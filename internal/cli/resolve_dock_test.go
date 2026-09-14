@@ -29,19 +29,18 @@ func TestResolveCurrentDock_TmuxSession(t *testing.T) {
 	}
 }
 
-// TestResolveCurrentDock_IgnoresTmuxOutsidePane verifies that
-// CurrentSession is NOT used when $TMUX is unset (e.g. a shell
-// that is not inside tmux).
+// TestResolveCurrentDock_IgnoresTmuxOutsidePane verifies that a
+// CurrentSession error — what the tmux layer returns outside tmux,
+// see TestReal_CurrentAccessors_OutsideTmux — is not papered over
+// with some other dock.
 func TestResolveCurrentDock_IgnoresTmuxOutsidePane(t *testing.T) {
-	eng, mockTmux, _, _ := testNavEngine(t)
-	mockTmux.SetCurrentSession("labs")
-
-	// $TMUX is NOT set — simulates being outside tmux.
-	t.Setenv("TMUX", "")
+	eng, _, _, _ := testNavEngine(t)
+	// No SetCurrentSession: the mock reports "not in a tmux session",
+	// matching Real outside tmux.
 
 	_, err := resolveCurrentDock(eng)
 	if err == nil {
-		t.Error("expected error: should not resolve via tmux session when TMUX is unset")
+		t.Error("expected error: should not resolve a dock when not inside tmux")
 	}
 }
 

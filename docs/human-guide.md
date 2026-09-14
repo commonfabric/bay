@@ -763,6 +763,7 @@ bay status-line <field>                     # output for tmux status bar
 ```
 bay setup                                   # first-time setup
 bay recover                                 # reconstruct all state after reboot
+                                            # (inside a dock: that dock only)
 bay doctor                                  # health checks
 bay monitor start|stop|status               # manage background monitor
 bay completion bash|zsh|fish                # generate completion script
@@ -1272,6 +1273,14 @@ was invoked from. Bay now anchors that question to its own session, so
 the answer no longer depends on what else is running. Upgrade to pick
 it up; no `bay setup` re-run is needed, the fix is entirely in the
 binary.
+
+**"`bay recover` only recovered one dock."**
+`bay recover` scopes itself to where it runs: inside a dock's tmux
+session it recovers that dock, outside tmux it recovers every dock.
+Older versions could not tell the two apart — run from a plain shell,
+they recovered whichever dock tmux happened to report and exited 0
+without an error. Upgrade to pick up the fix. To recover one dock
+deliberately from anywhere, use `bay dock recover <name>`.
 
 **"What's the ~ window?"**
 A legacy placeholder that keeps a tmux session alive when bay cannot
