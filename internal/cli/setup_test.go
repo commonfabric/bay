@@ -3,12 +3,15 @@ package cli
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/commontoolsinc/bay/internal/tmux"
 )
 
 func TestHasUserStatusRight(t *testing.T) {
@@ -409,7 +412,7 @@ bind-key -n M-j run-shell 'bay surface next'
 bind-key -n M-k run-shell 'bay surface prev'
 `
 		got := missingCanonicalLines(block, kbs)
-		want := []string{"bind-key -n M-g display-popup -E 'bay go || true'"}
+		want := []string{kbs[2].canonicalLine()}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("missingCanonicalLines() = %v, want %v", got, want)
 		}
@@ -436,10 +439,10 @@ bind-key -n M-g display-popup -E 'bay go'
 		// M-j must still be reported missing — command match alone is
 		// ambiguous for duplicates.
 		dupKbs := []bayKeybinding{
-			{key: "M-j", cmd: "select-pane -D", isTmuxCommand: true},
-			{key: "M-J", cmd: "select-pane -D", isTmuxCommand: true},
-			{key: "M-k", cmd: "select-pane -U", isTmuxCommand: true},
-			{key: "M-K", cmd: "select-pane -U", isTmuxCommand: true},
+			{key: "M-j", cmd: "select-pane -D", isTmuxCommand: true, global: true},
+			{key: "M-J", cmd: "select-pane -D", isTmuxCommand: true, global: true},
+			{key: "M-k", cmd: "select-pane -U", isTmuxCommand: true, global: true},
+			{key: "M-K", cmd: "select-pane -U", isTmuxCommand: true, global: true},
 		}
 		block := `# Bay keybindings
 bind-key -n M-J select-pane -D
@@ -519,6 +522,28 @@ bind-key -n M-l next-window
 	}
 }
 
+// runShellBind renders the line bay writes for a root binding that
+// runs a bay command — including the session scoping, so drift
+// fixtures differ from canonical only in the command. Built from
+// canonicalLine so the fixtures follow the format rather than
+// restating it.
+func runShellBind(key, cmd string) string {
+	return bayKeybinding{key: key, cmd: cmd, tmuxVerb: "run-shell"}.canonicalLine() + "\n"
+}
+
+// unscopedLine renders the line bay wrote for kb before it scoped its
+// keys — canonicalLine minus the session guard, which is the state every
+// block installed by an earlier bay is in.
+func unscopedLine(kb bayKeybinding) string {
+	return fmt.Sprintf("bind-key %s %s %s\n", kb.bindFlag(), kb.key, kb.tmuxCommand())
+}
+
+// unscopedRunShellBind is unscopedLine for a root binding that runs a
+// bay command, matching runShellBind's shape.
+func unscopedRunShellBind(key, cmd string) string {
+	return unscopedLine(bayKeybinding{key: key, cmd: cmd, tmuxVerb: "run-shell"})
+}
+
 func TestMismatchedBindings(t *testing.T) {
 	kbs := []bayKeybinding{
 		{key: "M-s", cmd: "bay shell --pane", tmuxVerb: "run-shell"},
@@ -531,12 +556,11 @@ func TestMismatchedBindings(t *testing.T) {
 		// User has the old canonical: M-s=window, M-S=pane. Canonical
 		// has since flipped. Both keys are bound, so the "missing" path
 		// sees nothing — mismatch is what catches this.
-		block := `# Bay keybindings
-bind-key -n M-s run-shell 'bay shell --window || true'
-bind-key -n M-S run-shell 'bay shell --pane || true'
-bind-key -n M-e run-shell 'bay edit || true'
-bind-key -n M-E run-shell 'bay edit --dock || true'
-`
+		block := "# Bay keybindings\n" +
+			runShellBind("M-s", "bay shell --window") +
+			runShellBind("M-S", "bay shell --pane") +
+			runShellBind("M-e", "bay edit") +
+			runShellBind("M-E", "bay edit --dock")
 		got := mismatchedBindings(block, kbs)
 		wantKeys := []string{"M-s", "M-S"}
 		if len(got) != len(wantKeys) {
@@ -550,11 +574,10 @@ bind-key -n M-E run-shell 'bay edit --dock || true'
 	})
 
 	t.Run("canonical bindings report no mismatch", func(t *testing.T) {
-		block := `# Bay keybindings
-bind-key -n M-s run-shell 'bay shell --pane || true'
-bind-key -n M-S run-shell 'bay shell --window || true'
-bind-key -n M-e run-shell 'bay edit || true'
-`
+		block := "# Bay keybindings\n" +
+			runShellBind("M-s", "bay shell --pane") +
+			runShellBind("M-S", "bay shell --window") +
+			runShellBind("M-e", "bay edit")
 		if got := mismatchedBindings(block, kbs); len(got) != 0 {
 			t.Errorf("mismatchedBindings() = %+v; want empty", got)
 		}
@@ -562,21 +585,35 @@ bind-key -n M-e run-shell 'bay edit || true'
 
 	t.Run("non-bay rebinds are not mismatches", func(t *testing.T) {
 		// User rebound M-s to something unrelated. Not drift we own —
-		// skip silently.
-		block := `# Bay keybindings
-bind-key -n M-s run-shell 'my-custom-script || true'
-`
+		// skip silently. Both spellings: the unscoped line every
+		// pre-scoping block holds, and a scoped one. The unscoped case
+		// is the dangerous one — flagging it as scope drift would offer
+		// to "fix the scoping" and replace the script.
+		for _, block := range []string{
+			"# Bay keybindings\n" + unscopedRunShellBind("M-s", "my-custom-script"),
+			"# Bay keybindings\n" + runShellBind("M-s", "my-custom-script"),
+		} {
+			if got := mismatchedBindings(block, kbs); len(got) != 0 {
+				t.Errorf("mismatchedBindings(%q) = %+v; want empty", block, got)
+			}
+		}
+	})
+
+	t.Run("custom tmux verb on a bay command is not scope drift", func(t *testing.T) {
+		// The command is bay's, but the user chose a popup over
+		// run-shell. Rewriting the line to canonical would take that
+		// away, so the line is not bay's to migrate.
+		block := "# Bay keybindings\n" +
+			`bind-key -n M-s display-popup -E 'bay shell --pane || true'` + "\n"
 		if got := mismatchedBindings(block, kbs); len(got) != 0 {
-			t.Errorf("mismatchedBindings() = %+v; want empty", got)
+			t.Errorf("mismatchedBindings() = %+v; want empty for a customized verb", got)
 		}
 	})
 
 	t.Run("bay-keep marker suppresses mismatch", func(t *testing.T) {
-		block := `# Bay keybindings
-# bay-keep: M-s
-bind-key -n M-s run-shell 'bay shell --window || true'
-bind-key -n M-S run-shell 'bay shell --pane || true'
-`
+		block := "# Bay keybindings\n# bay-keep: M-s\n" +
+			runShellBind("M-s", "bay shell --window") +
+			runShellBind("M-S", "bay shell --pane")
 		got := mismatchedBindings(block, kbs)
 		if len(got) != 1 || got[0].canonical.key != "M-S" {
 			t.Errorf("mismatchedBindings() = %+v; want only M-S mismatch", got)
@@ -586,20 +623,16 @@ bind-key -n M-S run-shell 'bay shell --pane || true'
 	t.Run("missing key is not flagged as mismatch", func(t *testing.T) {
 		// M-s not bound at all → missingBindings handles it; mismatch
 		// only fires when the key is actively bound to the wrong thing.
-		block := `# Bay keybindings
-bind-key -n M-S run-shell 'bay shell --window || true'
-`
+		block := "# Bay keybindings\n" + runShellBind("M-S", "bay shell --window")
 		if got := mismatchedBindings(block, kbs); len(got) != 0 {
 			t.Errorf("mismatchedBindings() = %+v; want empty (M-s unbound is missing, not mismatch)", got)
 		}
 	})
 
 	t.Run("bay-keep with multiple keys on one line", func(t *testing.T) {
-		block := `# Bay keybindings
-# bay-keep: M-s M-e
-bind-key -n M-s run-shell 'bay shell --window || true'
-bind-key -n M-e run-shell 'bay edit --dock || true'
-`
+		block := "# Bay keybindings\n# bay-keep: M-s M-e\n" +
+			runShellBind("M-s", "bay shell --window") +
+			runShellBind("M-e", "bay edit --dock")
 		if got := mismatchedBindings(block, kbs); len(got) != 0 {
 			t.Errorf("mismatchedBindings() = %+v; want empty (both pinned)", got)
 		}
@@ -609,11 +642,80 @@ bind-key -n M-e run-shell 'bay edit --dock || true'
 		paletteKbs := []bayKeybinding{
 			{key: "M-p", cmd: "bay palette --split pane", tmuxVerb: "display-popup -w 80% -h 80% -E"},
 		}
-		block := `# Bay keybindings
-bind-key -n M-p display-popup -w 80% -h 80% -E 'bay palette --split window || true'
-`
-		if got := mismatchedBindings(block, paletteKbs); len(got) != 0 {
-			t.Fatalf("mismatchedBindings() = %+v; want empty for custom palette binding", got)
+		custom := bayKeybinding{key: "M-p", cmd: "bay palette --split window", tmuxVerb: "display-popup -w 80% -h 80% -E"}
+		// Unscoped first: that's how a customized binding sits in every
+		// block written before bay scoped its keys, and it must not be
+		// swept up as scope drift and rewritten to `--split pane`.
+		for _, block := range []string{
+			"# Bay keybindings\n" + unscopedLine(custom),
+			"# Bay keybindings\n" + custom.canonicalLine() + "\n",
+		} {
+			if got := mismatchedBindings(block, paletteKbs); len(got) != 0 {
+				t.Fatalf("mismatchedBindings(%q) = %+v; want empty for custom palette binding", block, got)
+			}
+		}
+	})
+
+	t.Run("unscoped canonical palette binding migrates", func(t *testing.T) {
+		// The flip side: bay's own display-popup line, as an earlier bay
+		// wrote it, still has to pick up the session guard.
+		paletteKb := bayKeybinding{key: "M-p", cmd: "bay palette --split pane", tmuxVerb: "display-popup -w 80% -h 80% -E"}
+		block := "# Bay keybindings\n" + unscopedLine(paletteKb)
+		got := mismatchedBindings(block, []bayKeybinding{paletteKb})
+		if len(got) != 1 || got[0].canonical.key != "M-p" || !got[0].scoping {
+			t.Fatalf("mismatchedBindings() = %+v; want single M-p scoping mismatch", got)
+		}
+	})
+
+	t.Run("unscoped chord entry migrates", func(t *testing.T) {
+		// M-o is an isTmuxCommand binding, so parseBindLine reports only
+		// the quoted hint as its command — never the canonical string.
+		// Migration has to recognize the line by its whole command tail
+		// or the chord entry silently stays global.
+		chordKb := findKeybinding(t, "", "M-o")
+		block := "# Bay keybindings\n" + unscopedLine(chordKb)
+		got := mismatchedBindings(block, []bayKeybinding{chordKb})
+		if len(got) != 1 || got[0].canonical.key != "M-o" || !got[0].scoping {
+			t.Fatalf("mismatchedBindings() = %+v; want single M-o scoping mismatch", got)
+		}
+		// And once migrated, the scoped line is canonical: the `\;` the
+		// unscoped line carries becomes a bare `;` inside the guard, and
+		// that spelling must not read as drift on the next setup run.
+		scoped := "# Bay keybindings\n" + chordKb.canonicalLine() + "\n"
+		if got := mismatchedBindings(scoped, []bayKeybinding{chordKb}); len(got) != 0 {
+			t.Fatalf("mismatchedBindings(scoped M-o) = %+v; want empty", got)
+		}
+	})
+
+	t.Run("custom chord entry command is not scope drift", func(t *testing.T) {
+		chordKb := findKeybinding(t, "", "M-o")
+		custom := chordKb
+		custom.cmd = `display-message -d 2000 "my own hint" \; switch-client -T ` + tableAgent
+		block := "# Bay keybindings\n" + unscopedLine(custom)
+		if got := mismatchedBindings(block, []bayKeybinding{chordKb}); len(got) != 0 {
+			t.Fatalf("mismatchedBindings() = %+v; want empty for a custom chord hint", got)
+		}
+	})
+
+	t.Run("unscoped binding is flagged as drift", func(t *testing.T) {
+		// What every existing user's block looks like before this
+		// release: the right command, bound in every tmux session.
+		// Rewriting the line is what confines it to bay's own.
+		block := "# Bay keybindings\n" +
+			"bind-key -n M-s run-shell 'bay shell --pane || true'\n"
+		got := mismatchedBindings(block, kbs)
+		if len(got) != 1 || got[0].canonical.key != "M-s" || !got[0].scoping {
+			t.Fatalf("mismatchedBindings() = %+v; want single M-s scoping mismatch", got)
+		}
+	})
+
+	t.Run("global bindings are not flagged for lacking scope", func(t *testing.T) {
+		// Navigation keys are deliberately global; an unscoped line is
+		// canonical for them.
+		navKbs := []bayKeybinding{{key: "M-l", cmd: "next-window", isTmuxCommand: true, global: true}}
+		block := "# Bay keybindings\nbind-key -n M-l next-window\n"
+		if got := mismatchedBindings(block, navKbs); len(got) != 0 {
+			t.Errorf("mismatchedBindings() = %+v; want empty for a global binding", got)
 		}
 	})
 
@@ -640,6 +742,30 @@ bind-key -T bay-home g run-shell 'bay agent gemini --bay home || true'
 		}
 	})
 
+	t.Run("every canonical binding migrates from its unscoped line", func(t *testing.T) {
+		// The whole shipped table at once, written the way the last
+		// unscoped bay wrote it. Exactly the scoped ones must be
+		// offered for migration, and nothing else may be flagged as
+		// command drift on the way through.
+		var b strings.Builder
+		b.WriteString("# Bay keybindings\n")
+		for _, kb := range bayKeybindings {
+			b.WriteString(unscopedLine(kb))
+		}
+		flagged := map[string]bool{}
+		for _, m := range mismatchedBindings(b.String(), bayKeybindings) {
+			if !m.scoping {
+				t.Errorf("%s flagged as command drift; want scoping only (user cmd %q)", m.canonical.id(), m.userCmd)
+			}
+			flagged[m.canonical.id()] = true
+		}
+		for _, kb := range bayKeybindings {
+			if got := flagged[kb.id()]; got != kb.scoped() {
+				t.Errorf("%s flagged=%v; want %v", kb.id(), got, kb.scoped())
+			}
+		}
+	})
+
 	t.Run("previousCmds entry catches isTmuxCommand drift", func(t *testing.T) {
 		// Regression: when a tmux-command binding's display-message hint
 		// changes (e.g. M-o gaining `| h=home` in home-bay phase 6), the
@@ -655,7 +781,11 @@ bind-key -T bay-home g run-shell 'bay agent gemini --bay home || true'
 			isTmuxCommand: true,
 		}}
 		block := "# Bay keybindings\n" +
-			`bind-key -n M-o display-message -d 2000 "old hint" \; switch-client -T bay-agent` + "\n"
+			bayKeybinding{
+				key:           "M-o",
+				cmd:           `display-message -d 2000 "old hint" \; switch-client -T bay-agent`,
+				isTmuxCommand: true,
+			}.canonicalLine() + "\n"
 		got := mismatchedBindings(block, kbs)
 		if len(got) != 1 || got[0].canonical.key != "M-o" {
 			t.Fatalf("mismatchedBindings() = %+v; want single M-o mismatch", got)
@@ -663,25 +793,48 @@ bind-key -T bay-home g run-shell 'bay agent gemini --bay home || true'
 	})
 }
 
+// bayWroteCommandTail is the gate on rewriting a line in place, so both
+// halves matter: it must recognize bay's own command in either spelling,
+// and must not recognize anything else.
+func TestBayWroteCommandTail(t *testing.T) {
+	shell := bayKeybinding{key: "M-s", cmd: "bay shell --pane", tmuxVerb: "run-shell"}
+	chord := findKeybinding(t, "", "M-o")
+
+	tests := []struct {
+		name string
+		tail string
+		kb   bayKeybinding
+		want bool
+	}{
+		{"unscoped canonical", `run-shell 'bay shell --pane || true'`, shell, true},
+		{"custom command", `run-shell 'my-custom-script || true'`, shell, false},
+		{"canonical command, custom verb", `display-popup -E 'bay shell --pane || true'`, shell, false},
+		{"chord entry as written unscoped", chord.tmuxCommand(), chord, true},
+		{"chord entry as it reads inside the guard",
+			strings.ReplaceAll(chord.tmuxCommand(), `\;`, ";"), chord, true},
+		{"chord entry with a custom hint",
+			`display-message -d 2000 "my own hint" ; switch-client -T ` + tableAgent, chord, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := bayWroteCommandTail(tt.tail, tt.kb); got != tt.want {
+				t.Errorf("bayWroteCommandTail(%q, %s) = %v; want %v", tt.tail, tt.kb.id(), got, tt.want)
+			}
+		})
+	}
+}
+
 func TestReplaceBindingInBlock(t *testing.T) {
-	content := `set -g mouse on
-
-# Bay keybindings
-bind-key -n M-s run-shell 'bay shell --window || true'
-bind-key -n M-S run-shell 'bay shell --pane || true'
-
-set -g base-index 1
-`
+	content := "set -g mouse on\n\n# Bay keybindings\n" +
+		runShellBind("M-s", "bay shell --window") +
+		runShellBind("M-S", "bay shell --pane") +
+		"\nset -g base-index 1\n"
 	kb := bayKeybinding{key: "M-s", cmd: "bay shell --pane", tmuxVerb: "run-shell"}
 	got := replaceBindingInBlock(content, kb)
-	want := `set -g mouse on
-
-# Bay keybindings
-bind-key -n M-s run-shell 'bay shell --pane || true'
-bind-key -n M-S run-shell 'bay shell --pane || true'
-
-set -g base-index 1
-`
+	want := "set -g mouse on\n\n# Bay keybindings\n" +
+		runShellBind("M-s", "bay shell --pane") +
+		runShellBind("M-S", "bay shell --pane") +
+		"\nset -g base-index 1\n"
 	if got != want {
 		t.Errorf("replaceBindingInBlock:\nGOT:\n%s\nWANT:\n%s", got, want)
 	}
@@ -713,7 +866,7 @@ func TestHomeChordKeybindings(t *testing.T) {
 	joined := strings.Join(lines, "\n")
 
 	for _, want := range []string{
-		`bind-key -n M-o display-message -d 2000 "agent: c Claude, x Codex, g Antigravity, f Fable, o Opus | Shift=window | b=bay | h=home" \; switch-client -T bay-agent`,
+		`bind-key -n M-o if -F '#{@bay-session-id}' { display-message -d 2000 "agent: c Claude, x Codex, g Antigravity, f Fable, o Opus | Shift=window | b=bay | h=home" ; switch-client -T bay-agent } { send-keys M-o }`,
 		`bind-key -T bay-agent h display-message -d 2000 "home: Enter home, s shell, e editor, c Claude, x Codex, g Antigravity, f Fable, o Opus" \; switch-client -T bay-home`,
 		`bind-key -T bay-home Enter run-shell 'bay home || true'`,
 		`bind-key -T bay-home s run-shell 'bay shell --bay home || true'`,
@@ -759,10 +912,11 @@ func TestMissingBindings_DetectsMissingHomeEnterBinding(t *testing.T) {
 // detection alongside root bindings.
 func TestParseBindLine_KeyTable(t *testing.T) {
 	cases := []struct {
-		line  string
-		table string
-		key   string
-		cmd   string
+		line   string
+		table  string
+		key    string
+		cmd    string
+		scoped bool
 	}{
 		{
 			line:  `bind-key -T bay-agent c run-shell 'bay agent claude --pane || true'`,
@@ -794,16 +948,51 @@ func TestParseBindLine_KeyTable(t *testing.T) {
 			key:   "h",
 			cmd:   "home: Enter home, s shell, e editor, c Claude, x Codex, g Antigravity", // quoted region only — matches existing tmux-cmd extraction behavior
 		},
+		{
+			// The scoped root form bay writes: the command bay runs
+			// in a bay-managed session reads the same as it did
+			// before scoping.
+			line:   `bind-key -n M-c if -F '#{@bay-session-id}' { run-shell 'bay new -q || true' } { send-keys M-c }`,
+			key:    "M-c",
+			cmd:    "bay new -q || true",
+			scoped: true,
+		},
+		{
+			// The same binding after a round trip through tmux,
+			// which prints `if-shell` and re-quotes the arms.
+			line:   `bind-key -n M-c if-shell -F "#{@bay-session-id}" "run-shell 'bay new -q || true'" "send-keys M-c"`,
+			key:    "M-c",
+			cmd:    "bay new -q || true",
+			scoped: true,
+		},
+		{
+			// Scoped chord entry: a tmux-command binding, so the
+			// quoted hint is what comes back, as with the
+			// sub-table entries above.
+			line:   `bind-key -n M-o if -F '#{@bay-session-id}' { display-message -d 2000 "agent: c Claude" ; switch-client -T bay-agent } { send-keys M-o }`,
+			key:    "M-o",
+			cmd:    "agent: c Claude",
+			scoped: true,
+		},
+		{
+			// A user's own `if -F` binding is not bay's scoping.
+			line: `bind-key -n M-c if -F '#{pane_in_mode}' { send-keys -X cancel } { run-shell 'bay new -q || true' }`,
+			key:  "M-c",
+			cmd:  `#{pane_in_mode}' { send-keys -X cancel } { run-shell 'bay new -q || true`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {
-			gotTable, gotKey, gotCmd, ok := parseBindLine(tc.line)
+			got, ok := parseBindLine(tc.line)
 			if !ok {
 				t.Fatalf("parseBindLine returned ok=false")
 			}
-			if gotTable != tc.table || gotKey != tc.key || gotCmd != tc.cmd {
+			if got.table != tc.table || got.key != tc.key || got.cmd != tc.cmd {
 				t.Errorf("parseBindLine = (%q, %q, %q), want (%q, %q, %q)",
-					gotTable, gotKey, gotCmd, tc.table, tc.key, tc.cmd)
+					got.table, got.key, got.cmd, tc.table, tc.key, tc.cmd)
+			}
+			if got.scoped != tc.scoped {
+				t.Errorf("parseBindLine scoped = %v, want %v", got.scoped, tc.scoped)
 			}
 		})
 	}
@@ -879,12 +1068,12 @@ func TestChordBindingRoundTrip(t *testing.T) {
 	}
 	line := kb.canonicalLine()
 	t.Logf("canonical line: %s", line)
-	gotTable, gotKey, _, ok := parseBindLine(line)
+	got, ok := parseBindLine(line)
 	if !ok {
 		t.Fatalf("parseBindLine(%q) failed", line)
 	}
-	if got := bindID(gotTable, gotKey); got != kb.id() {
-		t.Errorf("round-trip id = %q, want %q", got, kb.id())
+	if got.id() != kb.id() {
+		t.Errorf("round-trip id = %q, want %q", got.id(), kb.id())
 	}
 }
 
@@ -900,17 +1089,17 @@ bind-key -T bay-agent-bay c run-shell 'bay new -q --agent=claude || true'
 bind-key -T bay-home c run-shell 'bay agent claude --bay home || true'
 `
 	got := activeBindings(block)
-	if got["M-c"] != "bay new -q || true" {
-		t.Errorf("M-c missing or wrong: %q", got["M-c"])
+	if got["M-c"].cmd != "bay new -q || true" {
+		t.Errorf("M-c missing or wrong: %q", got["M-c"].cmd)
 	}
-	if got["bay-agent:c"] != "bay agent claude --pane || true" {
-		t.Errorf("bay-agent:c missing or wrong: %q", got["bay-agent:c"])
+	if got["bay-agent:c"].cmd != "bay agent claude --pane || true" {
+		t.Errorf("bay-agent:c missing or wrong: %q", got["bay-agent:c"].cmd)
 	}
-	if got["bay-agent-bay:c"] != "bay new -q --agent=claude || true" {
-		t.Errorf("bay-agent-bay:c missing or wrong: %q", got["bay-agent-bay:c"])
+	if got["bay-agent-bay:c"].cmd != "bay new -q --agent=claude || true" {
+		t.Errorf("bay-agent-bay:c missing or wrong: %q", got["bay-agent-bay:c"].cmd)
 	}
-	if got["bay-home:c"] != "bay agent claude --bay home || true" {
-		t.Errorf("bay-home:c missing or wrong: %q", got["bay-home:c"])
+	if got["bay-home:c"].cmd != "bay agent claude --bay home || true" {
+		t.Errorf("bay-home:c missing or wrong: %q", got["bay-home:c"].cmd)
 	}
 }
 
@@ -923,4 +1112,158 @@ func findKeybinding(t *testing.T, table, key string) bayKeybinding {
 	}
 	t.Fatalf("keybinding %s not found", bindID(table, key))
 	return bayKeybinding{}
+}
+
+// The scoping policy, pinned: navigation keys stay global so they work
+// in any tmux session; every other root binding fires only in a
+// bay-managed one and hands its key to the application everywhere
+// else; chord sub-table bindings need no guard of their own because
+// their entry key carries it.
+func TestKeybindingScopePolicy(t *testing.T) {
+	globalKeys := map[string]bool{
+		"M-h": true, "M-l": true,
+		"M-j": true, "M-k": true,
+		"M-H": true, "M-L": true,
+		"M-J": true, "M-K": true,
+	}
+	seenGlobal := map[string]bool{}
+	for _, kb := range bayKeybindings {
+		line := kb.canonicalLine()
+		scopedLine := strings.Contains(line, tmux.ScopeCondition)
+		switch {
+		case kb.table != "":
+			if kb.scoped() || scopedLine {
+				t.Errorf("chord binding %s should not be scoped: %s", kb.id(), line)
+			}
+		case globalKeys[kb.key]:
+			seenGlobal[kb.key] = true
+			if kb.scoped() || scopedLine {
+				t.Errorf("navigation key %s must stay global: %s", kb.id(), line)
+			}
+		default:
+			if !kb.scoped() || !scopedLine {
+				t.Errorf("bay command %s must be scoped to bay sessions: %s", kb.id(), line)
+			}
+			// Out of scope the key has to reach the application, or
+			// bay would swallow keystrokes in sessions it doesn't own.
+			if want := "{ send-keys " + kb.key + " }"; !strings.HasSuffix(line, want) {
+				t.Errorf("binding %s must pass its key through out of scope, got: %s", kb.id(), line)
+			}
+		}
+	}
+	for key := range globalKeys {
+		if !seenGlobal[key] {
+			t.Errorf("navigation key %s is no longer in the canonical set", key)
+		}
+	}
+}
+
+// setupTestHome points loadTmuxConf at a scratch ~/.tmux.conf and makes
+// sure the run can't reach a real tmux server: installKeybindings ends
+// by offering `tmux source-file`, and a test must never fire that at
+// the developer's live server.
+func setupTestHome(t *testing.T, conf string) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", filepath.Join(home, "no-server"))
+	path := filepath.Join(home, ".tmux.conf")
+	if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
+		t.Fatalf("writing tmux.conf: %v", err)
+	}
+	return path
+}
+
+// A block written before bay scoped its keys binds bay commands in
+// every tmux session. One `bay setup` run rewrites them in place, and a
+// second changes nothing.
+func TestInstallKeybindings_MigratesUnscopedBlockIdempotently(t *testing.T) {
+	conf := "set -g mouse on\n\n" + bayKeybindingsMarker + "\n" +
+		"bind-key -n M-h previous-window\n" +
+		"bind-key -n M-c run-shell 'bay new -q || true'\n" +
+		"bind-key -n M-s run-shell 'bay shell --pane || true'\n" +
+		"\nset -g base-index 1\n"
+	path := setupTestHome(t, conf)
+
+	// "y" updates the drifted bindings; "n" declines the reload offer.
+	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\nn\n")))
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading tmux.conf: %v", err)
+	}
+	got := string(after)
+	for _, want := range []string{
+		"set -g mouse on", // user's own config untouched
+		"set -g base-index 1",
+		"bind-key -n M-h previous-window", // navigation stays global
+		findKeybinding(t, "", "M-c").canonicalLine(),
+		findKeybinding(t, "", "M-s").canonicalLine(),
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrated conf missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "bind-key -n M-c run-shell 'bay new -q || true'\n") {
+		t.Errorf("unscoped M-c survived the migration:\n%s", got)
+	}
+
+	// Re-run: nothing left to reconcile, so nothing is written.
+	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\nn\n")))
+	again, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("re-reading tmux.conf: %v", err)
+	}
+	if string(again) != got {
+		t.Errorf("second run changed the conf:\nFIRST:\n%s\nSECOND:\n%s", got, again)
+	}
+}
+
+// The migration writes the file, so the guard on what it may rewrite is
+// worth pinning end to end: an unscoped line carrying a command that
+// isn't bay's must survive `bay setup` verbatim, with no bay-keep marker
+// needed. Scope drift and command drift are separate prompts, and a
+// user answering the scoping one is not consenting to lose a command.
+func TestInstallKeybindings_LeavesCustomCommandsUnscoped(t *testing.T) {
+	custom := []string{
+		"bind-key -n M-s run-shell 'my-custom-script || true'\n",
+		"bind-key -n M-p display-popup -w 80% -h 80% -E 'bay palette --split window || true'\n",
+	}
+	conf := bayKeybindingsMarker + "\n" + strings.Join(custom, "")
+	path := setupTestHome(t, conf)
+
+	// "y" to every prompt: the most permissive answer a user can give.
+	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\ny\ny\n")))
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading tmux.conf: %v", err)
+	}
+	for _, line := range custom {
+		if !strings.Contains(string(after), line) {
+			t.Errorf("custom binding %q was rewritten:\n%s", line, after)
+		}
+	}
+}
+
+// `# bay-keep:` is how a user says "leave this one alone" — including a
+// user who wants a bay key global on purpose.
+func TestInstallKeybindings_BayKeepPreservesGlobalBinding(t *testing.T) {
+	unscoped := "bind-key -n M-g run-shell 'bay go --pick || true'\n"
+	conf := bayKeybindingsMarker + "\n" + "# bay-keep: M-g\n" + unscoped
+	path := setupTestHome(t, conf)
+
+	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\nn\n")))
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading tmux.conf: %v", err)
+	}
+	if !strings.Contains(string(after), unscoped) {
+		t.Errorf("pinned global M-g was rewritten:\n%s", after)
+	}
+	if !strings.Contains(string(after), "# bay-keep: M-g") {
+		t.Errorf("bay-keep marker lost:\n%s", after)
+	}
 }

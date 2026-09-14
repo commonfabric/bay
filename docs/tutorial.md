@@ -288,7 +288,9 @@ not tracked — reopen them with `bay edit`.
 
 **Full setup:** `bay setup` installs keybindings and shell completions.
 It's optional — everything works without it, but the keybindings make
-navigation instant.
+navigation instant. Bay's command keys only fire inside bay's own tmux
+sessions — in any other session the key reaches your application
+untouched — while the `Option+h/l/j/k` navigation keys work everywhere.
 
 **Multiple checkouts:** create a separate dock for another checkout:
 `bay dock new backend --path ~/projects/backend`. Explicit dock

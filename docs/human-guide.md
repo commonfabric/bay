@@ -848,6 +848,50 @@ creation keys, lowercase opens a split pane in the current window and
 Shift opens a new window. The bay picker (`Option+g`) is usually the fastest way to
 jump across bays — fuzzy-match by name or description.
 
+### Where the keys are live
+
+Bay's command keys fire only in the tmux sessions bay manages — the
+dock sessions it created and tagged with the `@bay-session-id` session
+option. In any other session they do nothing: the keystroke is handed
+to whatever is running in the pane, exactly as if the key were
+unbound. So a tmux session of your own — including one that *links in*
+bay windows as views — keeps its keys to itself, and `Option+W` can't
+force-close a bay from a terminal that has nothing to do with bay.
+
+The navigation keys are the deliberate exception. `Option+h/l`,
+`Option+j/k` and `Option+Shift+H/J/K/L` are plain tmux window and pane
+movement, useful anywhere and harmless in a session bay doesn't own,
+so they stay bound in every session.
+
+Inside a dock nothing changes: every key, chord, popup and hint
+behaves as it always has, and so do your own bindings on other keys.
+
+Two consequences worth knowing:
+
+- **A key bay owns is bay's, in scope or out.** If you had a personal
+  binding on `Option+c` earlier in `~/.tmux.conf`, bay's block replaces
+  it; outside a bay session `Option+c` reaches the application rather
+  than reviving your binding. Scoping keeps bay's *command* out of your
+  other sessions; it does not hand the key back. Your options, in full:
+  - Rebind the key *after* bay's block. Yours wins everywhere — which
+    includes inside docks, so you give up bay's command on that key.
+  - Keep both, by writing the same test bay uses into your own line
+    after bay's block:
+
+    ```
+    bind -n M-c if -F '#{@bay-session-id}' { run-shell 'bay new -q || true' } { <your command> }
+    ```
+
+  - Keep bay's command but leave it bound in every session: pin the
+    unscoped line with `# bay-keep:` (below).
+- **The scoping follows the session, not the window.** The same bay
+  window viewed through its own dock runs bay's keys; viewed through a
+  session bay doesn't manage, it doesn't.
+
+If bay's keys stop working inside a dock, its tmux session has most
+likely lost the marker — something other than bay recreated it. `bay
+doctor` reports that, and `bay recover` re-tags the session.
+
 ### Installing and updating
 
 `bay setup` installs all keybindings in `~/.tmux.conf`. It detects
@@ -855,11 +899,17 @@ conflicts with existing bindings and prompts before overwriting. Run
 `bay doctor` to check if keybindings are current.
 
 When bay ships a canonical change (e.g. flipping `M-s` from window to
-pane), `bay setup` on re-run detects canonical keys bound to a
-non-canonical bay command and prompts to update them. Opt out per-key
-by adding `# bay-keep: M-s` to the bay block — bay will stop asking
-about that key, and `bay doctor` will stop reporting it as missing.
-Chord sub-table bindings use a `table:key` form, e.g.
+pane, or confining the command keys to bay-managed sessions), `bay
+setup` on re-run detects keys whose binding has drifted from canonical
+and prompts to update them in place. A block installed before bay
+scoped its keys shows up here: the commands are right, but they fire
+in every tmux session. Only lines bay wrote itself are offered — a key
+whose command you changed is left as it is. Opt out per-key by adding
+`# bay-keep: M-s` to the bay block — bay will stop asking about that
+key, and `bay doctor` will stop reporting it as out of date. That is
+also how you keep a bay command bound globally on purpose: leave the
+unscoped line in place and pin it. Chord sub-table bindings use a
+`table:key` form, e.g.
 `# bay-keep: bay-agent:c bay-agent-bay:x bay-home:Enter`.
 
 After writing changes, `bay setup` offers to reload `~/.tmux.conf` in
@@ -1263,6 +1313,17 @@ you need a separate dock.
 **"How do I update my keybindings after a bay upgrade?"**
 Run `bay setup` again. It replaces the bay keybinding block in
 `~/.tmux.conf` while preserving your other settings.
+
+**"Bay's keys do nothing in this tmux session."**
+Bay's command keys are live only in the sessions bay manages, so in
+your own session — including one that links bay windows in as views —
+they are meant to do nothing: the keystroke goes to the application.
+Inside a dock, the same symptom means that session has lost its
+`@bay-session-id` marker, which happens when something other than bay
+recreated it. The tell is that navigation (`Option+h/l`) still works
+while the command keys are silent. `bay doctor` names the dock; `bay
+recover` re-tags it. Note that a *wrong-target* symptom — the keys fire
+but act on another dock — is the next entry, not this one.
 
 **"Bay acted on, or reported, the wrong bay or dock."**
 Bay works out which dock you are in by asking tmux for the current

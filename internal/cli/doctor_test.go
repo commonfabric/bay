@@ -25,13 +25,11 @@ func TestMissingKeybindings_HonorsBayKeep(t *testing.T) {
 	// binding on purpose. Doctor should not warn about the canonical
 	// M-s line being "missing" — otherwise the pin has no end-to-end
 	// effect (setup stops asking but doctor still nags).
-	content := `# Bay keybindings
-# bay-keep: M-s
-bind-key -n M-s run-shell 'bay shell --window || true'
-`
-	for _, line := range missingKeybindings(content) {
-		if strings.Contains(line, "M-s ") {
-			t.Errorf("missingKeybindings reported pinned key M-s as missing: %q", line)
+	content := "# Bay keybindings\n# bay-keep: M-s\n" +
+		"bind-key -n M-s run-shell 'bay shell --window || true'\n"
+	for _, kb := range missingKeybindings(content) {
+		if kb.id() == "M-s" {
+			t.Errorf("missingKeybindings reported pinned key M-s as missing: %q", kb.canonicalLine())
 		}
 	}
 }
@@ -52,7 +50,7 @@ func TestMissingKeybindings_DetectsCommentedHomeBinding(t *testing.T) {
 	}
 
 	missing := missingKeybindings(strings.Join(lines, "\n"))
-	if len(missing) != 1 || missing[0] != homeEnter {
+	if len(missing) != 1 || missing[0].canonicalLine() != homeEnter {
 		t.Fatalf("missingKeybindings = %v; want only commented home Enter binding %q", missing, homeEnter)
 	}
 }
@@ -74,7 +72,7 @@ func TestKeybindingsIncludeSurfaceNavigation(t *testing.T) {
 			t.Errorf("keybindings missing %q", want)
 		}
 	}
-	if !strings.Contains(joined, "bind-key -n M-p display-popup -w 80% -h 80% -E 'bay palette --split pane || true'") {
+	if !strings.Contains(joined, "display-popup -w 80% -h 80% -E 'bay palette --split pane || true'") {
 		t.Errorf("keybindings should default Option+p palette to pane mode; got:\n%s", joined)
 	}
 	if !strings.Contains(joined, "bind-key -T bay-home Enter run-shell 'bay home || true'") {

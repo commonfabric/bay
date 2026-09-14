@@ -77,3 +77,22 @@ func TestParseHotkeys_EmptyInput(t *testing.T) {
 		t.Errorf("empty input yielded binding %q", got)
 	}
 }
+
+// Bay scopes its bindings to the sessions it manages, so `tmux
+// list-keys` hands the palette a conditional wrapped around the real
+// command. The annotation should still name the key.
+func TestParseHotkeys_ScopedBindings(t *testing.T) {
+	out := `bind-key  -T root M-s   if-shell -F "#{@bay-session-id}" { run-shell "bay shell --pane || true" } { send-keys M-s }
+bind-key  -T root M-a   if-shell -F "#{@bay-session-id}" "run-shell 'bay agent --pane || true'" "send-keys M-a"
+bind-key  -T root M-l   next-window
+`
+	h := parseHotkeys(out)
+	for _, c := range []struct{ sig, want string }{
+		{"bay shell --pane", "M-s"},
+		{"bay agent --pane", "M-a"},
+	} {
+		if got := h.Lookup(c.sig); got != c.want {
+			t.Errorf("Lookup(%q) = %q; want %q", c.sig, got, c.want)
+		}
+	}
+}

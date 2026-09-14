@@ -13,6 +13,7 @@ import (
 	"github.com/commontoolsinc/bay/internal/engine"
 	"github.com/commontoolsinc/bay/internal/manifest"
 	"github.com/commontoolsinc/bay/internal/monitor"
+	"github.com/commontoolsinc/bay/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -95,6 +96,9 @@ func runDoctor(eng *engine.Engine, w io.Writer) {
 					checkDockAwareness(eng, dock, path, w)
 				}
 			}
+			if !checkSessionMarker(eng, dock, w) {
+				ok = false
+			}
 			for j := range dock.Bays {
 				bay := &dock.Bays[j]
 				if bay.Worktree != nil && bay.Worktree.Branch != "" {
@@ -144,7 +148,11 @@ func runDoctor(eng *engine.Engine, w io.Writer) {
 	} else {
 		missing := missingKeybindings(string(data))
 		if len(missing) > 0 {
-			fmt.Fprintf(w, "[WARN] tmux keybindings missing: %s\n", strings.Join(missing, ", "))
+			ids := make([]string, 0, len(missing))
+			for _, kb := range missing {
+				ids = append(ids, kb.id())
+			}
+			fmt.Fprintf(w, "[WARN] tmux keybindings missing or out of date: %s\n", strings.Join(ids, ", "))
 			ok = false
 		} else {
 			fmt.Fprintln(w, "[OK] tmux keybindings installed")
@@ -187,6 +195,31 @@ func runDoctor(eng *engine.Engine, w io.Writer) {
 	} else {
 		fmt.Fprintln(w, "\nAll checks passed.")
 	}
+}
+
+// checkSessionMarker reports a live dock session that bay has not
+// tagged with @bay-session-id, returning false when it warns. Bay's
+// keybindings are scoped to that marker, so an untagged session is one
+// where Option+c and friends fall through to the application instead
+// of running bay — a whole dock's command keys dead while the
+// navigation keys keep working. It happens when a session bay owns is
+// recreated by something else (a restored tmux server, or a hand-made
+// session with a dock's name); `bay recover` re-tags it.
+//
+// Warned rather than noted: the symptom is easy to misread as bay
+// failing to resolve the dock, and this is the line that tells the two
+// apart.
+func checkSessionMarker(eng *engine.Engine, dock *manifest.Dock, w io.Writer) bool {
+	exists, err := eng.Tmux.HasSession(dock.Name)
+	if err != nil || !exists {
+		return true
+	}
+	if marker, _ := eng.Tmux.GetSessionOption(dock.Name, tmux.SessionIDOption); marker != "" {
+		return true
+	}
+	fmt.Fprintf(w, "[WARN] dock %q: tmux session not tagged %s — bay's command keys are dead there (navigation keys still work); run `bay recover`\n",
+		dock.Name, tmux.SessionIDOption)
+	return false
 }
 
 // checkDockAwareness prints INFO lines for missing bay-awareness setup
@@ -244,7 +277,12 @@ func monitorAssessmentDegraded(a monitor.StatusAssessment) bool {
 	return a.Reason == monitor.StatusReasonHeartbeatStale
 }
 
-func missingKeybindings(content string) []string {
+// missingKeybindings returns the canonical bindings whose exact line is
+// not active in content. Exact-line matching means a binding that has
+// fallen behind a canonical change — a renamed agent, or the session
+// scoping added in this release — reads as missing, which is the nudge
+// to re-run `bay setup`.
+func missingKeybindings(content string) []bayKeybinding {
 	kept := map[string]bool{}
 	if block, found := extractBayBlock(content); found {
 		kept = keptKeys(block)
@@ -257,14 +295,13 @@ func missingKeybindings(content string) []string {
 		}
 		activeLines[trimmed] = true
 	}
-	var missing []string
+	var missing []bayKeybinding
 	for _, kb := range bayKeybindings {
 		if kept[kb.id()] {
 			continue
 		}
-		line := kb.canonicalLine()
-		if !activeLines[line] {
-			missing = append(missing, line)
+		if !activeLines[kb.canonicalLine()] {
+			missing = append(missing, kb)
 		}
 	}
 	return missing

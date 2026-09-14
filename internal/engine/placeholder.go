@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commontoolsinc/bay/internal/tmux"
 )
 
 const placeholderName = "~"
@@ -13,8 +14,10 @@ const placeholderName = "~"
 // sessionIDOption is the tmux session-scoped user option that bay sets
 // on every session it manages. Its value is the same UUID stored in
 // the matching Dock.SessionID. The two together let SyncAll detect a
-// tmux server restart that left a same-named session in its wake.
-const sessionIDOption = "@bay-session-id"
+// tmux server restart that left a same-named session in its wake, and
+// bay's keybindings read the same marker to tell a session they should
+// fire in from one they should keep out of.
+const sessionIDOption = tmux.SessionIDOption
 
 // newSessionID generates a fresh session identity. var (not const-fn)
 // so tests can swap in deterministic IDs.

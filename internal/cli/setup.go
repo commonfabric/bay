@@ -11,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commontoolsinc/bay/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -184,6 +185,7 @@ type bayKeybinding struct {
 	desc          string
 	tmuxVerb      string // "run-shell" or "display-popup -E" (ignored when isTmuxCommand)
 	isTmuxCommand bool   // cmd is a raw tmux command (e.g., "next-window")
+	global        bool   // bind in every session, not just bay-managed ones
 }
 
 // id is the composite identity used for uniqueness: a key in the root
@@ -210,16 +212,33 @@ func (kb bayKeybinding) bindFlag() string {
 	return "-T " + kb.table
 }
 
+// scoped reports whether the canonical line guards this binding so it
+// only fires in bay-managed sessions. Two kinds of binding are not
+// guarded: the navigation keys, which are deliberately global (see
+// `global`), and chord sub-table bindings, which are unreachable
+// except through their entry key — scoping M-o scopes the whole chord.
+func (kb bayKeybinding) scoped() bool {
+	return kb.table == "" && !kb.global
+}
+
 // bayKeybindings defines all bay tmux keybindings.
 //
-// canonicalLine() appends "|| true" to bay-invoking bindings so they are
-// silent in non-bay tmux sessions. Without it, tmux run-shell displays
-// 'bay ... returned 1' in the status line when bay exits with an error
-// (e.g., "not in a bay"). Stderr is already invisible in
-// run-shell, so only the exit code needs masking.
+// canonicalLine() appends "|| true" to bay-invoking bindings so a
+// command that has nothing to do stays silent. Without it, tmux
+// run-shell displays 'bay ... returned 1' in the status line when bay
+// exits with an error (e.g., "not in a bay" on a dock's placeholder
+// window). Stderr is already invisible in run-shell, so only the exit
+// code needs masking. Sessions bay doesn't manage are handled earlier,
+// by the scoping below — the command never runs there at all.
 //
-// Navigation bindings are tmux-native so they work everywhere, including
-// non-bay tmux sessions. The scheme is vim-flavored hjkl:
+// Every binding that runs a bay command is scoped: it fires only in a
+// session bay manages, and passes its key through to the pane's
+// application everywhere else (see tmux.ScopeBinding). The navigation
+// bindings below are the deliberate exception — they are tmux-native
+// window/pane movement, useful in any session and harmless in one bay
+// doesn't own, so they stay global.
+//
+// The scheme is vim-flavored hjkl:
 //   - h/l: previous/next window (tabs run horizontally in the status bar)
 //   - j/k: pane down/up (most pane splits stack vertically)
 //   - H/L: pane left/right (horizontal splits are the secondary axis)
@@ -231,16 +250,16 @@ func (kb bayKeybinding) bindFlag() string {
 // has a binding on one of these keys, bay asks first.
 var bayKeybindings = []bayKeybinding{
 	// Window navigation (tabs run left-right across the status bar)
-	{key: "M-h", cmd: "previous-window", desc: "Option+h: previous window", isTmuxCommand: true},
-	{key: "M-l", cmd: "next-window", desc: "Option+l: next window", isTmuxCommand: true},
+	{key: "M-h", cmd: "previous-window", desc: "Option+h: previous window", isTmuxCommand: true, global: true},
+	{key: "M-l", cmd: "next-window", desc: "Option+l: next window", isTmuxCommand: true, global: true},
 
 	// Pane navigation within the current window.
-	{key: "M-j", cmd: "select-pane -D", desc: "Option+j: select pane down", isTmuxCommand: true},
-	{key: "M-k", cmd: "select-pane -U", desc: "Option+k: select pane up", isTmuxCommand: true},
-	{key: "M-H", cmd: "select-pane -L", desc: "Option+H: select pane left", isTmuxCommand: true},
-	{key: "M-L", cmd: "select-pane -R", desc: "Option+L: select pane right", isTmuxCommand: true},
-	{key: "M-J", cmd: "select-pane -D", desc: "Option+J: select pane down (mirror of j)", isTmuxCommand: true},
-	{key: "M-K", cmd: "select-pane -U", desc: "Option+K: select pane up (mirror of k)", isTmuxCommand: true},
+	{key: "M-j", cmd: "select-pane -D", desc: "Option+j: select pane down", isTmuxCommand: true, global: true},
+	{key: "M-k", cmd: "select-pane -U", desc: "Option+k: select pane up", isTmuxCommand: true, global: true},
+	{key: "M-H", cmd: "select-pane -L", desc: "Option+H: select pane left", isTmuxCommand: true, global: true},
+	{key: "M-L", cmd: "select-pane -R", desc: "Option+L: select pane right", isTmuxCommand: true, global: true},
+	{key: "M-J", cmd: "select-pane -D", desc: "Option+J: select pane down (mirror of j)", isTmuxCommand: true, global: true},
+	{key: "M-K", cmd: "select-pane -U", desc: "Option+K: select pane up (mirror of k)", isTmuxCommand: true, global: true},
 
 	// Bay picker
 	{key: "M-g", cmd: "bay go --pick", desc: "Option+g: pick bay in dock", tmuxVerb: "run-shell"},
@@ -406,17 +425,27 @@ var bayStatusLineBlock = []string{
 	"set -g status-right '#(bay status-line full --window #{window_id} --width #{status-right-length})'",
 }
 
-// canonicalLine returns the literal line bay would write for this binding.
-func (kb bayKeybinding) canonicalLine() string {
+// tmuxCommand returns the tmux command this binding runs, before any
+// session scoping is applied.
+func (kb bayKeybinding) tmuxCommand() string {
 	if kb.isTmuxCommand {
 		// Raw tmux command: no shell wrapper, no "|| true" — tmux commands
 		// don't fail with distracting status-line messages the way shell
 		// commands do via run-shell.
-		return fmt.Sprintf("bind-key %s %s %s", kb.bindFlag(), kb.key, kb.cmd)
+		return kb.cmd
 	}
-	// Ensure exit 0 so keybindings are silent in non-bay sessions.
-	// tmux run-shell displays "returned N" for non-zero exits.
-	return fmt.Sprintf("bind-key %s %s %s '%s || true'", kb.bindFlag(), kb.key, kb.tmuxVerb, kb.cmd)
+	// Ensure exit 0 so keybindings are silent when bay has nothing to
+	// do. tmux run-shell displays "returned N" for non-zero exits.
+	return fmt.Sprintf("%s '%s || true'", kb.tmuxVerb, kb.cmd)
+}
+
+// canonicalLine returns the literal line bay would write for this binding.
+func (kb bayKeybinding) canonicalLine() string {
+	cmd := kb.tmuxCommand()
+	if kb.scoped() {
+		cmd = tmux.ScopeBinding(kb.key, cmd)
+	}
+	return fmt.Sprintf("bind-key %s %s %s", kb.bindFlag(), kb.key, cmd)
 }
 
 // extractBayBlock returns the bay keybindings block (everything from the
@@ -451,25 +480,41 @@ func extractBayBlock(content string) (string, bool) {
 	return strings.Join(blockLines, "\n"), true
 }
 
-// parseBindLine extracts the table, key, and command portion of a tmux
-// bind line. Handles both active lines and commented lines (leading
-// `#`), and recognizes both root bindings (`-n`) and key-table
-// bindings (`-T <table>`). Returns ok=false if the line isn't a
-// bind-key/bind binding we can parse.
+// parsedBind is one tmux bind line broken into the pieces bay
+// reconciles against its canonical table.
+type parsedBind struct {
+	table  string // "" = root table (`-n`); else the `-T <table>` name
+	key    string
+	cmd    string // command the binding runs, with bay's session scoping unwrapped
+	tail   string // whole tmux command after the key, scoping unwrapped, nothing extracted
+	scoped bool   // the line guards the command with bay's session-scope conditional
+}
+
+func (pb parsedBind) id() string { return bindID(pb.table, pb.key) }
+
+// parseBindLine breaks a tmux bind line into its parts. Handles both
+// active lines and commented lines (leading `#`), and recognizes both
+// root bindings (`-n`) and key-table bindings (`-T <table>`). Returns
+// ok=false if the line isn't a bind-key/bind binding we can parse.
+//
+// A scoped binding's conditional is unwrapped before the command is
+// read, so cmd means the same thing either way — what the key does in
+// a bay-managed session. Callers that care about the guard itself read
+// `scoped`.
 //
 // For bay-invoking bindings the returned command is the quoted shell
 // contents (e.g. `bay new -q || true`); for tmux-native bindings
-// it's the raw tmux command (e.g. `previous-window`, `select-pane -L`).
-//
-// Empty `table` means the binding is in the root table (`-n`); otherwise
-// it's the explicit `-T <table>` name.
-func parseBindLine(line string) (table, key, cmd string, ok bool) {
+// it's the quoted region when there is one (a display-message hint) and
+// otherwise the raw tmux command (e.g. `previous-window`). `tail` keeps
+// the command whole, without that extraction, for callers that need to
+// recognize a line bay wrote rather than the command inside it.
+func parseBindLine(line string) (pb parsedBind, ok bool) {
 	trimmed := strings.TrimSpace(line)
 	if strings.HasPrefix(trimmed, "#") {
 		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
 	}
 	if !strings.HasPrefix(trimmed, "bind-key") && !strings.HasPrefix(trimmed, "bind ") {
-		return "", "", "", false
+		return parsedBind{}, false
 	}
 	// Pull off "bind-key" / "bind", then "-n" or "-T <table>", leaving
 	// the key + tmux command tail. We use SplitN with a small bound so
@@ -477,7 +522,7 @@ func parseBindLine(line string) (table, key, cmd string, ok bool) {
 	// stays in a single piece.
 	parts := strings.SplitN(trimmed, " ", 2)
 	if len(parts) < 2 {
-		return "", "", "", false
+		return parsedBind{}, false
 	}
 	tail := strings.TrimLeft(parts[1], " ")
 	switch {
@@ -487,26 +532,32 @@ func parseBindLine(line string) (table, key, cmd string, ok bool) {
 		tail = strings.TrimLeft(tail[len("-T "):], " ")
 		tParts := strings.SplitN(tail, " ", 2)
 		if len(tParts) < 2 {
-			return "", "", "", false
+			return parsedBind{}, false
 		}
-		table = tParts[0]
+		pb.table = tParts[0]
 		tail = strings.TrimLeft(tParts[1], " ")
 	default:
-		return "", "", "", false
+		return parsedBind{}, false
 	}
 	keyParts := strings.SplitN(tail, " ", 2)
 	if len(keyParts) < 2 {
-		return "", "", "", false
+		return parsedBind{}, false
 	}
-	key = keyParts[0]
+	pb.key = keyParts[0]
 	rest := strings.TrimLeft(keyParts[1], " ")
+	if then, isScoped := tmux.UnwrapScope(rest); isScoped {
+		pb.scoped = true
+		rest = then
+	}
+	pb.tail = rest
+	pb.cmd = rest
 	if open := strings.IndexAny(rest, "'\""); open >= 0 {
 		close := strings.LastIndexByte(rest, rest[open])
 		if close > open {
-			return table, key, rest[open+1 : close], true
+			pb.cmd = rest[open+1 : close]
 		}
 	}
-	return table, key, rest, true
+	return pb, true
 }
 
 // commandsInBlock returns the set of commands found on any active
@@ -518,8 +569,8 @@ func commandsInBlock(block string) map[string]bool {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if _, _, cmd, ok := parseBindLine(l); ok {
-			cmds[cmd] = true
+		if pb, ok := parseBindLine(l); ok {
+			cmds[pb.cmd] = true
 		}
 	}
 	return cmds
@@ -534,8 +585,8 @@ func commentedCommandsInBlock(block string) map[string]bool {
 		if !strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if _, _, cmd, ok := parseBindLine(l); ok {
-			cmds[cmd] = true
+		if pb, ok := parseBindLine(l); ok {
+			cmds[pb.cmd] = true
 		}
 	}
 	return cmds
@@ -551,8 +602,8 @@ func activeKeysInBlock(block string) map[string]bool {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if t, k, _, ok := parseBindLine(l); ok {
-			ids[bindID(t, k)] = true
+		if pb, ok := parseBindLine(l); ok {
+			ids[pb.id()] = true
 		}
 	}
 	return ids
@@ -569,26 +620,26 @@ func commentedKeysInBlock(block string) map[string]bool {
 		if !strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if t, k, _, ok := parseBindLine(l); ok {
-			ids[bindID(t, k)] = true
+		if pb, ok := parseBindLine(l); ok {
+			ids[pb.id()] = true
 		}
 	}
 	return ids
 }
 
-// activeBindings returns the map of binding identity → command for
-// every active (non-comment) bind line in the block. Keys are the
+// activeBindings returns the map of binding identity → parsed binding
+// for every active (non-comment) bind line in the block. Keys are the
 // composite (table, key) identity from bindID so a chord-table letter
 // doesn't collide with the same letter at the root.
-func activeBindings(block string) map[string]string {
-	out := map[string]string{}
+func activeBindings(block string) map[string]parsedBind {
+	out := map[string]parsedBind{}
 	for _, l := range strings.Split(block, "\n") {
 		trimmed := strings.TrimSpace(l)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if t, k, cmd, ok := parseBindLine(l); ok {
-			out[bindID(t, k)] = cmd
+		if pb, ok := parseBindLine(l); ok {
+			out[pb.id()] = pb
 		}
 	}
 	return out
@@ -629,13 +680,12 @@ func conflictingKeys(content string, kbs []bayKeybinding) []string {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		t, k, _, ok := parseBindLine(l)
+		pb, ok := parseBindLine(l)
 		if !ok {
 			continue
 		}
-		id := bindID(t, k)
-		if canonical[id] {
-			bound[id] = true
+		if canonical[pb.id()] {
+			bound[pb.id()] = true
 		}
 	}
 	var conflicts []string
@@ -730,20 +780,43 @@ func canonicalCommandMatches(cmd, canonical string) bool {
 	return cmd == canonical || strings.HasPrefix(cmd, canonical+" ||")
 }
 
+// bayWroteCommandTail reports whether tail — a bind line's whole command,
+// scope guard already unwrapped — is what bay itself writes for kb.
+//
+// The comparison is on the exact bytes, not the command extracted out of
+// the quoting, because this is the gate on rewriting a user's line: only
+// a line bay produced verbatim may be migrated in place. `bay shell
+// --pane` run through a different tmux verb, or a bay command a user
+// edited, is theirs to keep.
+//
+// Two spellings count as bay's: the tail as written on a pre-scoping
+// line, and the same command as it appears inside a scope guard, where
+// ScopeBinding rewrites `\;` to `;` (inside `{ }` tmux lexes a bare `;`
+// as the command separator).
+func bayWroteCommandTail(tail string, kb bayKeybinding) bool {
+	want := kb.tmuxCommand()
+	return tail == want || tail == strings.ReplaceAll(want, `\;`, ";")
+}
+
 // bayKeybindingMismatch records a canonical key whose active binding
-// runs a bay command that exists in the canonical set but isn't the
-// canonical one for that key — the silent-drift case that appears
+// has drifted from what bay ships — the silent-drift case that appears
 // when bay ships a canonical change and the user hasn't re-run setup.
+// Two kinds of drift: the key runs a bay command that exists in the
+// canonical set but isn't the canonical one for that key, or it runs
+// bay's own line for that key with the wrong session scoping.
 type bayKeybindingMismatch struct {
 	canonical bayKeybinding
 	userCmd   string
+	scoping   bool // drift is the session scoping, not the command
 }
 
 // mismatchedBindings returns canonical kbs whose key is actively bound
-// to a non-canonical-for-that-key bay command. Keys pinned via
-// `# bay-keep:` are skipped; truly-missing keys are left for
-// missingBindings. We only flag drift against bay's own canonical set
-// so unrelated user rebinds aren't touched.
+// to a non-canonical-for-that-key bay command, or bound with the wrong
+// session scoping. Keys pinned via `# bay-keep:` are skipped, which is
+// also how a user keeps a bay binding global on purpose; truly-missing
+// keys are left for missingBindings. We only flag command drift
+// against bay's own canonical set, and scoping drift only on a line bay
+// wrote verbatim, so unrelated user rebinds aren't touched.
 func mismatchedBindings(block string, kbs []bayKeybinding) []bayKeybindingMismatch {
 	active := activeBindings(block)
 	kept := keptKeys(block)
@@ -757,10 +830,26 @@ func mismatchedBindings(block string, kbs []bayKeybinding) []bayKeybindingMismat
 		if kept[kb.id()] {
 			continue
 		}
-		userCmd, ok := active[kb.id()]
+		bound, ok := active[kb.id()]
 		if !ok {
 			continue
 		}
+		// Scope migration applies only to lines bay wrote itself. A
+		// binding installed before bay scoped its keys carries the
+		// canonical command verbatim and runs it in every session;
+		// rewriting the line is what confines it to bay's own. Anything
+		// else on the key — a user's own command, or a bay command they
+		// edited — is command drift at most, and the checks below decide
+		// that. Testing the command first matters: a scoping prompt says
+		// nothing about the command, but accepting it rewrites the whole
+		// line, so it must never be offered for a line bay didn't write.
+		if bayWroteCommandTail(bound.tail, kb) {
+			if bound.scoped != kb.scoped() {
+				out = append(out, bayKeybindingMismatch{canonical: kb, userCmd: bound.cmd, scoping: true})
+			}
+			continue
+		}
+		userCmd := bound.cmd
 		if canonicalCommandMatches(userCmd, kb.cmd) {
 			continue
 		}
@@ -802,8 +891,8 @@ func replaceBindingInBlock(content string, kb bayKeybinding) string {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		t, k, _, ok := parseBindLine(l)
-		if !ok || bindID(t, k) != kb.id() {
+		pb, ok := parseBindLine(l)
+		if !ok || pb.id() != kb.id() {
 			continue
 		}
 		lines[i] = kb.canonicalLine()
@@ -872,8 +961,15 @@ func promptMissingBindings(reader *bufio.Reader, tmuxConf, content string, missi
 func promptMismatchedBindings(reader *bufio.Reader, tmuxConf, content string, mismatches []bayKeybindingMismatch) bool {
 	fmt.Printf("%d binding(s) in your block don't match the current canonical:\n", len(mismatches))
 	for _, m := range mismatches {
-		fmt.Printf("  %s is bound to `%s`; canonical: `%s`\n",
-			m.canonical.id(), m.userCmd, m.canonical.cmd)
+		switch {
+		case m.scoping && m.canonical.scoped():
+			fmt.Printf("  %s fires in every tmux session; canonical limits it to bay-managed ones\n", m.canonical.id())
+		case m.scoping:
+			fmt.Printf("  %s is limited to bay-managed sessions; canonical keeps it global\n", m.canonical.id())
+		default:
+			fmt.Printf("  %s is bound to `%s`; canonical: `%s`\n",
+				m.canonical.id(), m.userCmd, m.canonical.cmd)
+		}
 	}
 	fmt.Print("Update these to canonical? [Y/n/k] (y=update, n=skip once, k=keep yours so bay stops asking) ")
 	answer, _ := reader.ReadString('\n')

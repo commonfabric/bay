@@ -3,6 +3,8 @@ package palette
 import (
 	"os/exec"
 	"strings"
+
+	"github.com/commontoolsinc/bay/internal/tmux"
 )
 
 // Hotkeys maps bay-command signatures (e.g., "bay shell --window") to the
@@ -32,10 +34,14 @@ func LoadHotkeys() *Hotkeys {
 //
 //	bind-key -T root M-p display-popup -w 80% -h 80% -E 'bay palette --split pane || true'
 //	bind-key -n M-p run-shell 'bay shell --window || true'
+//	bind-key -T root M-c if-shell -F "#{@bay-session-id}" { run-shell "bay new -q || true" } { send-keys M-c }
 //
 // The key is the token immediately after `-T <table>` or `-n`. The command
 // is the quoted string at (or near) the end of the line; any trailing
-// ` || true` is stripped.
+// ` || true` is stripped. Bay scopes most of its bindings to the sessions
+// it manages, so the third form is the common one: the palette annotates
+// the key with what it does in a bay, which is the arm the conditional
+// takes there.
 func parseHotkeys(output string) *Hotkeys {
 	h := &Hotkeys{byCmd: map[string]string{}}
 	for line := range strings.SplitSeq(output, "\n") {
@@ -47,7 +53,7 @@ func parseHotkeys(output string) *Hotkeys {
 		if key == "" {
 			continue
 		}
-		cmd := extractQuotedCommand(line)
+		cmd := extractQuotedCommand(scopedCommand(line))
 		if cmd == "" {
 			continue
 		}
@@ -80,6 +86,16 @@ func extractKey(line string) string {
 		}
 	}
 	return ""
+}
+
+// scopedCommand unwraps bay's session-scope conditional, returning the
+// command the binding runs in a bay-managed session. Lines that aren't
+// scoped come back unchanged.
+func scopedCommand(line string) string {
+	if then, ok := tmux.UnwrapScope(line); ok {
+		return then
+	}
+	return line
 }
 
 // extractQuotedCommand finds the quoted substring on a bind-key line. Uses
