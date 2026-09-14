@@ -40,7 +40,9 @@ func (e *Engine) Recover() ([]RecoverResult, error) {
 
 		sessionIDChanged, err := e.applyRecoveredSessionID(dock)
 		if err != nil {
-			return nil, err
+			// One unhealthy dock must not abort the others.
+			errs = append(errs, fmt.Sprintf("dock %s: %v", dock.Name, err))
+			continue
 		}
 		if sessionIDChanged {
 			// Server restart or session takeover — recorded pane/window
@@ -60,7 +62,7 @@ func (e *Engine) Recover() ([]RecoverResult, error) {
 
 		if outcome.changed {
 			if err := e.mergeRecoveredDockState(dock); err != nil {
-				return nil, err
+				outcome.errs = append(outcome.errs, fmt.Sprintf("dock %s: save state: %v", dock.Name, err))
 			}
 		}
 

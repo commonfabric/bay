@@ -869,6 +869,10 @@ Reconstruct all docks, bays, and surfaces after a reboot.
 Recreates tmux sessions and windows, relaunches agents with
 resume args (e.g., `--continue`), starts the monitor. Idempotent.
 
+Scope depends on where it runs: inside a dock's tmux session it
+recovers just that dock; outside tmux it recovers every dock. Use
+`bay dock recover <name>` to target one dock from anywhere.
+
 #### `bay doctor`
 
 Health checks: config validity, dock checkout accessibility, agent availability,

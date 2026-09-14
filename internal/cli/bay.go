@@ -90,7 +90,7 @@ func newBayNewCmd() *cobra.Command {
 				fmt.Printf("Created %s:%s\n", opts.Dock, engine.BayCompactLabel(bay))
 				printPrepareStartedSummary(eng, opts.Dock, bay.ID)
 				currentSession, tmuxErr := eng.Tmux.CurrentSession()
-				if tmuxErr != nil || os.Getenv("TMUX") == "" {
+				if tmuxErr != nil {
 					fmt.Printf("\nAttach with:\n  tmux attach -t %s\n", opts.Dock)
 				} else if currentSession != opts.Dock {
 					fmt.Printf("\nSwitch with:\n  tmux switch-client -t %s\n", opts.Dock)
@@ -1012,12 +1012,9 @@ func resolveCurrentDock(eng *engine.Engine) (string, error) {
 	}
 
 	// Current tmux session, when it names a bay dock. CurrentSession
-	// works even from a run-shell keybinding (it reports the attached
-	// client's session).
+	// works even from a run-shell keybinding (it anchors to the
+	// invoking session), and errors outside tmux.
 	trySession := func() string {
-		if os.Getenv("TMUX") == "" {
-			return ""
-		}
 		if sess, err := eng.Tmux.CurrentSession(); err == nil && m != nil && m.FindDock(sess) != nil {
 			return sess
 		}
