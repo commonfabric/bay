@@ -25,10 +25,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/transcript"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/transcript"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/monitor"
+	"github.com/commonfabric/bay/internal/monitor"
 )
 
 func TestNewMonitorWithConfig_MissingConfigUsesDefaults(t *testing.T) {

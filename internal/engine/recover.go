@@ -7,8 +7,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // RecoverResult holds the results of a recovery operation.

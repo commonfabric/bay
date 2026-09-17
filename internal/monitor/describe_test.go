@@ -3,7 +3,7 @@ package monitor
 import (
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func TestSelectDescribeCandidates(t *testing.T) {

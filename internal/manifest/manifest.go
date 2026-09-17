@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commonfabric/bay/internal/config"
 )
 
 // CurrentVersion is the manifest schema version.

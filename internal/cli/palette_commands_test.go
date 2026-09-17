@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/palette"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/palette"
 )
 
 // identityDisplay is the no-decoration display func for picker tests

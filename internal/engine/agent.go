@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func (e *Engine) validateAgentName(agentName string) error {

@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 const placeholderName = "~"

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/monitor"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/monitor"
 	"github.com/spf13/cobra"
 )
 

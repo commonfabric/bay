@@ -7,11 +7,11 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	gitpkg "github.com/commontoolsinc/bay/internal/git"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	tmuxpkg "github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	gitpkg "github.com/commonfabric/bay/internal/git"
+	"github.com/commonfabric/bay/internal/manifest"
+	tmuxpkg "github.com/commonfabric/bay/internal/tmux"
 	"github.com/spf13/cobra"
 )
 

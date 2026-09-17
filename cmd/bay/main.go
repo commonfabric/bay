@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/commontoolsinc/bay/internal/cli"
+	"github.com/commonfabric/bay/internal/cli"
 )
 
 // version is set at build time via -ldflags "-X main.version=v0.1.0".

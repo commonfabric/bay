@@ -3,8 +3,8 @@ package nav
 import (
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // buildTestManifest creates a manifest with two docks and several bays.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // lastActive returns the LastActive timestamp for a bay, or 0 if missing.

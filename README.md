@@ -37,7 +37,7 @@ bay recover        # rebuild docks/bays/surfaces after a reboot
 This is a private repository. Build from source:
 
 ```
-git clone git@github.com:commontoolsinc/bay.git
+git clone git@github.com:commonfabric/bay.git
 cd bay
 go install ./cmd/bay
 ```

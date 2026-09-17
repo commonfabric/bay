@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/prepare"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/prepare"
 	"github.com/spf13/cobra"
 )
 

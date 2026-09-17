@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 	"github.com/spf13/cobra"
 )
 
