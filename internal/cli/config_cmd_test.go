@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commonfabric/bay/internal/config"
 )
 
 // --- Hard break: bay edit --set and --show are gone ---

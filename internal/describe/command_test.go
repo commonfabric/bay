@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commonfabric/bay/internal/config"
 )
 
 func TestCommandSummarizerFindsRuntimeBesideResolvedSymlink(t *testing.T) {

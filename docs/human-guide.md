@@ -31,12 +31,12 @@ launches AI coding agents.
 ## Installation
 
 ```
-go install github.com/commontoolsinc/bay/cmd/bay@latest
+go install github.com/commonfabric/bay/cmd/bay@latest
 ```
 
 For private repos, configure Go to use SSH:
 ```
-go env -w GOPRIVATE=github.com/commontoolsinc/bay
+go env -w GOPRIVATE=github.com/commonfabric/bay
 git config --global url."git@github.com:".insteadOf "https://github.com/"
 ```
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/palette"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/palette"
 	"github.com/spf13/cobra"
 )
 

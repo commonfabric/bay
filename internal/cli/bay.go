@@ -9,12 +9,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/nav"
-	"github.com/commontoolsinc/bay/internal/picker"
-	"github.com/commontoolsinc/bay/internal/prepare"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/nav"
+	"github.com/commonfabric/bay/internal/picker"
+	"github.com/commonfabric/bay/internal/prepare"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

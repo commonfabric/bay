@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commonfabric/bay/internal/config"
 )
 
 // commandSummarizer is the default Summarizer: it runs the configured

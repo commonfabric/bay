@@ -6,11 +6,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/palette"
-	"github.com/commontoolsinc/bay/internal/picker"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/palette"
+	"github.com/commonfabric/bay/internal/picker"
 )
 
 // paletteEnv collects the long-lived state the palette commands all

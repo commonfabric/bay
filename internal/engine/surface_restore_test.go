@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 func TestSurfaceClose_PushesUndoEntry(t *testing.T) {

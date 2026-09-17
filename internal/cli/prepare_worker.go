@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/commontoolsinc/bay/internal/prepare"
+	"github.com/commonfabric/bay/internal/prepare"
 	"github.com/spf13/cobra"
 )
 

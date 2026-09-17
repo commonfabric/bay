@@ -3,8 +3,8 @@ package engine
 import (
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // seedSurfaceBay adds a bay with one surface whose recorded PaneID

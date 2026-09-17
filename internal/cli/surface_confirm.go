@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // closeConfirmWindow is the second-tap deadline. Short enough that two

@@ -1,4 +1,4 @@
-module github.com/commontoolsinc/bay
+module github.com/commonfabric/bay
 
 go 1.26.1
 

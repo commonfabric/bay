@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // assertLayout fails the test if the window's tmux layout doesn't match

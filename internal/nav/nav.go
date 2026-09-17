@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // Entry represents a navigable bay.
