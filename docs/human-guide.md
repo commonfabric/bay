@@ -497,6 +497,13 @@ the codex default above. The summarizer runs as a detached background
 process and never blocks `bay` commands. See
 `docs/design/auto-descriptions.md` for the design.
 
+If the summarizer keeps failing (the configured model is retired, the CLI
+isn't installed, its login expired), descriptions stop updating without any
+other sign. `bay doctor` reports this: it warns once three summarizer runs
+in a row have failed with no success in between, and shows the last error
+and when the failures began. Failed runs are also logged to
+`~/.local/share/bay/logs/describe.log`.
+
 ## Agent integration
 
 ### Bay awareness

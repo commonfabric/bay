@@ -120,6 +120,44 @@ type Manifest struct {
 	Version int    `json:"version"`
 	Repos   []Repo `json:"repos,omitempty"`
 	Docks   []Dock `json:"docks"`
+	// Describe records recent auto-description summarizer outcomes across
+	// all bays; nil until the worker has run the summarizer once.
+	Describe *DescribeStatus `json:"describe_status,omitempty"`
+}
+
+// DescribeStatus is the auto-description summarizer's recent health, kept so
+// `bay doctor` can report a summarizer that keeps failing (retired model,
+// missing CLI, expired login) instead of leaving that only in
+// logs/describe.log. Only summarizer outcomes count: runs that skip the
+// summarizer (no signal, unchanged input) leave it alone, and any success
+// clears the failure streak.
+type DescribeStatus struct {
+	LastSuccessAt       int64  `json:"last_success_at,omitempty"`
+	ConsecutiveFailures int    `json:"consecutive_failures,omitempty"`
+	FailingSince        int64  `json:"failing_since,omitempty"` // start of the current failure streak
+	LastFailureAt       int64  `json:"last_failure_at,omitempty"`
+	LastError           string `json:"last_error,omitempty"` // one line, from the most recent failure
+}
+
+// RecordDescribeSuccess notes that the summarizer produced a usable
+// description at now (unix seconds), ending any failure streak.
+func (m *Manifest) RecordDescribeSuccess(now int64) {
+	m.Describe = &DescribeStatus{LastSuccessAt: now}
+}
+
+// RecordDescribeFailure notes that a summarizer run failed at now with the
+// given one-line error, extending the current failure streak.
+func (m *Manifest) RecordDescribeFailure(now int64, msg string) {
+	if m.Describe == nil {
+		m.Describe = &DescribeStatus{}
+	}
+	s := m.Describe
+	if s.ConsecutiveFailures == 0 {
+		s.FailingSince = now
+	}
+	s.ConsecutiveFailures++
+	s.LastFailureAt = now
+	s.LastError = msg
 }
 
 // Dock represents a tmux session and its associated terminal window.

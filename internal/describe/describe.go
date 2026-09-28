@@ -37,6 +37,10 @@ const (
 	maxRecentPrompts = 6
 	maxInputLen      = 6000
 
+	// maxStatusErrorLen bounds the one-line error kept in the manifest's
+	// describe status.
+	maxStatusErrorLen = 300
+
 	// maxStableStreak caps the no-op streak the worker records. The
 	// monitor's backoff saturates well before this (see describeMaxInterval),
 	// so it only keeps the stored count from growing without bound.
@@ -126,17 +130,14 @@ func (w *Worker) Run(ctx context.Context, opts Options) error {
 	// retry stays at the base min-interval cadence rather than backing off.
 	desc, err := w.summarize(ctx, input, mode)
 	if err != nil {
-		w.logErr(opts, err)
-		return w.stampSummarized(opts, false)
+		return w.stampFailed(opts, err)
 	}
 	desc = sanitizeDescription(desc)
 	if desc == "" {
-		w.logErr(opts, fmt.Errorf("summarizer produced an empty description"))
-		return w.stampSummarized(opts, false)
+		return w.stampFailed(opts, fmt.Errorf("summarizer produced an empty description"))
 	}
 	if err := engine.ValidateDescription(desc); err != nil {
-		w.logErr(opts, fmt.Errorf("generated description invalid: %w", err))
-		return w.stampSummarized(opts, false)
+		return w.stampFailed(opts, fmt.Errorf("generated description invalid: %w", err))
 	}
 	return w.commit(opts, desc, hash)
 }
@@ -183,11 +184,31 @@ func (w *Worker) now() int64 {
 // the input changed but we failed to summarize it: reset the streak so the
 // retry stays at the base cadence (the content is still unsummarized).
 func (w *Worker) stampSummarized(opts Options, quiet bool) error {
+	return w.stamp(opts, quiet, nil)
+}
+
+// stampFailed logs a summarizer failure, records it in the manifest's
+// describe status (which `bay doctor` reads), and stamps the bay like any
+// other changed-but-unsummarized run.
+func (w *Worker) stampFailed(opts Options, err error) error {
+	w.logErr(opts, err)
+	return w.stamp(opts, false, err)
+}
+
+// stamp updates the bay's back-off fields. A non-nil failure is also
+// recorded in the describe status. That is written even when the bay is no
+// longer eligible: the summarizer still ran and failed.
+func (w *Worker) stamp(opts Options, quiet bool, failure error) error {
 	now := w.now()
 	return manifest.LockedUpdateMaybe(w.ManifestPath, func(m *manifest.Manifest) (bool, error) {
+		changed := false
+		if failure != nil {
+			m.RecordDescribeFailure(now, failureSummary(failure))
+			changed = true
+		}
 		bay := findBay(m, opts)
 		if bay == nil || !eligible(bay) {
-			return false, nil
+			return changed, nil
 		}
 		bay.DescriptionSummarizedAt = now
 		if quiet {
@@ -201,14 +222,29 @@ func (w *Worker) stampSummarized(opts Options, quiet bool) error {
 	})
 }
 
+// failureSummary reduces a summarizer error to the single line stored in the
+// describe status. It takes the last non-empty line, since CLIs such as codex
+// print the actual error after their banner and echoed prompt.
+func failureSummary(err error) string {
+	lines := strings.Split(err.Error(), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := oneLine(lines[i]); line != "" {
+			return truncate(line, maxStatusErrorLen)
+		}
+	}
+	return ""
+}
+
 // commit writes a generated description, re-checking eligibility under
-// the lock since the user may have set one in the meantime.
+// the lock since the user may have set one in the meantime. The summarizer
+// succeeded either way, so that is recorded in the describe status first.
 func (w *Worker) commit(opts Options, desc, hash string) error {
 	now := w.now()
 	return manifest.LockedUpdateMaybe(w.ManifestPath, func(m *manifest.Manifest) (bool, error) {
+		m.RecordDescribeSuccess(now)
 		bay := findBay(m, opts)
 		if bay == nil || !eligible(bay) {
-			return false, nil
+			return true, nil
 		}
 		bay.Description = desc
 		bay.DescriptionSource = manifest.DescriptionSourceAuto

@@ -12,6 +12,13 @@ import (
 	"github.com/commonfabric/bay/internal/config"
 )
 
+const (
+	// maxStderrLines and maxStderrLineLen bound the stderr kept in a
+	// summarizer failure error.
+	maxStderrLines   = 4
+	maxStderrLineLen = 300
+)
+
 // commandSummarizer is the default Summarizer: it runs the configured
 // argv (DescribeConfig.Command) with the prompt appended as the final
 // argument, then returns the result. Two optional tokens make it work
@@ -74,7 +81,10 @@ func (c commandSummarizer) Summarize(ctx context.Context, prompt string) (string
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s: %w: %s", final[0], err, strings.TrimSpace(stderr.String()))
+		if tail := stderrTail(stderr.String()); tail != "" {
+			return "", fmt.Errorf("%s: %w: %s", final[0], err, tail)
+		}
+		return "", fmt.Errorf("%s: %w", final[0], err)
 	}
 
 	out := stdout.String()
@@ -93,6 +103,26 @@ func (c commandSummarizer) Summarize(ctx context.Context, prompt string) (string
 		return "", fmt.Errorf("%s produced no output", final[0])
 	}
 	return out, nil
+}
+
+// stderrTail keeps the end of a failed summarizer's stderr for error
+// reporting. Codex prints a banner and echoes the whole prompt (the user's
+// own requests) before the actual error, so the head is noise and copying it
+// into describe.log made each failure entry several KB. Consecutive
+// duplicate lines are dropped because codex prints its error twice.
+func stderrTail(s string) string {
+	var kept []string
+	for line := range strings.SplitSeq(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || (len(kept) > 0 && kept[len(kept)-1] == line) {
+			continue
+		}
+		kept = append(kept, truncate(line, maxStderrLineLen))
+	}
+	if len(kept) > maxStderrLines {
+		kept = kept[len(kept)-maxStderrLines:]
+	}
+	return strings.Join(kept, "\n")
 }
 
 // summarizerEnv repairs the stale PATH inherited by a long-running monitor
