@@ -488,7 +488,7 @@ enabled = true
 # reads stdout. Set the model by editing the command — any CLI works.
 command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
            "--ephemeral", "-c", "model_reasoning_effort=low",
-           "-m", "gpt-5.4-mini", "-o", "{out}"]
+           "-m", "gpt-6-luna", "-o", "{out}"]
 ```
 
 A plain stdout filter needs no `{out}`, e.g.
