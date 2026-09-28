@@ -53,6 +53,18 @@ func loadBay(t *testing.T, path string) manifest.Bay {
 	return *b
 }
 
+func loadDescribeStatus(t *testing.T, path string) manifest.DescribeStatus {
+	t.Helper()
+	m, err := manifest.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Describe == nil {
+		t.Fatal("manifest has no describe status")
+	}
+	return *m.Describe
+}
+
 func newWorker(t *testing.T, manifestPath string, sum Summarizer, prompts []transcript.Prompt, git GitSignal) *Worker {
 	t.Helper()
 	return &Worker{
@@ -168,6 +180,11 @@ func TestStampsOnSummarizerFailure(t *testing.T) {
 	if got.DescriptionStableStreak != 0 {
 		t.Errorf("stable streak = %d, want 0 (reset on a failed-but-changed run)", got.DescriptionStableStreak)
 	}
+	st := loadDescribeStatus(t, mp)
+	want := manifest.DescribeStatus{ConsecutiveFailures: 1, FailingSince: 1000, LastFailureAt: 1000, LastError: "boom"}
+	if st != want {
+		t.Errorf("describe status = %+v, want %+v", st, want)
+	}
 }
 
 func TestStampsOnEmptyDescription(t *testing.T) {
@@ -185,6 +202,9 @@ func TestStampsOnEmptyDescription(t *testing.T) {
 	}
 	if got.DescriptionSummarizedAt != 1000 {
 		t.Errorf("summarizedAt = %d, want 1000 (stamped on empty for backoff)", got.DescriptionSummarizedAt)
+	}
+	if st := loadDescribeStatus(t, mp); st.ConsecutiveFailures != 1 || st.LastError != "summarizer produced an empty description" {
+		t.Errorf("describe status = %+v, want one failure for the empty description", st)
 	}
 }
 
@@ -456,5 +476,95 @@ func TestSanitizeDescription(t *testing.T) {
 	huge := strings.Repeat("a ", 2000)
 	if got := sanitizeDescription("short first line\n\n" + huge); len(got) > 2000 {
 		t.Errorf("total len = %d, want <= 2000", len(got))
+	}
+}
+
+func TestDescribeStatusFailureStreakClearedBySuccess(t *testing.T) {
+	mp := filepath.Join(t.TempDir(), "manifest.json")
+	writeManifest(t, mp, eligibleBay())
+	sum := &stubSummarizer{err: errors.New("line one\nERROR: model not supported")}
+	w := newWorker(t, mp, sum, []transcript.Prompt{{Text: "goal"}}, GitSignal{Branch: "x"})
+	opts := Options{Dock: "labs", Bay: "b1"}
+
+	for range 2 {
+		if err := w.Run(context.Background(), opts); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := loadDescribeStatus(t, mp)
+	if st.ConsecutiveFailures != 2 || st.LastError != "ERROR: model not supported" {
+		t.Fatalf("after two failures = %+v, want 2 failures with the last line as the error", st)
+	}
+
+	sum.err, sum.out = nil, "Ship the feature"
+	if err := w.Run(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	st = loadDescribeStatus(t, mp)
+	if st != (manifest.DescribeStatus{LastSuccessAt: 1000}) {
+		t.Errorf("after success = %+v, want failures cleared and LastSuccessAt=1000", st)
+	}
+}
+
+func TestQuietRunsLeaveDescribeStatusAlone(t *testing.T) {
+	mp := filepath.Join(t.TempDir(), "manifest.json")
+	writeManifest(t, mp, eligibleBay())
+	sum := &stubSummarizer{out: "unused"}
+	// No transcript and no git signal: the worker never calls the summarizer.
+	w := newWorker(t, mp, sum, nil, GitSignal{})
+
+	if err := w.Run(context.Background(), Options{Dock: "labs", Bay: "b1"}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := manifest.Load(mp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Describe != nil {
+		t.Errorf("describe status = %+v after a run that skipped the summarizer, want nil", m.Describe)
+	}
+}
+
+func TestStampFailedRecordsStatusForIneligibleBay(t *testing.T) {
+	mp := filepath.Join(t.TempDir(), "manifest.json")
+	bay := eligibleBay()
+	bay.Description = "written by hand"
+	bay.DescriptionSource = manifest.DescriptionSourceUser
+	writeManifest(t, mp, bay)
+	w := newWorker(t, mp, &stubSummarizer{}, nil, GitSignal{})
+
+	// The user described the bay while the summarizer was running. The
+	// summarizer still failed, so that is recorded, but the bay is untouched.
+	if err := w.stampFailed(Options{Dock: "labs", Bay: "b1"}, errors.New("boom")); err != nil {
+		t.Fatal(err)
+	}
+	if st := loadDescribeStatus(t, mp); st.ConsecutiveFailures != 1 || st.LastError != "boom" {
+		t.Errorf("describe status = %+v, want one recorded failure", st)
+	}
+	got := loadBay(t, mp)
+	if got.Description != "written by hand" || got.DescriptionSummarizedAt != 0 {
+		t.Errorf("bay changed: description=%q summarizedAt=%d", got.Description, got.DescriptionSummarizedAt)
+	}
+}
+
+func TestFailureSummary(t *testing.T) {
+	long := strings.Repeat("x", maxStatusErrorLen+50)
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"single line", errors.New("boom"), "boom"},
+		{"last line wins", errors.New("codex: exit status 1: banner\nprompt text\nERROR: bad model"), "ERROR: bad model"},
+		{"skips trailing blanks", errors.New("first\nsecond\n\n  \n"), "second"},
+		{"collapses whitespace", errors.New("a   b\t c"), "a b c"},
+		{"truncates", errors.New(long), long[:maxStatusErrorLen]},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := failureSummary(tt.err); got != tt.want {
+				t.Errorf("failureSummary = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -877,7 +877,9 @@ recovers just that dock; outside tmux it recovers every dock. Use
 
 Health checks: config validity, dock checkout accessibility, agent availability,
 manifest consistency, monitor status, tmux keybindings, bay awareness
-in dock checkouts.
+in dock checkouts, and (when `[describe]` is enabled) auto-description
+summarizer health: it warns after three consecutive summarizer failures,
+with the last error. If bay descriptions stop appearing, run this first.
 
 #### `bay monitor start|stop|status`
 

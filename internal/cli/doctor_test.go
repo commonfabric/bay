@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/engine"
@@ -213,5 +215,96 @@ func TestCheckManifestConsistency(t *testing.T) {
 	warnings := checkManifestConsistency(m, cfg)
 	if len(warnings) < 3 {
 		t.Fatalf("warnings = %v, want at least 3 consistency warnings (dup bay name, dup surface id, dup surface name)", warnings)
+	}
+}
+
+func TestCheckDescribeHealth(t *testing.T) {
+	prevLocal := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = prevLocal })
+
+	enabled, disabled := true, false
+	cfgWith := func(e *bool) *config.Config {
+		return &config.Config{Describe: config.DescribeConfig{Enabled: e}}
+	}
+	ts := func(s string) int64 {
+		tm, err := time.Parse("2006-01-02 15:04", s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tm.Unix()
+	}
+	const log = "/data/logs/describe.log"
+	const errLine = "ERROR: model not supported"
+
+	tests := []struct {
+		name   string
+		cfg    *config.Config
+		status *manifest.DescribeStatus
+		wantOK bool
+		want   []string // substrings of the output
+		empty  bool     // output must be empty
+	}{
+		{name: "disabled prints nothing", cfg: cfgWith(nil), status: &manifest.DescribeStatus{ConsecutiveFailures: 50}, wantOK: true, empty: true},
+		{name: "explicitly disabled prints nothing", cfg: cfgWith(&disabled), wantOK: true, empty: true},
+		{name: "nil config prints nothing", cfg: nil, wantOK: true, empty: true},
+		{name: "enabled, no runs yet", cfg: cfgWith(&enabled), wantOK: true, want: []string{"[OK] auto-descriptions enabled (no summaries yet)"}},
+		{
+			name:   "enabled, last success shown",
+			cfg:    cfgWith(&enabled),
+			status: &manifest.DescribeStatus{LastSuccessAt: ts("2026-09-28 09:34")},
+			wantOK: true,
+			want:   []string{"[OK] auto-descriptions enabled (last summary 2026-09-28 09:34)"},
+		},
+		{
+			name:   "failures below threshold are not a warning",
+			cfg:    cfgWith(&enabled),
+			status: &manifest.DescribeStatus{LastSuccessAt: ts("2026-09-28 09:34"), ConsecutiveFailures: describeFailureWarnThreshold - 1, LastError: errLine},
+			wantOK: true,
+			want:   []string{"[OK] auto-descriptions enabled"},
+		},
+		{
+			name: "threshold reached warns with last error and log path",
+			cfg:  cfgWith(&enabled),
+			status: &manifest.DescribeStatus{
+				LastSuccessAt:       ts("2026-09-07 13:46"),
+				ConsecutiveFailures: 5688,
+				FailingSince:        ts("2026-09-08 10:40"),
+				LastError:           errLine,
+			},
+			wantOK: false,
+			want: []string{
+				"[WARN] auto-descriptions failing: 5688 consecutive summarizer failures since 2026-09-08 10:40",
+				"(last success 2026-09-07 13:46)",
+				errLine,
+				"(see " + log + ")",
+			},
+		},
+		{
+			name:   "never succeeded",
+			cfg:    cfgWith(&enabled),
+			status: &manifest.DescribeStatus{ConsecutiveFailures: describeFailureWarnThreshold, FailingSince: ts("2026-09-08 10:40"), LastError: errLine},
+			wantOK: false,
+			want:   []string{"(last success never)"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := manifest.New()
+			m.Describe = tt.status
+			var buf bytes.Buffer
+			if got := checkDescribeHealth(&buf, tt.cfg, m, log); got != tt.wantOK {
+				t.Errorf("ok = %v, want %v (output %q)", got, tt.wantOK, buf.String())
+			}
+			out := buf.String()
+			if tt.empty && out != "" {
+				t.Errorf("output = %q, want empty", out)
+			}
+			for _, sub := range tt.want {
+				if !strings.Contains(out, sub) {
+					t.Errorf("output %q missing %q", out, sub)
+				}
+			}
+		})
 	}
 }
