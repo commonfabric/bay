@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/commonfabric/bay/internal/prepare"
@@ -23,6 +24,8 @@ func startWorkerProcess(exe string, args []string) error {
 // dispatches describe workers for weeks) would otherwise keep every
 // exited worker as a zombie. A short-lived parent exits before the worker
 // does and the worker is reparented to init, as before.
+//
+// The waiter lives only in this process image; see WorkersInFlight.
 func spawnWorker(exe string, args []string) (int, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = "/"
@@ -31,8 +34,24 @@ func spawnWorker(exe string, args []string) (int, error) {
 		return 0, fmt.Errorf("starting worker: %w", err)
 	}
 	pid := cmd.Process.Pid
-	go func() { _ = cmd.Wait() }()
+	workersInFlight.Add(1)
+	go func() {
+		_ = cmd.Wait()
+		workersInFlight.Add(-1)
+	}()
 	return pid, nil
+}
+
+// workersInFlight counts workers this process started and has not yet
+// reaped.
+var workersInFlight atomic.Int64
+
+// WorkersInFlight reports how many dispatched workers are still running
+// under this process. A process that replaces its own image with
+// syscall.Exec keeps its children but loses the goroutines waiting on
+// them, so it must not exec while this is non-zero.
+func WorkersInFlight() int {
+	return int(workersInFlight.Load())
 }
 
 // PreparePlan returns the effective prepare plan for a bay.

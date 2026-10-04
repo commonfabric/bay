@@ -31,3 +31,26 @@ func TestSpawnWorker_ReapsExitedChild(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// The monitor holds its in-place re-exec while workers are in flight;
+// the count must cover a running worker and drop once it is reaped.
+func TestWorkersInFlight_TracksRunningWorker(t *testing.T) {
+	exe, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skipf("no sleep binary: %v", err)
+	}
+	before := WorkersInFlight()
+	if _, err := spawnWorker(exe, []string{"0.5"}); err != nil {
+		t.Fatalf("spawnWorker: %v", err)
+	}
+	if got := WorkersInFlight(); got != before+1 {
+		t.Fatalf("WorkersInFlight while running = %d, want %d", got, before+1)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for WorkersInFlight() != before {
+		if time.Now().After(deadline) {
+			t.Fatalf("WorkersInFlight = %d after worker exit, want %d", WorkersInFlight(), before)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
