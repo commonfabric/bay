@@ -13,16 +13,26 @@ import (
 // child so the worker survives the parent (e.g., the CLI process)
 // exiting. Shared by the prepare and describe dispatchers.
 func startWorkerProcess(exe string, args []string) error {
+	_, err := spawnWorker(exe, args)
+	return err
+}
+
+// spawnWorker starts the detached worker and returns its PID. The child
+// is waited on in a goroutine rather than released: Process.Release does
+// not reap, so a parent that outlives the worker (the monitor, which
+// dispatches describe workers for weeks) would otherwise keep every
+// exited worker as a zombie. A short-lived parent exits before the worker
+// does and the worker is reparented to init, as before.
+func spawnWorker(exe string, args []string) (int, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = "/"
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("starting worker: %w", err)
+		return 0, fmt.Errorf("starting worker: %w", err)
 	}
-	if err := cmd.Process.Release(); err != nil {
-		return fmt.Errorf("releasing worker: %w", err)
-	}
-	return nil
+	pid := cmd.Process.Pid
+	go func() { _ = cmd.Wait() }()
+	return pid, nil
 }
 
 // PreparePlan returns the effective prepare plan for a bay.
