@@ -172,8 +172,11 @@ func (m *Monitor) Run(ctx context.Context) error {
 			// If the bay binary has been replaced, exec the new one
 			// in place. syscall.Exec preserves the PID and falls
 			// through on failure (ENOENT mid-swap, etc.) so the next
-			// tick retries.
-			if exe != "" && m.hasBinaryChanged(exe) {
+			// tick retries. Workers still running would keep this PID
+			// as their parent but lose the goroutines waiting on them,
+			// and stay defunct once they exit, so hold the exec until
+			// they have been reaped.
+			if exe != "" && m.hasBinaryChanged(exe) && engine.WorkersInFlight() == 0 {
 				_ = syscall.Exec(exe, os.Args, os.Environ())
 			}
 			// Errors during a check cycle are non-fatal; we log and continue.
