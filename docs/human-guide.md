@@ -475,6 +475,12 @@ bay's agent conversation (Claude and Codex transcripts) on a slow
 background cadence run by the monitor. It never overwrites a description
 you (or an agent) set by hand.
 
+A generated description is a status card for picking the work back up:
+the first line is the purpose of the whole effort, and the body (shown
+in the `M-?` popup) gives the current stage and the next step or
+blocker. It draws on your prompts, the agent's latest reply, the
+session summary written on `/compact`, and the branch's git state.
+
 It's **off by default** — it spends model calls and assumes a summarizer
 CLI you have — so it's opt-in. `bay setup` offers to turn it on; or set
 it directly:

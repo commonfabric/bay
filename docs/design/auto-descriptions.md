@@ -245,7 +245,18 @@ activity gate can be upgraded to a cheap cwd→log-mtime index.
    is unknown or would empty the set). Of what remains, the earliest
    prompt is the goal anchor and the last few are current context.
    Conversation drives the goal, git grounds the body. No prompts → fall
-   back to git-only. No signal at all (no prompts, no commits, empty
+   back to git-only.
+
+   *Revised 2026-10:* typed prompts alone proved too thin. Follow-ups
+   are mostly short steps ("open pr", "split it") that only make sense
+   next to the agent's replies, so descriptions tracked the latest step
+   and could not say where the work stood. The input now also carries
+   the compaction summary Claude Code writes on `/compact` (the session
+   history) and the agent's latest turn-final reply (the current stage),
+   and keeps up to 30 prompts (first plus most recent) instead of the
+   first plus the last six. Codex subagent and `codex exec` sessions are
+   skipped, since they share the bay's cwd but are not the user's
+   conversation. No signal at all (no prompts, no commits, empty
    diff) → stamp `DescriptionSummarizedAt` (so the monitor paces
    re-checks) and leave the description empty.
 5. If the assembled input's hash matches the stored hash (per-bay state
@@ -292,6 +303,13 @@ optional blank line then 1–3 lines of current context, which may draw
 on the git signal for what's in flight. Explicitly *not* a changelog of
 actions — git history already records what was done, so the body is
 "where things stand," not "what changed."
+
+*Revised 2026-10:* the body is now a status card for a developer
+returning to the bay: a `Stage:` line (where the work stands, with PR
+numbers and other concrete names), a `Next:` line (the next step, or
+what is blocked and on whom), and optionally one caveat. The first line
+is the purpose of the whole effort, taken from the overall arc rather
+than the latest request.
 
 ## Cascade
 
