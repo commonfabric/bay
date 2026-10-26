@@ -4,10 +4,11 @@
 // the working agent's involvement.
 //
 // It is conversation-first: the goal comes from the user's own prompts
-// (the one thing git doesn't capture); git (branch, commits, diffstat)
-// grounds the body and is the sole input only when no transcript is
-// readable. It never overwrites a human- or agent-set description, and
-// failures are non-fatal (logged, retried next cycle).
+// and the session-history summary (the things git doesn't capture), and
+// the current stage from the agent's latest reply; git (branch, commits,
+// diffstat) grounds the body and is the sole input only when no
+// transcript is readable. It never overwrites a human- or agent-set
+// description, and failures are non-fatal (logged, retried next cycle).
 //
 // See docs/design/auto-descriptions.md.
 package describe
@@ -33,9 +34,16 @@ import (
 
 const (
 	summarizeTimeout = 60 * time.Second
-	maxPromptLen     = 600
-	maxRecentPrompts = 6
-	maxInputLen      = 6000
+
+	// Input budgets, in bytes. The first prompt usually states the goal,
+	// so it keeps more room than the follow-ups, which are often short
+	// steps ("open pr") whose value is in showing the arc.
+	maxFirstPromptLen = 600
+	maxPromptLen      = 200
+	maxPrompts        = 30
+	maxSummaryLen     = 2500
+	maxReplyLen       = 1500
+	maxInputLen       = 12000
 
 	// maxStatusErrorLen bounds the one-line error kept in the manifest's
 	// describe status.
@@ -66,9 +74,9 @@ type Worker struct {
 	DataDir      string
 	Now          func() time.Time
 
-	Summarizer    Summarizer
-	GatherPrompts func(cwd string) []transcript.Prompt
-	GatherGit     func(ctx context.Context, bayPath string) GitSignal
+	Summarizer         Summarizer
+	GatherConversation func(cwd string) transcript.Conversation
+	GatherGit          func(ctx context.Context, bayPath string) GitSignal
 }
 
 // Run generates (or refreshes) the description for one bay.
@@ -104,8 +112,8 @@ func (w *Worker) Run(ctx context.Context, opts Options) error {
 	cwd := bay.Path
 
 	git := w.gitSignal(ctx, cwd)
-	prompts := recentPrompts(w.prompts(cwd), git.WorkStart)
-	input, mode := assembleInput(prompts, git)
+	conv := currentWork(w.conversation(cwd), git.WorkStart)
+	input, mode := assembleInput(conv, git)
 	if mode == modeNone {
 		// Nothing to summarize (no transcript, no git signal). Stamp so
 		// the monitor's gate paces re-checks instead of re-probing every
@@ -142,9 +150,9 @@ func (w *Worker) Run(ctx context.Context, opts Options) error {
 	return w.commit(opts, desc, hash)
 }
 
-func (w *Worker) prompts(cwd string) []transcript.Prompt {
-	if w.GatherPrompts != nil {
-		return w.GatherPrompts(cwd)
+func (w *Worker) conversation(cwd string) transcript.Conversation {
+	if w.GatherConversation != nil {
+		return w.GatherConversation(cwd)
 	}
 	return transcript.Reader{}.Gather(cwd)
 }
@@ -283,52 +291,88 @@ const (
 	modeGitOnly
 )
 
-// recentPrompts drops prompts from before the current work began (the
-// last-merge boundary), so a bay reused after a merged PR describes its
-// new focus, not the old task. If the boundary is unknown or excluding
-// would empty the set, all prompts are kept. Undated prompts are kept.
-func recentPrompts(prompts []transcript.Prompt, since time.Time) []transcript.Prompt {
+// currentWork drops conversation from before the current work began
+// (the last-merge boundary), so a bay reused after a merged PR describes
+// its new focus, not the old task. If the boundary is unknown or
+// excluding would empty the conversation, all of it is kept. Undated
+// messages are kept.
+func currentWork(conv transcript.Conversation, since time.Time) transcript.Conversation {
 	if since.IsZero() {
-		return prompts
+		return conv
 	}
-	kept := make([]transcript.Prompt, 0, len(prompts))
-	for _, p := range prompts {
-		if p.Timestamp.IsZero() || !p.Timestamp.Before(since) {
-			kept = append(kept, p)
+	current := func(p transcript.Prompt) bool {
+		return p.Timestamp.IsZero() || !p.Timestamp.Before(since)
+	}
+	var kept transcript.Conversation
+	for _, p := range conv.Prompts {
+		if current(p) {
+			kept.Prompts = append(kept.Prompts, p)
 		}
 	}
-	if len(kept) == 0 {
-		return prompts
+	if current(conv.Summary) {
+		kept.Summary = conv.Summary
+	}
+	if current(conv.LastReply) {
+		kept.LastReply = conv.LastReply
+	}
+	if kept.IsEmpty() {
+		return conv
 	}
 	return kept
 }
 
-func assembleInput(prompts []transcript.Prompt, git GitSignal) (string, inputMode) {
+// selectPrompts caps the prompt list at maxPrompts, keeping the first
+// (which usually states the goal) and the most recent, and reports how
+// many were omitted between them.
+func selectPrompts(prompts []transcript.Prompt) ([]transcript.Prompt, int) {
+	if len(prompts) <= maxPrompts {
+		return prompts, 0
+	}
+	omitted := len(prompts) - maxPrompts
+	kept := append([]transcript.Prompt{prompts[0]}, prompts[len(prompts)-(maxPrompts-1):]...)
+	return kept, omitted
+}
+
+func assembleInput(conv transcript.Conversation, git GitSignal) (string, inputMode) {
 	var b strings.Builder
 	mode := modeNone
 
-	if len(prompts) > 0 {
+	if !conv.IsEmpty() {
 		mode = modeConversation
-		b.WriteString("=== Conversation (the user's own words) ===\n")
-		b.WriteString("First request:\n")
-		b.WriteString(truncate(prompts[0].Text, maxPromptLen))
-		b.WriteString("\n\nRecent requests (most recent last):\n")
-		recent := prompts
-		if len(recent) > maxRecentPrompts {
-			recent = recent[len(recent)-maxRecentPrompts:]
-		}
-		for _, p := range recent {
+	}
+	if conv.Summary.Text != "" {
+		b.WriteString("=== Session history (written by the agent when the conversation was compacted) ===\n")
+		b.WriteString(truncate(conv.Summary.Text, maxSummaryLen))
+		b.WriteString("\n\n")
+	}
+	if len(conv.Prompts) > 0 {
+		prompts, omitted := selectPrompts(conv.Prompts)
+		b.WriteString("=== The user's requests, oldest first (the user's own words) ===\n")
+		for i, p := range prompts {
+			limit := maxPromptLen
+			if i == 0 {
+				limit = maxFirstPromptLen
+			}
 			b.WriteString("- ")
-			b.WriteString(truncate(oneLine(p.Text), maxPromptLen))
+			b.WriteString(truncate(oneLine(p.Text), limit))
 			b.WriteString("\n")
+			if i == 0 && omitted > 0 {
+				fmt.Fprintf(&b, "- [%d earlier requests omitted]\n", omitted)
+			}
 		}
+		b.WriteString("\n")
+	}
+	if conv.LastReply.Text != "" {
+		b.WriteString("=== Where things stand (the agent's latest reply) ===\n")
+		b.WriteString(truncate(conv.LastReply.Text, maxReplyLen))
+		b.WriteString("\n\n")
 	}
 
 	if git.hasContent() {
 		if mode == modeNone {
 			mode = modeGitOnly
 		}
-		b.WriteString("\n=== Git state ===\n")
+		b.WriteString("=== Git state ===\n")
 		b.WriteString(git.String())
 	}
 
@@ -338,16 +382,27 @@ func assembleInput(prompts []transcript.Prompt, git GitSignal) (string, inputMod
 	return truncate(b.String(), maxInputLen), mode
 }
 
-const baseInstruction = "You are labeling a developer workspace. Write a standing brief describing what this workspace is FOR — its goal or scope, not a log of actions. " +
-	"Output ONLY the description, with no preamble, quotes, or code fences. " +
-	"The first line is a short imperative goal label: at most 80 characters, no trailing period. " +
-	"Optionally add a blank line then 1-3 short lines of current context (where things stand). Keep it to a few lines total."
+// baseInstruction asks for a status card that serves a developer
+// returning to the workspace: the purpose of the whole effort, the stage
+// it has reached, and what they need to know to continue. The emphasis
+// on the overall arc counters the pull of the latest request, which is
+// often a short step like "open pr".
+const baseInstruction = `You are writing the status card for a developer workspace. The developer switches between many workspaces and reads this card after time away to recall (1) what the whole effort is for, (2) what stage it has reached, and (3) what they need to know to continue or finish it.
+
+Line 1: the purpose of the entire effort, as a short imperative label (at most 80 characters, no trailing period). Short follow-ups like "open pr", "split it", or "continue" are steps, not the goal.
+
+Then a blank line and 2-4 short lines, with no blank lines between them:
+- Stage: where the work stands now (for example designing, implementing, PR #N in review, merged and cleaning up), with concrete names such as PR numbers, features, and files.
+- Next: the next step, or what is blocked and on whom (a decision the developer owes, a pending review, a failing test).
+- Optionally, one decision or caveat the developer would need before resuming.
+
+Use only what the input supports; omit a line rather than guess. Don't narrate individual tool actions. Output ONLY the card, with no preamble, quotes, or code fences.`
 
 func instructionFor(mode inputMode) string {
 	if mode == modeGitOnly {
-		return baseInstruction + " Base it on the branch name, commit subjects, and changed files provided."
+		return baseInstruction + "\n\nNo conversation is available: base the card on the branch name, commit subjects, and changed files provided, and omit Next unless the commits make it clear."
 	}
-	return baseInstruction + " Base the goal on the user's requests; you may use the git state for current context."
+	return baseInstruction + "\n\nTake the purpose from the session history, the first request, and the overall arc of the requests, not from the latest request. Take the stage mainly from the agent's latest reply; use the git state to ground it."
 }
 
 // --- description sanitation ---

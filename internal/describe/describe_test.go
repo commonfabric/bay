@@ -3,6 +3,7 @@ package describe
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,12 +69,14 @@ func loadDescribeStatus(t *testing.T, path string) manifest.DescribeStatus {
 func newWorker(t *testing.T, manifestPath string, sum Summarizer, prompts []transcript.Prompt, git GitSignal) *Worker {
 	t.Helper()
 	return &Worker{
-		ManifestPath:  manifestPath,
-		DataDir:       t.TempDir(),
-		Now:           func() time.Time { return time.Unix(1000, 0) },
-		Summarizer:    sum,
-		GatherPrompts: func(string) []transcript.Prompt { return prompts },
-		GatherGit:     func(context.Context, string) GitSignal { return git },
+		ManifestPath: manifestPath,
+		DataDir:      t.TempDir(),
+		Now:          func() time.Time { return time.Unix(1000, 0) },
+		Summarizer:   sum,
+		GatherConversation: func(string) transcript.Conversation {
+			return transcript.Conversation{Prompts: prompts}
+		},
+		GatherGit: func(context.Context, string) GitSignal { return git },
 	}
 }
 
@@ -93,7 +96,7 @@ func TestGeneratesFromConversation(t *testing.T) {
 	if sum.calls != 1 {
 		t.Fatalf("summarizer calls = %d, want 1", sum.calls)
 	}
-	if !strings.Contains(sum.prompt, "Base the goal on the user's requests") {
+	if !strings.Contains(sum.prompt, "Take the purpose from the session history") {
 		t.Errorf("expected conversation-mode instruction in prompt, got %q", sum.prompt)
 	}
 	got := loadBay(t, mp)
@@ -123,7 +126,7 @@ func TestGitOnlyFallback(t *testing.T) {
 	if sum.calls != 1 {
 		t.Fatalf("summarizer calls = %d, want 1", sum.calls)
 	}
-	if !strings.Contains(sum.prompt, "Base it on the branch name") {
+	if !strings.Contains(sum.prompt, "No conversation is available") {
 		t.Errorf("expected git-only instruction in prompt, got %q", sum.prompt)
 	}
 	if got := loadBay(t, mp); got.Description != "Build feature X" {
@@ -276,7 +279,7 @@ func TestRefreshesAuto(t *testing.T) {
 func TestInputHashSkip(t *testing.T) {
 	prompts := []transcript.Prompt{{Text: "stable goal"}}
 	git := GitSignal{Branch: "x"}
-	input, _ := assembleInput(prompts, git)
+	input, _ := assembleInput(transcript.Conversation{Prompts: prompts}, git)
 	hash := hashInput(input)
 
 	mp := filepath.Join(t.TempDir(), "manifest.json")
@@ -310,7 +313,7 @@ func TestInputHashSkip(t *testing.T) {
 func TestStableStreakCaps(t *testing.T) {
 	prompts := []transcript.Prompt{{Text: "stable goal"}}
 	git := GitSignal{Branch: "x"}
-	input, _ := assembleInput(prompts, git)
+	input, _ := assembleInput(transcript.Conversation{Prompts: prompts}, git)
 
 	mp := filepath.Join(t.TempDir(), "manifest.json")
 	bay := eligibleBay()
@@ -381,24 +384,84 @@ func TestLockPreventsDoubleRun(t *testing.T) {
 	}
 }
 
-func TestRecentPrompts(t *testing.T) {
+func TestCurrentWork(t *testing.T) {
 	boundary := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
 	before := transcript.Prompt{Timestamp: boundary.Add(-time.Hour), Text: "old"}
 	after := transcript.Prompt{Timestamp: boundary.Add(time.Hour), Text: "new"}
 	undated := transcript.Prompt{Text: "undated"}
 
 	// Zero boundary → no filtering.
-	if got := recentPrompts([]transcript.Prompt{before, after}, time.Time{}); len(got) != 2 {
-		t.Errorf("zero boundary kept %d, want 2", len(got))
+	if got := currentWork(transcript.Conversation{Prompts: []transcript.Prompt{before, after}}, time.Time{}); len(got.Prompts) != 2 {
+		t.Errorf("zero boundary kept %d, want 2", len(got.Prompts))
 	}
 	// Drops pre-boundary, keeps post and undated.
-	got := recentPrompts([]transcript.Prompt{before, after, undated}, boundary)
-	if len(got) != 2 || got[0].Text != "new" || got[1].Text != "undated" {
-		t.Errorf("filter = %+v, want [new, undated]", got)
+	got := currentWork(transcript.Conversation{Prompts: []transcript.Prompt{before, after, undated}}, boundary)
+	if len(got.Prompts) != 2 || got.Prompts[0].Text != "new" || got.Prompts[1].Text != "undated" {
+		t.Errorf("filter = %+v, want [new, undated]", got.Prompts)
+	}
+	// The summary and reply are filtered by the same boundary.
+	got = currentWork(transcript.Conversation{Prompts: []transcript.Prompt{after}, Summary: before, LastReply: before}, boundary)
+	if got.Summary.Text != "" || got.LastReply.Text != "" {
+		t.Errorf("pre-boundary summary/reply kept: %+v", got)
+	}
+	got = currentWork(transcript.Conversation{Summary: after, LastReply: after}, boundary)
+	if got.Summary.Text != "new" || got.LastReply.Text != "new" {
+		t.Errorf("post-boundary summary/reply dropped: %+v", got)
 	}
 	// All before boundary → fallback to all.
-	if got := recentPrompts([]transcript.Prompt{before}, boundary); len(got) != 1 {
-		t.Errorf("all-before fallback kept %d, want 1 (keep all)", len(got))
+	got = currentWork(transcript.Conversation{Prompts: []transcript.Prompt{before}, LastReply: before}, boundary)
+	if len(got.Prompts) != 1 || got.LastReply.Text != "old" {
+		t.Errorf("all-before fallback = %+v, want everything kept", got)
+	}
+}
+
+func TestAssembleInputSections(t *testing.T) {
+	conv := transcript.Conversation{
+		Prompts:   []transcript.Prompt{{Text: "design parallel bays"}, {Text: "open pr"}},
+		Summary:   transcript.Prompt{Text: "Earlier: wrote the design doc."},
+		LastReply: transcript.Prompt{Text: "PR #12 is open; CI green."},
+	}
+	input, mode := assembleInput(conv, GitSignal{Branch: "design/bays"})
+	if mode != modeConversation {
+		t.Fatalf("mode = %v, want conversation", mode)
+	}
+	// Sections appear in order: history, requests, current state, git.
+	want := []string{"Earlier: wrote the design doc.", "design parallel bays", "open pr", "PR #12 is open; CI green.", "Branch: design/bays"}
+	last := -1
+	for _, w := range want {
+		i := strings.Index(input, w)
+		if i < 0 {
+			t.Fatalf("input missing %q:\n%s", w, input)
+		}
+		if i < last {
+			t.Errorf("%q out of order in:\n%s", w, input)
+		}
+		last = i
+	}
+
+	// A reply alone (no typed prompts) is still a conversation.
+	if _, mode := assembleInput(transcript.Conversation{LastReply: conv.LastReply}, GitSignal{}); mode != modeConversation {
+		t.Errorf("reply-only mode = %v, want conversation", mode)
+	}
+}
+
+func TestAssembleInputCapsPrompts(t *testing.T) {
+	var prompts []transcript.Prompt
+	for i := 0; i < maxPrompts+5; i++ {
+		prompts = append(prompts, transcript.Prompt{Text: fmt.Sprintf("request-%02d", i)})
+	}
+	input, _ := assembleInput(transcript.Conversation{Prompts: prompts}, GitSignal{})
+	if !strings.Contains(input, "request-00") {
+		t.Error("first request dropped; it should always be kept")
+	}
+	if strings.Contains(input, "request-01\n") || strings.Contains(input, "request-05\n") {
+		t.Error("middle requests kept beyond the cap")
+	}
+	if !strings.Contains(input, "request-06") || !strings.Contains(input, fmt.Sprintf("request-%02d", maxPrompts+4)) {
+		t.Error("most recent requests missing")
+	}
+	if !strings.Contains(input, "[5 earlier requests omitted]") {
+		t.Errorf("missing omission marker in:\n%s", input)
 	}
 }
 
