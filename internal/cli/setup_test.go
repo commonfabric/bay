@@ -1158,21 +1158,40 @@ func TestKeybindingScopePolicy(t *testing.T) {
 	}
 }
 
-// setupTestHome points loadTmuxConf at a scratch ~/.tmux.conf and makes
-// sure the run can't reach a real tmux server: installKeybindings ends
-// by offering `tmux source-file`, and a test must never fire that at
-// the developer's live server.
-func setupTestHome(t *testing.T, conf string) string {
+// setupTestHome points loadTmuxConf at a scratch ~/.tmux.conf and cuts
+// the two paths that reach a live tmux server, returning the conf path
+// and a pointer to the number of reloads the run asked for.
+//
+// installKeybindings ends by offering `tmux source-file`, and firing
+// that at the developer's running server rebinds their real keys to
+// whatever fixture the test wrote. Scrubbing the environment does not
+// prevent it: `TMUX=""` leaves the variable set but empty, which still
+// reaches the default socket, and TMUX_TMPDIR is ignored in that state.
+// Stubbing is what makes it impossible, and it lets a test assert on
+// whether a reload was offered instead of depending on prompt order to
+// keep from reaching one.
+func setupTestHome(t *testing.T, conf string) (string, *int) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", filepath.Join(home, "no-server"))
+
+	reloads := 0
+	origRunning, origSource := tmuxServerRunningFn, tmuxSourceFileFn
+	tmuxServerRunningFn = func() bool { return true }
+	tmuxSourceFileFn = func(path string) error {
+		if path != filepath.Join(home, ".tmux.conf") {
+			t.Errorf("reload targeted %q, outside the test home", path)
+		}
+		reloads++
+		return nil
+	}
+	t.Cleanup(func() { tmuxServerRunningFn, tmuxSourceFileFn = origRunning, origSource })
+
 	path := filepath.Join(home, ".tmux.conf")
 	if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
 		t.Fatalf("writing tmux.conf: %v", err)
 	}
-	return path
+	return path, &reloads
 }
 
 // A block written before bay scoped its keys binds bay commands in
@@ -1184,7 +1203,7 @@ func TestInstallKeybindings_MigratesUnscopedBlockIdempotently(t *testing.T) {
 		"bind-key -n M-c run-shell 'bay new -q || true'\n" +
 		"bind-key -n M-s run-shell 'bay shell --pane || true'\n" +
 		"\nset -g base-index 1\n"
-	path := setupTestHome(t, conf)
+	path, _ := setupTestHome(t, conf)
 
 	// "y" updates the drifted bindings; "n" declines the reload offer.
 	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\nn\n")))
@@ -1231,10 +1250,17 @@ func TestInstallKeybindings_LeavesCustomCommandsUnscoped(t *testing.T) {
 		"bind-key -n M-p display-popup -w 80% -h 80% -E 'bay palette --split window || true'\n",
 	}
 	conf := bayKeybindingsMarker + "\n" + strings.Join(custom, "")
-	path := setupTestHome(t, conf)
+	path, reloads := setupTestHome(t, conf)
 
-	// "y" to every prompt: the most permissive answer a user can give.
+	// "y" to every prompt: the most permissive answer a user can give,
+	// and the one that reaches the reload offer. The stub in
+	// setupTestHome is what keeps that offer off a real tmux server —
+	// this run accepts it, and the count below proves it was accepted
+	// against the test's own conf rather than the developer's.
 	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\ny\ny\n")))
+	if *reloads == 0 {
+		t.Error("expected the run to offer a reload; the stubbed path was never exercised")
+	}
 
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -1252,7 +1278,7 @@ func TestInstallKeybindings_LeavesCustomCommandsUnscoped(t *testing.T) {
 func TestInstallKeybindings_BayKeepPreservesGlobalBinding(t *testing.T) {
 	unscoped := "bind-key -n M-g run-shell 'bay go --pick || true'\n"
 	conf := bayKeybindingsMarker + "\n" + "# bay-keep: M-g\n" + unscoped
-	path := setupTestHome(t, conf)
+	path, _ := setupTestHome(t, conf)
 
 	installKeybindings(bufio.NewReader(strings.NewReader("y\ny\nn\n")))
 

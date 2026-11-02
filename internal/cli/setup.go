@@ -1105,6 +1105,22 @@ func installKeybindings(reader *bufio.Reader) {
 	promptTmuxReload(reader, tmuxConf)
 }
 
+// tmuxServerRunningFn and tmuxSourceFileFn are the only two operations
+// in this file that reach a live tmux server. They are package vars, for
+// the same reason ensureMonitorFn is one: a test that drives
+// installKeybindings must be able to exercise the reload prompt without
+// sourcing its fixture conf into the developer's running tmux.
+//
+// Environment isolation is not sufficient here and must not be relied
+// on. `TMUX=""` leaves the variable set but empty, which does not stop
+// the tmux client from reaching the default socket, and TMUX_TMPDIR is
+// not honored in that state either — so a test that only scrubs the
+// environment still rebinds the developer's live keys.
+var (
+	tmuxServerRunningFn = tmuxServerRunning
+	tmuxSourceFileFn    = tmuxSourceFile
+)
+
 // tmuxServerRunning reports whether a tmux server is reachable. We use
 // this to gate the reload prompt — there's nothing to reload if no
 // server is up, and asking the user would just be noise.
@@ -1112,12 +1128,17 @@ func tmuxServerRunning() bool {
 	return exec.Command("tmux", "list-sessions").Run() == nil
 }
 
+// tmuxSourceFile applies a conf file to the running tmux server.
+func tmuxSourceFile(path string) error {
+	return exec.Command("tmux", "source-file", path).Run()
+}
+
 // promptTmuxReload offers to source ~/.tmux.conf so newly written
 // bindings take effect in the running tmux server. No-op when no
 // server is running: nothing to reload, and prompting would be
 // confusing.
 func promptTmuxReload(reader *bufio.Reader, tmuxConf string) {
-	if !tmuxServerRunning() {
+	if !tmuxServerRunningFn() {
 		return
 	}
 	fmt.Printf("Reload %s now? [Y/n] ", tmuxConf)
@@ -1126,7 +1147,7 @@ func promptTmuxReload(reader *bufio.Reader, tmuxConf string) {
 		fmt.Printf("Skipped. Run `tmux source-file %s` when you're ready.\n", tmuxConf)
 		return
 	}
-	if err := exec.Command("tmux", "source-file", tmuxConf).Run(); err != nil {
+	if err := tmuxSourceFileFn(tmuxConf); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: tmux source-file failed: %v\n", err)
 		return
 	}
