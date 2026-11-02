@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func TestFormatBayShort_AllFields(t *testing.T) {

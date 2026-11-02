@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // noFlash is a flashFunc that drops every message — used by tests that

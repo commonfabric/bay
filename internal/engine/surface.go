@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // uniqueSurfaceName returns a name that doesn't collide with existing surfaces.

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // TestRunSurfaceRestore_EmptyQueueEmitsTmuxToast regresses the first

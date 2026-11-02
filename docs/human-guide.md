@@ -31,12 +31,12 @@ launches AI coding agents.
 ## Installation
 
 ```
-go install github.com/commontoolsinc/bay/cmd/bay@latest
+go install github.com/commonfabric/bay/cmd/bay@latest
 ```
 
 For private repos, configure Go to use SSH:
 ```
-go env -w GOPRIVATE=github.com/commontoolsinc/bay
+go env -w GOPRIVATE=github.com/commonfabric/bay
 git config --global url."git@github.com:".insteadOf "https://github.com/"
 ```
 
@@ -475,6 +475,12 @@ bay's agent conversation (Claude and Codex transcripts) on a slow
 background cadence run by the monitor. It never overwrites a description
 you (or an agent) set by hand.
 
+A generated description is a status card for picking the work back up:
+the first line is the purpose of the whole effort, and the body (shown
+in the `M-?` popup) gives the current stage and the next step or
+blocker. It draws on your prompts, the agent's latest reply, the
+session summary written on `/compact`, and the branch's git state.
+
 It's **off by default** — it spends model calls and assumes a summarizer
 CLI you have — so it's opt-in. `bay setup` offers to turn it on; or set
 it directly:
@@ -488,7 +494,7 @@ enabled = true
 # reads stdout. Set the model by editing the command — any CLI works.
 command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
            "--ephemeral", "-c", "model_reasoning_effort=low",
-           "-m", "gpt-5.4-mini", "-o", "{out}"]
+           "-m", "gpt-6-luna", "-o", "{out}"]
 ```
 
 A plain stdout filter needs no `{out}`, e.g.
@@ -496,6 +502,13 @@ A plain stdout filter needs no `{out}`, e.g.
 the codex default above. The summarizer runs as a detached background
 process and never blocks `bay` commands. See
 `docs/design/auto-descriptions.md` for the design.
+
+If the summarizer keeps failing (the configured model is retired, the CLI
+isn't installed, its login expired), descriptions stop updating without any
+other sign. `bay doctor` reports this: it warns once three summarizer runs
+in a row have failed with no success in between, and shows the last error
+and when the failures began. Failed runs are also logged to
+`~/.local/share/bay/logs/describe.log`.
 
 ## Agent integration
 
@@ -763,6 +776,7 @@ bay status-line <field>                     # output for tmux status bar
 ```
 bay setup                                   # first-time setup
 bay recover                                 # reconstruct all state after reboot
+                                            # (inside a dock: that dock only)
 bay doctor                                  # health checks
 bay monitor start|stop|status               # manage background monitor
 bay completion bash|zsh|fish                # generate completion script
@@ -1333,6 +1347,14 @@ was invoked from. Bay now anchors that question to its own session, so
 the answer no longer depends on what else is running. Upgrade to pick
 it up; no `bay setup` re-run is needed, the fix is entirely in the
 binary.
+
+**"`bay recover` only recovered one dock."**
+`bay recover` scopes itself to where it runs: inside a dock's tmux
+session it recovers that dock, outside tmux it recovers every dock.
+Older versions could not tell the two apart — run from a plain shell,
+they recovered whichever dock tmux happened to report and exited 0
+without an error. Upgrade to pick up the fix. To recover one dock
+deliberately from anywhere, use `bay dock recover <name>`.
 
 **"What's the ~ window?"**
 A legacy placeholder that keeps a tmux session alive when bay cannot

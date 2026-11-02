@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/config"
+	"github.com/commonfabric/bay/internal/config"
 )
 
 // WorktreeAwarenessFile is the file DockInit writes into the dock's

@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // TestContextBayLabel pins the canonical-label rules used everywhere

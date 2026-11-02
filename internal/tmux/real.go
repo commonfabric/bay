@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -409,7 +410,20 @@ func currentTarget() string {
 	return ""
 }
 
+// ErrNotInTmux is returned by the Current* accessors when the calling
+// process is not running inside tmux at all.
+var ErrNotInTmux = errors.New("not running inside tmux")
+
 // currentFormat evaluates a tmux format against currentTarget().
+//
+// Outside tmux there is no "current" anything, and the untargeted
+// query below would answer anyway — `display-message -p` does not fail
+// with no client context, it reports the most recently active session
+// on the server. Same fallback currentTarget() exists to dodge, except
+// no anchor can help: the process has no tmux context to anchor to. So
+// refuse the question instead. $TMUX is the signal, not $TMUX_PANE:
+// run-shell and status-line #() jobs both export TMUX while leaving
+// TMUX_PANE empty.
 //
 // On failure it retries untargeted. A stale $TMUX_PANE (its pane
 // killed out from under a still-running shell) is the case that needs
@@ -417,6 +431,9 @@ func currentTarget() string {
 // fix: there the anchored query succeeds and simply returns the right
 // answer.
 func currentFormat(format string) (string, error) {
+	if os.Getenv("TMUX") == "" {
+		return "", ErrNotInTmux
+	}
 	if target := currentTarget(); target != "" {
 		if out, err := run("display-message", "-t", target, "-p", format); err == nil {
 			return strings.TrimSpace(out), nil

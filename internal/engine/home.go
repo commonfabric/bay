@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func homePath(dock *manifest.Dock) (string, error) {

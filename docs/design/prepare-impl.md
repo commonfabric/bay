@@ -128,7 +128,8 @@ it. Not yet wired into `bay new`.
   run.
 - New: `engine.DispatchPrepareWorker(dockName, bayID)` — re-execs
   `os.Executable() prepare-worker ...` detached (`Setpgid: true`,
-  no `Wait`). Returns immediately. Same-binary re-exec rules out
+  waited on in a goroutine so a long-lived parent reaps it). Returns
+  immediately. Same-binary re-exec rules out
   version skew.
 - Worker, on success of all steps, exits cleanly. Phase E will
   add the queued-surface dispatch on success.
@@ -310,7 +311,7 @@ Not used. The feature is opt-in via config. A bay with no
 
 ### Worker process portability
 
-`Setpgid` + `os.Exec`-without-Wait works on Linux and macOS. Bay
+`Setpgid` + a background `Wait` works on Linux and macOS. Bay
 isn't shipped for Windows.
 
 ## Open items

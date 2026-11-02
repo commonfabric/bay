@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/engine"
-	"github.com/commontoolsinc/bay/internal/manifest"
-	"github.com/commontoolsinc/bay/internal/monitor"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/engine"
+	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/monitor"
+	"github.com/commonfabric/bay/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -138,6 +138,11 @@ func runDoctor(eng *engine.Engine, w io.Writer) {
 		} else {
 			fmt.Fprintln(w, "[OK] manifest consistent")
 		}
+
+		describeLog := filepath.Join(bayPaths().DataDir, "logs", "describe.log")
+		if !checkDescribeHealth(w, eng.Config, m, describeLog) {
+			ok = false
+		}
 	}
 
 	// Check tmux keybindings
@@ -250,6 +255,41 @@ func checkDockAwareness(eng *engine.Engine, dock *manifest.Dock, path string, w 
 			fmt.Fprintf(w, "[INFO] dock %q checkout: %s missing bay awareness for %s — run `bay dock init %s`\n", dock.Name, pf.File, pf.Agent, dock.Name)
 		}
 	}
+}
+
+// describeFailureWarnThreshold is how many consecutive summarizer failures
+// make `bay doctor` warn. One monitor dispatch can start several workers, so
+// a single bad cycle already reaches three; any success resets the count.
+const describeFailureWarnThreshold = 3
+
+// checkDescribeHealth reports whether the auto-description summarizer is
+// working, from the outcomes the describe worker records in the manifest.
+// It prints nothing when the backstop is disabled. It returns false after
+// printing a warning; logPath is only named in that warning.
+func checkDescribeHealth(w io.Writer, cfg *config.Config, m *manifest.Manifest, logPath string) bool {
+	if cfg == nil || !cfg.Describe.EffectiveEnabled() {
+		return true
+	}
+	st := m.Describe
+	if st == nil || st.ConsecutiveFailures < describeFailureWarnThreshold {
+		if st != nil && st.LastSuccessAt > 0 {
+			fmt.Fprintf(w, "[OK] auto-descriptions enabled (last summary %s)\n", formatDescribeTime(st.LastSuccessAt))
+		} else {
+			fmt.Fprintln(w, "[OK] auto-descriptions enabled (no summaries yet)")
+		}
+		return true
+	}
+	lastSuccess := "never"
+	if st.LastSuccessAt > 0 {
+		lastSuccess = formatDescribeTime(st.LastSuccessAt)
+	}
+	fmt.Fprintf(w, "[WARN] auto-descriptions failing: %d consecutive summarizer failures since %s (last success %s): %s (see %s)\n",
+		st.ConsecutiveFailures, formatDescribeTime(st.FailingSince), lastSuccess, st.LastError, logPath)
+	return false
+}
+
+func formatDescribeTime(unix int64) string {
+	return time.Unix(unix, 0).Format("2006-01-02 15:04")
 }
 
 func lowerFirst(s string) string {

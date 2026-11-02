@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/picker"
+	"github.com/commonfabric/bay/internal/picker"
 	"golang.org/x/term"
 )
 

@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // Hotkeys maps bay-command signatures (e.g., "bay shell --window") to the

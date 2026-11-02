@@ -7,7 +7,7 @@ design emerged from wanting teammates to install bay without having to
 Today, the README's install section reads:
 
 ```
-git clone git@github.com:commontoolsinc/bay.git
+git clone git@github.com:commonfabric/bay.git
 cd bay
 go install ./cmd/bay
 ```
@@ -35,7 +35,7 @@ that drop a binary into place without a build toolchain.
 
 ## The constraint that shapes everything: private repo
 
-`github.com/commontoolsinc/bay` is private and has to stay that way for
+`github.com/commonfabric/bay` is private and has to stay that way for
 now (pending team discussion). Most "frictionless install" channels
 assume a public repo — none of GitHub's release artifacts are
 anonymously fetchable for private repos.
@@ -75,11 +75,11 @@ and extend `internal/cli/version.go` to print all three.
 
 ### Install: `gh`-authenticated script
 
-Every teammate already has `gh` authed against `commontoolsinc`. The
+Every teammate already has `gh` authed against `commonfabric`. The
 install command becomes:
 
 ```sh
-gh release download --repo commontoolsinc/bay --pattern "*$(uname -s)_$(uname -m)*.tar.gz" -O - \
+gh release download --repo commonfabric/bay --pattern "*$(uname -s)_$(uname -m)*.tar.gz" -O - \
   | tar -xz -C "$HOME/.local/bin" bay
 ```
 
@@ -107,7 +107,7 @@ README, `docs/human-guide.md`, and `internal/cli/agent-guide.md`.
 - On every CLI start, read `~/.cache/bay/version-check.json`
   (`{ checked_at, latest_version }`, XDG-aware).
 - If `checked_at` is >24h old, fire an async goroutine to refresh:
-  shell out to `gh api repos/commontoolsinc/bay/releases/latest`,
+  shell out to `gh api repos/commonfabric/bay/releases/latest`,
   write the result back to the cache. We do **not** wait on the
   goroutine — the current invocation never blocks on network.
 - If cached `latest_version` > current `version`, print one nag line
@@ -135,10 +135,10 @@ commit.
 A public repo unlocks the standard, low-friction channels with minimal
 rework:
 
-1. **Homebrew tap.** Create `commontoolsinc/homebrew-bay`, add a
+1. **Homebrew tap.** Create `commonfabric/homebrew-bay`, add a
    `brews:` block to `.goreleaser.yaml`. GoReleaser auto-publishes the
    formula on each release. Install becomes
-   `brew install commontoolsinc/bay/bay`. Brew strips the quarantine
+   `brew install commonfabric/bay/bay`. Brew strips the quarantine
    xattr, so no Gatekeeper warning.
 2. **Anonymous `curl | sh`.** The `install.sh` switches its download
    path from `gh release download` to a plain `curl` against
@@ -184,5 +184,5 @@ Each phase is independently shippable.
   notarization or a much louder install message. Not a Phase 1
   concern.
 - **Tap location if we go public.** Personal `mike/homebrew-bay` vs
-  `commontoolsinc/homebrew-bay`. The latter scales better for a team
+  `commonfabric/homebrew-bay`. The latter scales better for a team
   tool.

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/git"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/git"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // seedWorktreeBay adds a worktree-type bay with a branch set to

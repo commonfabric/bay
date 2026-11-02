@@ -5,7 +5,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/commontoolsinc/bay/internal/monitor"
+	"github.com/commonfabric/bay/internal/monitor"
 	"github.com/spf13/cobra"
 )
 

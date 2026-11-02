@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -110,7 +110,7 @@ Do you want to proceed
 			fmt.Println("  bay help               see all commands")
 			fmt.Println("  bay help <command>      detailed help for a command")
 			fmt.Println()
-			fmt.Println("Tutorial: https://github.com/commontoolsinc/bay/blob/main/docs/tutorial.md")
+			fmt.Println("Tutorial: https://github.com/commonfabric/bay/blob/main/docs/tutorial.md")
 
 			return nil
 		},

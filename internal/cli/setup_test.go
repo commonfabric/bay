@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 func TestHasUserStatusRight(t *testing.T) {

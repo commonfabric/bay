@@ -876,11 +876,17 @@ Reconstruct all docks, bays, and surfaces after a reboot.
 Recreates tmux sessions and windows, relaunches agents with
 resume args (e.g., `--continue`), starts the monitor. Idempotent.
 
+Scope depends on where it runs: inside a dock's tmux session it
+recovers just that dock; outside tmux it recovers every dock. Use
+`bay dock recover <name>` to target one dock from anywhere.
+
 #### `bay doctor`
 
 Health checks: config validity, dock checkout accessibility, agent availability,
 manifest consistency, monitor status, tmux keybindings, bay awareness
-in dock checkouts.
+in dock checkouts, and (when `[describe]` is enabled) auto-description
+summarizer health: it warns after three consecutive summarizer failures,
+with the last error. If bay descriptions stop appearing, run this first.
 
 #### `bay monitor start|stop|status`
 

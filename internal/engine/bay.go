@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // BayNewOptions are options for creating a new bay.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/tmux"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 func TestBuildAgentCommand_QuotesArgs(t *testing.T) {

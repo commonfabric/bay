@@ -1619,3 +1619,54 @@ func TestResolveBay_NameHintMultipleDocks(t *testing.T) {
 		t.Errorf("expected multi-dock hint listing both candidates, got %v", err)
 	}
 }
+
+func TestDescribeStatus_FailureStreakAndReset(t *testing.T) {
+	m := New()
+	if m.Describe != nil {
+		t.Fatalf("new manifest has describe status %+v, want nil", m.Describe)
+	}
+
+	m.RecordDescribeFailure(100, "first")
+	m.RecordDescribeFailure(200, "second")
+	got := *m.Describe
+	want := DescribeStatus{ConsecutiveFailures: 2, FailingSince: 100, LastFailureAt: 200, LastError: "second"}
+	if got != want {
+		t.Fatalf("after two failures = %+v, want %+v", got, want)
+	}
+
+	m.RecordDescribeSuccess(300)
+	if *m.Describe != (DescribeStatus{LastSuccessAt: 300}) {
+		t.Fatalf("after success = %+v, want only LastSuccessAt=300", *m.Describe)
+	}
+
+	// A failure after a success starts a new streak, and keeps the success.
+	m.RecordDescribeFailure(400, "again")
+	want = DescribeStatus{LastSuccessAt: 300, ConsecutiveFailures: 1, FailingSince: 400, LastFailureAt: 400, LastError: "again"}
+	if *m.Describe != want {
+		t.Fatalf("new streak = %+v, want %+v", *m.Describe, want)
+	}
+}
+
+func TestDescribeStatus_JSON(t *testing.T) {
+	data, err := json.Marshal(New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "describe_status") {
+		t.Errorf("empty manifest serialized describe_status: %s", data)
+	}
+
+	m := New()
+	m.RecordDescribeFailure(100, "boom")
+	data, err = json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Describe == nil || *parsed.Describe != *m.Describe {
+		t.Errorf("round trip = %+v, want %+v", parsed.Describe, m.Describe)
+	}
+}

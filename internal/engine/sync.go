@@ -6,8 +6,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // syncProbeConcurrency caps the number of concurrent probe goroutines in

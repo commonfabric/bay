@@ -435,7 +435,7 @@ var DefaultDescribeCommand = []string{
 	"--skip-git-repo-check",
 	"--ephemeral",
 	"-c", "model_reasoning_effort=low",
-	"-m", "gpt-5.4-mini",
+	"-m", "gpt-6-luna",
 	"-o", "{out}",
 }
 

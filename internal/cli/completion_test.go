@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/config"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/manifest"
 	"github.com/spf13/cobra"
 )
 

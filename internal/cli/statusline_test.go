@@ -3,8 +3,8 @@ package cli
 import (
 	"testing"
 
-	"github.com/commontoolsinc/bay/internal/git"
-	"github.com/commontoolsinc/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/git"
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func statusLineTestBay() *manifest.Bay {
