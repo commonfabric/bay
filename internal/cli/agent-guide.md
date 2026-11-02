@@ -352,6 +352,13 @@ run from a tmux keybinding (via `run-shell`) use the tmux session
 instead — their working directory is the server's, not yours — so
 Option+c always creates in the dock you're looking at.
 
+Bay's command keys are bound only in the sessions bay manages (those
+carrying the `@bay-session-id` tmux session option); elsewhere the
+keystroke goes to the application in the pane. Navigation keys
+(`Option+h/l/j/k`, `Option+Shift+H/J/K/L`) stay bound everywhere. A
+dock whose session lost the marker runs no bay keys until
+`bay recover` re-tags it — `bay doctor` reports that case.
+
 Commands that target a bay take the **ID** as the positional
 (e.g., `bay close b1`). The exception is `bay new [name]`, where
 the positional names the new bay's display Name (or is left

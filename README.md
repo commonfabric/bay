@@ -27,6 +27,7 @@ bay recover        # rebuild docks/bays/surfaces after a reboot
 - **Attention signaling** — bay highlights a bay's tmux tab when its agent needs permission or finishes a turn; `Option+r` jumps to the next one waiting.
 - **Scoped navigation** — `bay surface go` picks surfaces within the current bay; `bay go` picks bays within the current dock. Cycling flashes a brief position indicator.
 - **Command palette** — `Option+p` opens a VS Code-style palette in a tmux popup: fuzzy-search every bay command, see its hotkey if it has one, and launch without leaving the keyboard.
+- **Session-scoped keybindings** — bay's command keys are live only in the tmux sessions bay manages; in any other session the keystroke goes straight to the application, so bay's keys never shadow yours outside its own docks. Window and pane navigation keys stay global.
 - **Hierarchical browsing** — `bay ls` lists bays in the current dock; `bay tree` shows the full hierarchy including surfaces.
 - **Auto-descriptions** — optionally, bay summarizes each bay's agent conversation (Claude/Codex) in the background to fill in its description, so `bay ls` and the picker stay meaningful without manual labeling. Opt-in (`bay setup` offers it); anything you set by hand is left untouched.
 - **Status line** — `bay status-line <field>` provides bay info for tmux status bar composition.

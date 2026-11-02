@@ -242,7 +242,10 @@ keeps the rule "manifest writes happen at known points" intact.
 - **User manually clears `@bay-session-id`.** Marker empty, manifest
   has UUID → `owned=false`, cleanup suppressed. Running `bay recover`
   re-tags. Acceptable: someone going out of their way to clear bay's
-  marker is opting out.
+  marker is opting out. (Since then the marker has gained a second
+  consumer: bay's tmux keybindings are conditioned on it, so an
+  untagged session also runs none of bay's command keys. `bay doctor`
+  reports a dock in that state.)
 - **Marker surviving across server restarts.** It can't — session-
   scoped tmux options die with the session. That's exactly the
   property we want.
