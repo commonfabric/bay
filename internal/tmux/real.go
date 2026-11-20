@@ -305,7 +305,7 @@ func (r *Real) RespawnPane(paneID string, cwd string, command string) error {
 }
 
 func (r *Real) ListPanes(windowID string) ([]Pane, error) {
-	out, err := run("list-panes", "-t", windowID, "-F", "#{pane_id}\t#{pane_pid}\t#{pane_active}")
+	out, err := run("list-panes", "-t", windowID, "-F", "#{pane_id}\t#{pane_pid}\t#{pane_active}\t#{pane_dead}")
 	if err != nil {
 		return nil, err
 	}
@@ -318,8 +318,8 @@ func (r *Real) ListPanes(windowID string) ([]Pane, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) != 4 {
 			return nil, fmt.Errorf("unexpected list-panes output: %q", line)
 		}
 		pid, err := strconv.Atoi(parts[1])
@@ -330,6 +330,7 @@ func (r *Real) ListPanes(windowID string) ([]Pane, error) {
 			ID:     parts[0],
 			PID:    pid,
 			Active: parts[2] == "1",
+			Dead:   parts[3] == "1",
 		})
 	}
 	return panes, nil

@@ -293,6 +293,17 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
+	t.Run("no record: two <pid>.sock sockets is an error, not the first", func(t *testing.T) {
+		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/diag/88226.sock", "/tmp/cc-socks/88226.sock"}}}
+		o, err := Describe(sys, p)
+		if err == nil || errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want an ambiguity error", err)
+		}
+		if o.Address() != "" {
+			t.Fatalf("address %q, want none", o.Address())
+		}
+	})
+
 	t.Run("several unidentifiable sockets: none is taken", func(t *testing.T) {
 		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/a.sock", "/tmp/b.sock"}}}
 		if _, err := Describe(sys, p); !errors.Is(err, ErrNoSocket) {
@@ -339,10 +350,20 @@ garbage line
 }
 
 func TestParseLsofNames(t *testing.T) {
-	out := []byte("p88226\nf9\nn->0x6298022bb12dbb12\nf13\nn/tmp/cc-socks/88226.sock\nf14\nn->0xac9d\n")
-	got := ParseLsofNames(out)
-	if len(got) != 1 || got[0] != "/tmp/cc-socks/88226.sock" {
-		t.Fatalf("got %v", got)
+	// macOS form, then Linux form with its " type=STREAM" annotation.
+	for _, out := range []string{
+		"p88226\nf9\nn->0x6298022bb12dbb12\nf13\nn/tmp/cc-socks/88226.sock\nf14\nn->0xac9d\n",
+		"p88226\nf13\nn/tmp/cc-socks/88226.sock type=STREAM\nf14\nntype=STREAM\n",
+	} {
+		got := ParseLsofNames([]byte(out))
+		if len(got) != 1 || got[0] != "/tmp/cc-socks/88226.sock" {
+			t.Fatalf("%q: got %v", out, got)
+		}
+	}
+	// A space elsewhere in the path is kept.
+	got := ParseLsofNames([]byte("n/tmp/a dir/1.sock type=STREAM\nn/tmp/b dir/2.sock\n"))
+	if len(got) != 2 || got[0] != "/tmp/a dir/1.sock" || got[1] != "/tmp/b dir/2.sock" {
+		t.Fatalf("got %q", got)
 	}
 }
 

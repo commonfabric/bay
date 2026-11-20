@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // integrationServer wraps a tmux server running on a private socket
@@ -412,5 +413,45 @@ func TestIntegration_CurrentPaneIDAnchoring(t *testing.T) {
 	}
 	if got != alphaPane {
 		t.Errorf("CurrentPaneID() = %q, want %q (beta's pane is %q)", got, alphaPane, betaPane)
+	}
+}
+
+// TestIntegration_ListPanesReportsDeadPane pins ListWindows parsing and Pane.Dead to tmux's
+// pane_dead: a pane whose process exits under remain-on-exit stays in
+// the window and must read as dead, since its PID is stale.
+func TestIntegration_ListPanesReportsDeadPane(t *testing.T) {
+	s, winID, rootPaneID := setupSession(t)
+	s.mustCmd("set-option", "-w", "-t", winID, "remain-on-exit", "on")
+	deadPane := s.mustCmd("split-window", "-t", rootPaneID, "-P", "-F", "#{pane_id}", "true")
+	r := s.realImplementation(t)
+
+	// The lookup reaches the pane through the session's window list.
+	windows, err := r.ListWindows("test")
+	if err != nil || len(windows) != 1 || windows[0].ID != winID {
+		t.Fatalf("ListWindows = %+v, %v; want window %s", windows, err, winID)
+	}
+
+	byID := func() map[string]Pane {
+		panes, err := r.ListPanes(winID)
+		if err != nil {
+			t.Fatalf("ListPanes: %v", err)
+		}
+		m := map[string]Pane{}
+		for _, p := range panes {
+			m[p.ID] = p
+		}
+		return m
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	panes := byID()
+	for !panes[deadPane].Dead && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+		panes = byID()
+	}
+	if !panes[deadPane].Dead {
+		t.Fatalf("pane %s never reported dead: %+v", deadPane, panes)
+	}
+	if panes[rootPaneID].Dead {
+		t.Fatalf("live root pane reported dead: %+v", panes[rootPaneID])
 	}
 }

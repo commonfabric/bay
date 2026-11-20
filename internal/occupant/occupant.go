@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -232,17 +233,25 @@ func readRecord(sys System, login string, p Process) *sessionRecord {
 // all: the path the session record names, or, without a record naming
 // one, the socket called <pid>.sock (Claude Code's naming, whatever the
 // directory). Any other open socket is not the messaging socket, however
-// few there are, since a wrong pick sends messages to some other
-// listener.
+// few there are, and two candidates is an error: a wrong pick sends
+// messages to some other listener.
 func pickSocket(socks []string, rec *sessionRecord, pid int) (string, error) {
 	want := func(s string) bool { return filepath.Base(s) == fmt.Sprintf("%d.sock", pid) }
 	if rec != nil && rec.MessagingSocketPath != "" {
 		want = func(s string) bool { return s == rec.MessagingSocketPath }
 	}
+	var found []string
 	for _, s := range socks {
-		if want(s) {
-			return s, nil
+		if want(s) && !slices.Contains(found, s) {
+			found = append(found, s)
 		}
 	}
-	return "", ErrNoSocket
+	switch len(found) {
+	case 0:
+		return "", ErrNoSocket
+	case 1:
+		return found[0], nil
+	}
+	return "", fmt.Errorf("claude pid %d has several sockets that could be its messaging socket: %s",
+		pid, strings.Join(found, ", "))
 }

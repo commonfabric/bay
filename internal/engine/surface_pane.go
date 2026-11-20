@@ -15,7 +15,8 @@ import (
 // so a recorded "%0" may now name a pane in some other session. A
 // surface is included only when the dock's session exists and carries
 // the dock's session-ID marker, the recorded window is in that session,
-// and the recorded pane is in that window. Surfaces that fail any check
+// and the recorded pane is in that window and alive (a dead pane kept by
+// remain-on-exit has a stale PID). Surfaces that fail any check
 // are absent from the map. A tmux query that fails is an error, so a
 // surface is never reported absent because tmux could not be read.
 //
@@ -64,7 +65,9 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, nam
 			}
 			panes = make(map[string]int, len(list))
 			for _, p := range list {
-				panes[p.ID] = p.PID
+				if !p.Dead { // a dead pane's PID is stale
+					panes[p.ID] = p.PID
+				}
 			}
 			panesByWindow[s.Tmux.WindowID] = panes
 		}

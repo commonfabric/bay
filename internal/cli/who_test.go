@@ -357,3 +357,19 @@ func TestRunWho_NoArgSkipsStalePaneRecord(t *testing.T) {
 		t.Fatalf("got %+v, want labs:%s:agent", res, b2.ID)
 	}
 }
+
+func TestRunWho_DeadPaneIsNotFollowed(t *testing.T) {
+	// A pane kept by remain-on-exit reports its exited process's PID,
+	// which the OS may have reused for a Claude in another bay.
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent")
+	bay, _ := eng.BayShow("labs", "b1")
+	mockTmux.SetPaneDead(bay.FindSurface("agent").Tmux.PaneID, true)
+	sys := &whoFakeSystem{procs: []occupant.Process{{PID: pids["agent"], PPID: 1, Comm: "claude"}}}
+	res, err := runWho(eng, sys, "labs:b1:agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Occupied || res.Address != "" {
+		t.Fatalf("followed a dead pane: %+v", res)
+	}
+}

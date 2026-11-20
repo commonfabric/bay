@@ -95,4 +95,8 @@ type Pane struct {
 	ID     string // tmux pane ID like "%5"
 	PID    int
 	Active bool
+	// Dead is true for a pane whose process has exited but which tmux
+	// keeps open (remain-on-exit). Its PID is stale and may since have
+	// been given to an unrelated process.
+	Dead bool
 }

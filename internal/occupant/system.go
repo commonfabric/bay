@@ -79,12 +79,19 @@ func lsofResult(out []byte, err error) ([]string, error) {
 
 // ParseLsofNames extracts socket paths from `lsof -F n` output: lines
 // "n/path" are named sockets; "n->0x…" are peer endpoints and skipped.
+// Linux lsof appends " type=STREAM" (or another type) to a unix socket's
+// name; that annotation is not part of the path.
 func ParseLsofNames(out []byte) []string {
 	var paths []string
 	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "n/") {
-			paths = append(paths, line[1:])
+		if !strings.HasPrefix(line, "n/") {
+			continue
 		}
+		name := line[1:]
+		if i := strings.LastIndex(name, " type="); i >= 0 && !strings.Contains(name[i+len(" type="):], " ") {
+			name = name[:i]
+		}
+		paths = append(paths, name)
 	}
 	return paths
 }
