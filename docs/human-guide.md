@@ -539,6 +539,38 @@ built-ins. Docks whose checkout isn't a git repository are skipped
 entirely — without git there are no worktree bays to set up.
 `bay doctor` flags docks missing bay awareness.
 
+### Messaging between bays
+
+Claude Code's `ListAgents` and `SendMessage` only see sessions under
+the same Claude login. If you run agents under two logins (`~/.claude`,
+and another selected with `CLAUDE_CONFIG_DIR`), an agent can only reach
+some bays by name. `bay who` finds the session in a bay surface,
+whichever login it uses, and prints an address that works across
+logins:
+
+```
+$ bay who loom:b100
+    bay loom:b100:agent
+   pane %358
+    pid 88226
+  login /Users/you/.claude2
+session b100-fe
+ status busy
+version 2.1.329
+address uds:/tmp/cc-socks/88226.sock
+```
+
+Bay follows the surface's tmux pane to the `claude` process in it (the
+pane's own process or one started from a shell there), and reads the
+socket that process listens on. It needs no configuration and does not
+change either login's files. Without a surface, it uses the surface
+named `agent`, or the one surface running Claude. If several surfaces
+run Claude and none is named `agent`, it lists them and fails.
+
+Agents use the `address` as `SendMessage`'s `to`. `bay agent-guide`
+gives them the full procedure. `uds:` addressing is not part of Claude
+Code's documented interface. It was tested on Claude Code 2.1.329.
+
 ### .worktreeinclude
 
 To copy gitignored local files (`.env`, credentials, overrides) from
@@ -768,6 +800,9 @@ bay tree --json --rows                      # denormalized row output
 bay tree --dirty                            # only show dirty bays
 bay pwd                                     # show current bay context
 bay pwd --json                              # machine-readable context
+bay who [[dock:]bay[:surface]]              # Claude session in a surface + its
+                                            # SendMessage address (any login)
+bay who loom:b100 --json                    # machine-readable
 bay status-line <field>                     # output for tmux status bar
 ```
 

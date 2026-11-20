@@ -1,0 +1,113 @@
+package occupant
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+)
+
+// RealSystem reads the live machine with ps and lsof.
+type RealSystem struct{}
+
+var _ System = RealSystem{}
+
+// psEnv pins ps output to UTC and the C locale, so lstart parses and
+// compares with the session record's UTC procStart.
+func psEnv() []string {
+	return append(os.Environ(), "TZ=UTC", "LC_ALL=C")
+}
+
+// Processes walks the whole table with ps rather than `pgrep -P`, which
+// returns nothing inside some sandboxes.
+func (RealSystem) Processes() ([]Process, error) {
+	cmd := exec.Command("ps", "-A", "-o", "pid=,ppid=,lstart=,comm=")
+	cmd.Env = psEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ps: %w", err)
+	}
+	return ParsePS(out), nil
+}
+
+// ParsePS parses `ps -A -o pid=,ppid=,lstart=,comm=` output. lstart is
+// five fields ("Fri Nov 20 18:20:59 2026"); comm is the rest of the line
+// and may contain spaces. Unparseable lines are skipped.
+func ParsePS(out []byte) []Process {
+	var procs []Process
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 8 {
+			continue
+		}
+		pid, err1 := strconv.Atoi(f[0])
+		ppid, err2 := strconv.Atoi(f[1])
+		start, err3 := ParseStart(strings.Join(f[2:7], " "))
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+		procs = append(procs, Process{PID: pid, PPID: ppid, Start: start, Comm: strings.Join(f[7:], " ")})
+	}
+	return procs
+}
+
+// UnixSockets lists the named unix sockets the process has open.
+func (RealSystem) UnixSockets(pid int) ([]string, error) {
+	out, err := exec.Command("lsof", "-a", "-U", "-p", strconv.Itoa(pid), "-F", "n").Output()
+	if err != nil && len(out) == 0 {
+		return nil, fmt.Errorf("lsof: %w", err)
+	}
+	return ParseLsofNames(out), nil
+}
+
+// ParseLsofNames extracts socket paths from `lsof -F n` output: lines
+// "n/path" are named sockets; "n->0x…" are peer endpoints and skipped.
+func ParseLsofNames(out []byte) []string {
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "n/") {
+			paths = append(paths, line[1:])
+		}
+	}
+	return paths
+}
+
+// Getenv reads one variable from another process's environment: from
+// /proc on Linux, from `ps -E` on macOS.
+func (RealSystem) Getenv(pid int, key string) (string, error) {
+	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
+		for _, kv := range bytes.Split(data, []byte{0}) {
+			if v, ok := strings.CutPrefix(string(kv), key+"="); ok {
+				return v, nil
+			}
+		}
+		return "", nil
+	}
+	cmd := exec.Command("ps", "-E", "-ww", "-o", "command=", "-p", strconv.Itoa(pid))
+	cmd.Env = psEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("ps -E: %w", err)
+	}
+	return EnvFromPSE(out, key), nil
+}
+
+// EnvFromPSE finds key in `ps -E -o command=` output, where the
+// environment follows the command's arguments, space-separated. The last
+// occurrence wins, since environment entries come after the arguments.
+// A value containing spaces is truncated at the first space.
+func EnvFromPSE(out []byte, key string) string {
+	val := ""
+	for _, tok := range strings.Fields(string(out)) {
+		if v, ok := strings.CutPrefix(tok, key+"="); ok {
+			val = v
+		}
+	}
+	return val
+}
+
+func (RealSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+
+func (RealSystem) HomeDir() (string, error) { return os.UserHomeDir() }
