@@ -148,28 +148,22 @@ func ParseStart(s string) (time.Time, error) {
 	return time.ParseInLocation(psTimeLayout, strings.Join(strings.Fields(s), " "), time.UTC)
 }
 
-// ErrNoSocket means the Claude process was found but has no messaging
-// socket open and its session record names none.
-var ErrNoSocket = errors.New("claude process has no messaging socket")
+// ErrNoSocket means socket inspection worked and found no messaging
+// socket open in the Claude process. A failed inspection is a different
+// error: it says nothing about whether the session can be reached.
+var ErrNoSocket = errors.New("claude process has no messaging socket open")
 
 // Describe fills in an Occupant for a Claude process found by FindClaude.
+// The login and session record are best effort: failing to read them
+// leaves the display fields empty but does not stop the socket lookup.
 func Describe(sys System, p Process) (*Occupant, error) {
 	o := &Occupant{PID: p.PID, Start: p.Start}
 
-	login, err := sys.Getenv(p.PID, "CLAUDE_CONFIG_DIR")
-	if err != nil {
-		return nil, fmt.Errorf("reading environment of pid %d: %w", p.PID, err)
+	var rec *sessionRecord
+	if login, ok := loginDir(sys, p.PID); ok {
+		o.LoginDir = login
+		rec = readRecord(sys, login, p)
 	}
-	if login == "" {
-		home, err := sys.HomeDir()
-		if err != nil {
-			return nil, err
-		}
-		login = filepath.Join(home, ".claude")
-	}
-	o.LoginDir = login
-
-	rec := readRecord(sys, login, p)
 	if rec != nil {
 		o.SessionID = rec.SessionID
 		o.Name = rec.Name
@@ -178,14 +172,40 @@ func Describe(sys System, p Process) (*Occupant, error) {
 	}
 
 	socks, sockErr := sys.UnixSockets(p.PID)
-	o.Socket = pickSocket(socks, rec)
-	if o.Socket == "" {
-		if sockErr != nil {
-			return o, fmt.Errorf("%w (lsof: %v)", ErrNoSocket, sockErr)
+	if sockErr != nil {
+		// Inspection is unavailable. The session record names the
+		// socket, and readRecord has checked the record belongs to
+		// this process; without one there is nothing to go on.
+		if rec != nil && rec.MessagingSocketPath != "" {
+			o.Socket = rec.MessagingSocketPath
+			return o, nil
 		}
-		return o, ErrNoSocket
+		return o, fmt.Errorf("cannot inspect sockets of claude pid %d: %w", p.PID, sockErr)
 	}
+	sock, err := pickSocket(socks, rec, p.PID)
+	if err != nil {
+		return o, err
+	}
+	o.Socket = sock
 	return o, nil
+}
+
+// loginDir returns the Claude login directory the process runs under:
+// its CLAUDE_CONFIG_DIR, or ~/.claude when that is unset. ok is false
+// when it cannot be determined.
+func loginDir(sys System, pid int) (string, bool) {
+	login, err := sys.Getenv(pid, "CLAUDE_CONFIG_DIR")
+	if err != nil {
+		return "", false
+	}
+	if login != "" {
+		return login, true
+	}
+	home, err := sys.HomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, ".claude"), true
 }
 
 // readRecord returns the session record for p, or nil when it is
@@ -211,28 +231,33 @@ func readRecord(sys System, login string, p Process) *sessionRecord {
 	return &rec
 }
 
-// pickSocket chooses the messaging socket among the process's open unix
-// sockets. The process's own sockets are authoritative; the record's
-// messagingSocketPath breaks ties and is the fallback when lsof is
-// unavailable. readRecord has already checked that the record belongs to
-// this process, so its path is current.
-func pickSocket(socks []string, rec *sessionRecord) string {
-	recPath := ""
-	if rec != nil {
-		recPath = rec.MessagingSocketPath
+// pickSocket chooses the messaging socket among the named unix sockets
+// the process has open, in order of evidence: the one the session record
+// names; the one named <pid>.sock (Claude Code's naming, whatever the
+// directory); the only one. A record path the process does not have open
+// is not used. Several candidates with nothing to choose between them is
+// an error rather than a guess, since a wrong guess sends the message to
+// some other listener.
+func pickSocket(socks []string, rec *sessionRecord, pid int) (string, error) {
+	if len(socks) == 0 {
+		return "", ErrNoSocket
 	}
-	for _, s := range socks {
-		if s == recPath {
-			return s
+	if rec != nil && rec.MessagingSocketPath != "" {
+		for _, s := range socks {
+			if s == rec.MessagingSocketPath {
+				return s, nil
+			}
 		}
 	}
+	pidName := fmt.Sprintf("%d.sock", pid)
 	for _, s := range socks {
-		if strings.HasSuffix(s, ".sock") {
-			return s
+		if filepath.Base(s) == pidName {
+			return s, nil
 		}
 	}
-	if len(socks) > 0 {
-		return socks[0]
+	if len(socks) == 1 {
+		return socks[0], nil
 	}
-	return recPath
+	return "", fmt.Errorf("claude pid %d has several unix sockets open and none is identifiable as its messaging socket: %s",
+		pid, strings.Join(socks, ", "))
 }

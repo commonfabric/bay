@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -95,18 +96,31 @@ func (RealSystem) Getenv(pid int, key string) (string, error) {
 }
 
 // EnvFromPSE finds key in `ps -E -o command=` output, where the
-// environment follows the command's arguments, space-separated. The last
-// occurrence wins, since environment entries come after the arguments.
-// A value containing spaces is truncated at the first space.
+// environment follows the command's arguments, space-separated with no
+// quoting. The last occurrence wins, since environment entries come
+// after the arguments. A value runs up to the next " NAME=" that looks
+// like another variable, so a path containing spaces survives; a value
+// that itself contains " NAME=" is cut there.
 func EnvFromPSE(out []byte, key string) string {
+	line := strings.TrimRight(string(out), "\n")
+	starts := envStartRE.FindAllStringSubmatchIndex(line, -1)
 	val := ""
-	for _, tok := range strings.Fields(string(out)) {
-		if v, ok := strings.CutPrefix(tok, key+"="); ok {
-			val = v
+	for i, m := range starts {
+		if line[m[2]:m[3]] != key {
+			continue
 		}
+		end := len(line)
+		if i+1 < len(starts) {
+			end = starts[i+1][0]
+		}
+		val = line[m[1]:end]
 	}
 	return val
 }
+
+// envStartRE matches the start of one environment entry: start of line
+// or a space, then NAME=. Group 1 is NAME.
+var envStartRE = regexp.MustCompile(`(?:^| )([A-Za-z_][A-Za-z0-9_]*)=`)
 
 func (RealSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
 

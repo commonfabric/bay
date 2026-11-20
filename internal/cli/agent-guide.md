@@ -739,9 +739,15 @@ JSON (`--json`):
 An unoccupied surface has `"occupied": false`, a `reason`, and no
 `pid`/`address`. `login`, `session_name`, `status` and `version` come
 from Claude Code's own session record and may be missing. `address` is
-always read from the process's open socket. The exit status is 0 for both
-occupied and unoccupied results. It is non-zero only when the address
-does not resolve or is ambiguous.
+always read from the process's open sockets. The exit status is 0 for
+both occupied and unoccupied results. It is non-zero when the address
+does not resolve or is ambiguous, or when a Claude process is found but
+its socket can't be identified (for example, `lsof` is unavailable and
+there is no session record). An error is not "nobody is there".
+
+A surface counts as occupied only when its recorded pane is still in the
+dock's own tmux session, so a pane ID reused after a tmux restart can't
+send you to another bay. `bay who` never changes bay's state.
 
 ### Surface commands
 

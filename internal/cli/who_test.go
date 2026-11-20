@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/manifest"
 	"github.com/commonfabric/bay/internal/occupant"
+	"github.com/commonfabric/bay/internal/tmux"
 )
 
 // whoFakeSystem is an in-memory occupant.System.
@@ -36,6 +38,12 @@ func (f *whoFakeSystem) HomeDir() (string, error) { return "/home/u", nil }
 // extra names, and returns each surface's pane pid.
 func whoFixture(t *testing.T, extra ...string) (*engine.Engine, map[string]int) {
 	t.Helper()
+	eng, _, pids := whoFixtureTmux(t, extra...)
+	return eng, pids
+}
+
+func whoFixtureTmux(t *testing.T, extra ...string) (*engine.Engine, *tmux.Mock, map[string]int) {
+	t.Helper()
 	eng, mockTmux, _, _ := testNavEngine(t)
 	bay, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true})
 	if err != nil {
@@ -56,7 +64,7 @@ func whoFixture(t *testing.T, extra ...string) (*engine.Engine, map[string]int) 
 		}
 		pids[s.Name] = pid
 	}
-	return eng, pids
+	return eng, mockTmux, pids
 }
 
 // shellWithClaude returns a pane shell process and a Claude child.
@@ -173,5 +181,64 @@ func TestRunWho_Errors(t *testing.T) {
 		if _, err := runWho(eng, &whoFakeSystem{}, target); err == nil {
 			t.Errorf("runWho(%q): expected error", target)
 		}
+	}
+}
+
+func TestRunWho_PaneFromAnotherSessionIsNotTrusted(t *testing.T) {
+	// After a tmux restart a recorded pane ID can name a pane in some
+	// other session. When the dock's session no longer carries the
+	// dock's marker, the recorded pane is not followed.
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent")
+	sys := &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}
+	if err := mockTmux.SetSessionOption("labs", tmux.SessionIDOption, "someone-else"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := runWho(eng, sys, "labs:b1:agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Occupied || res.Address != "" {
+		t.Fatalf("followed an unowned pane: %+v", res)
+	}
+}
+
+func TestRunWho_DoesNotWriteManifest(t *testing.T) {
+	// bay who is read-only: unlike SyncAll, it must not prune or close
+	// other bays. Bay b2 has lost its window, which a sync would record.
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent")
+	b2, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true})
+	if err != nil {
+		t.Fatalf("BayNew b2: %v", err)
+	}
+	if err := mockTmux.KillWindow(b2.Surfaces[0].Tmux.WindowID); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := eng.LoadManifest()
+	before, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWho(eng, &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}, "labs:b1"); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = eng.LoadManifest()
+	after, _ := json.Marshal(m)
+	if string(before) != string(after) {
+		t.Fatalf("manifest changed:\nbefore %s\nafter  %s", before, after)
+	}
+}
+
+func TestRunWho_NoArgIsCurrentPaneEvenWithSelfSurface(t *testing.T) {
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent", "self")
+	bay, _ := eng.BayShow("labs", "b1")
+	agent := bay.FindSurface("agent")
+	mockTmux.SetCurrentWindowID(agent.Tmux.WindowID)
+	mockTmux.SetCurrentPaneID(agent.Tmux.PaneID)
+	res, err := runWho(eng, &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.BayAddress != "labs:b1:agent" || res.PID != 500 {
+		t.Fatalf("unexpected result %+v", res)
 	}
 }

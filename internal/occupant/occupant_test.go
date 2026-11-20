@@ -21,6 +21,7 @@ type fakeSystem struct {
 	sockets map[int][]string
 	sockErr error
 	env     map[int]map[string]string
+	envErr  error
 	files   map[string]string
 	home    string
 }
@@ -29,7 +30,9 @@ func (f *fakeSystem) Processes() ([]Process, error) { return f.procs, nil }
 func (f *fakeSystem) UnixSockets(pid int) ([]string, error) {
 	return f.sockets[pid], f.sockErr
 }
-func (f *fakeSystem) Getenv(pid int, key string) (string, error) { return f.env[pid][key], nil }
+func (f *fakeSystem) Getenv(pid int, key string) (string, error) {
+	return f.env[pid][key], f.envErr
+}
 func (f *fakeSystem) ReadFile(path string) ([]byte, error) {
 	if s, ok := f.files[path]; ok {
 		return []byte(s), nil
@@ -228,13 +231,60 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
-	t.Run("no socket anywhere", func(t *testing.T) {
+	t.Run("lsof fails and no record: an error, not unoccupied", func(t *testing.T) {
 		sys := &fakeSystem{home: "/home/u", sockErr: errors.New("lsof: not found")}
+		o, err := Describe(sys, p)
+		if err == nil || errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want an inspection error other than ErrNoSocket", err)
+		}
+		if o == nil || o.PID != 88226 || o.Address() != "" {
+			t.Fatalf("unexpected occupant %+v", o)
+		}
+	})
+
+	t.Run("lsof finds no socket: record path not trusted", func(t *testing.T) {
+		sys := &fakeSystem{
+			home:  "/home/u",
+			files: map[string]string{"/home/u/.claude/sessions/88226.json": rec88226},
+		}
 		o, err := Describe(sys, p)
 		if !errors.Is(err, ErrNoSocket) {
 			t.Fatalf("err = %v, want ErrNoSocket", err)
 		}
-		if o == nil || o.PID != 88226 || o.Address() != "" {
+		if o.Address() != "" {
+			t.Fatalf("address %q, want none", o.Address())
+		}
+	})
+
+	t.Run("no record: <pid>.sock chosen over an unrelated socket listed first", func(t *testing.T) {
+		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/other.sock", "/tmp/cc-socks/88226.sock"}}}
+		o, err := Describe(sys, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o.Socket != "/tmp/cc-socks/88226.sock" {
+			t.Fatalf("socket %q", o.Socket)
+		}
+	})
+
+	t.Run("several unidentifiable sockets: an error, not a guess", func(t *testing.T) {
+		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/a.sock", "/tmp/b.sock"}}}
+		if _, err := Describe(sys, p); err == nil || errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want an ambiguity error", err)
+		}
+	})
+
+	t.Run("unreadable environment still finds the socket", func(t *testing.T) {
+		sys := &fakeSystem{
+			home:    "/home/u",
+			envErr:  errors.New("permission denied"),
+			sockets: map[int][]string{88226: {"/tmp/cc-socks/88226.sock"}},
+		}
+		o, err := Describe(sys, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o.Address() != "uds:/tmp/cc-socks/88226.sock" || o.LoginDir != "" {
 			t.Fatalf("unexpected occupant %+v", o)
 		}
 	})
@@ -274,6 +324,14 @@ func TestEnvFromPSE(t *testing.T) {
 	out := []byte("claude --flag CLAUDE_CONFIG_DIR=/arg HOME=/Users/u CLAUDE_CONFIG_DIR=/Users/u/.claude2 TERM=xterm\n")
 	if got := EnvFromPSE(out, "CLAUDE_CONFIG_DIR"); got != "/Users/u/.claude2" {
 		t.Fatalf("got %q", got)
+	}
+	spaced := []byte("claude HOME=/Users/u CLAUDE_CONFIG_DIR=/Users/u/Claude Profiles/second TERM=xterm\n")
+	if got := EnvFromPSE(spaced, "CLAUDE_CONFIG_DIR"); got != "/Users/u/Claude Profiles/second" {
+		t.Fatalf("spaced: got %q", got)
+	}
+	last := []byte("claude CLAUDE_CONFIG_DIR=/a b\n")
+	if got := EnvFromPSE(last, "CLAUDE_CONFIG_DIR"); got != "/a b" {
+		t.Fatalf("last entry: got %q", got)
 	}
 	if got := EnvFromPSE([]byte("claude HOME=/Users/u\n"), "CLAUDE_CONFIG_DIR"); got != "" {
 		t.Fatalf("unset: got %q", got)

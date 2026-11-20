@@ -56,7 +56,7 @@ argument, reports the current pane's surface (use it to sign messages).`,
 			if err != nil {
 				return err
 			}
-			target := "self"
+			target := ""
 			if len(args) > 0 {
 				target = args[0]
 			}
@@ -81,9 +81,21 @@ argument, reports the current pane's surface (use it to sign messages).`,
 }
 
 // parseWhoTarget splits a bay address: bay, dock:bay or bay:surface,
-// or dock:bay:surface.
+// or dock:bay:surface. An empty target is the current pane's surface,
+// even in a bay that has a surface literally named "self".
 func parseWhoTarget(eng *engine.Engine, target string) (dockName, bayName, surface string, err error) {
-	if target == "self" {
+	switch target {
+	case "":
+		dockName, bayName, err := eng.ResolveSelf()
+		if err != nil {
+			return "", "", "", err
+		}
+		bay, err := eng.BayShow(dockName, bayName)
+		if err != nil {
+			return "", "", "", err
+		}
+		return currentPaneSurface(eng, dockName, bay)
+	case "self":
 		return resolveSurfaceArgOrSelf(eng, "self", "", "")
 	}
 	parts := strings.Split(target, ":")
@@ -125,22 +137,29 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 	if bayName == "" {
 		return nil, fmt.Errorf("dock-level surfaces have no bay address")
 	}
-	eng.SyncAll()
-	bay, err := eng.BayShow(dockName, bayName)
+	// No SyncAll: it can close or prune other bays, and this command is
+	// read-only. LiveSurfacePanePIDs checks the recorded panes instead.
+	m, err := eng.LoadManifest()
 	if err != nil {
 		return nil, err
 	}
+	dock := m.FindDock(dockName)
+	if dock == nil {
+		return nil, fmt.Errorf("unknown dock %q", dockName)
+	}
+	bay := dock.FindBayByID(bayName)
+	if bay == nil {
+		return nil, fmt.Errorf("bay %q not found in dock %q", bayName, dockName)
+	}
+	panePIDs := eng.LiveSurfacePanePIDs(dock, bay)
 	procs, err := sys.Processes()
 	if err != nil {
 		return nil, err
 	}
 	paneProc := func(s *manifest.Surface) *occupant.Process {
-		if s.Tmux == nil || s.Tmux.PaneID == "" {
+		pid, ok := panePIDs[s.Name]
+		if !ok {
 			return nil
-		}
-		pid, err := eng.Tmux.GetPanePID(s.Tmux.PaneID)
-		if err != nil {
-			return nil // pane gone: no occupant
 		}
 		return occupant.FindClaude(procs, pid)
 	}
@@ -175,6 +194,9 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 		return res, nil
 	case surf.Tmux == nil:
 		res.Reason = "surface is not a tmux pane"
+		return res, nil
+	case panePIDs[surf.Name] == 0:
+		res.Reason = "surface's recorded pane is not live in the dock's tmux session"
 		return res, nil
 	case proc == nil:
 		res.Reason = "no Claude process in the surface's pane"
