@@ -47,6 +47,7 @@ type mockPane struct {
 	windowID string
 	pid      int
 	active   bool
+	dead     bool   // set by SetPaneDead
 	capture  string // content returned by CapturePane
 	cursorY  int
 }
@@ -655,9 +656,18 @@ func (m *Mock) ListPanes(windowID string) ([]Pane, error) {
 			ID:     p.id,
 			PID:    p.pid,
 			Active: p.active,
+			Dead:   p.dead,
 		})
 	}
 	return result, nil
+}
+
+// SetPaneDead marks a pane as dead (its process exited under
+// remain-on-exit), as reported by ListPanes.
+func (m *Mock) SetPaneDead(paneID string, dead bool) {
+	if p, ok := m.panes[paneID]; ok {
+		p.dead = dead
+	}
 }
 
 func (m *Mock) GetPanePID(paneID string) (int, error) {

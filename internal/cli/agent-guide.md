@@ -689,6 +689,72 @@ for Claude/Codex/Antigravity agents in home.
 
 Cycle to the next or previous bay within the current dock.
 
+#### `bay who [address]`
+
+Show the Claude Code session occupying a bay surface, whichever Claude
+login it runs under, and the address to reach it with `SendMessage`.
+Read-only.
+
+The address is a bay address: `b100`, `loom:b100`, `b100:agent2`, or
+`loom:b100:agent2`. With two parts, the first is a dock if one has that
+name, otherwise a bay. With no surface:
+
+- The surface named `agent` is used when Claude runs in it.
+- Otherwise the one surface in the bay that runs Claude is used. The
+  lookup goes by the pane's processes, not the surface type, so Claude
+  started in a `shell` surface counts.
+- Several surfaces run Claude and none is named `agent`: an error
+  that lists them. Pick one and pass `bay:surface`.
+- None runs Claude: an unoccupied result (`occupied: false`).
+
+With no argument, reports your own surface. Use its `bay_address` to
+sign messages.
+
+```
+bay who loom:b100            # human-readable
+bay who b100:agent2 --json   # machine-readable
+bay who --json               # your own surface
+```
+
+JSON (`--json`):
+
+```json
+{
+  "dock": "loom",
+  "bay": "b100",
+  "surface": "agent",
+  "bay_address": "loom:b100:agent",
+  "pane": "%358",
+  "occupied": true,
+  "pid": 88226,
+  "login": "/Users/you/.claude2",
+  "session_id": "ef997319-ab4a-429d-9e37-0eb257dec408",
+  "session_name": "b100-fe",
+  "status": "busy",
+  "version": "2.1.329",
+  "address": "uds:/tmp/cc-socks/88226.sock"
+}
+```
+
+An unoccupied surface has `"occupied": false`, a `reason`, and no
+`address`. It has a `pid` (and the session fields) only when a Claude
+process is in the pane but no messaging socket of its own is open.
+`login` is the process's `CLAUDE_CONFIG_DIR` (`~/.claude` when unset).
+`session_name`, `status` and `version` come from Claude Code's own
+session record in that directory. Any of them may be missing.
+
+`address` is always a socket `lsof` shows open in the Claude process:
+the one the session record names, or, with no record, the one named
+`<pid>.sock`. Bay never guesses among other sockets. The exit status is
+0 for both occupied and unoccupied results. It is non-zero when the
+address doesn't resolve or is ambiguous, or when the process's sockets
+can't be inspected (`lsof` missing, or it reports an error). An error
+is not "nobody is there".
+
+A surface counts as occupied only when its recorded pane is still in the
+dock's own tmux session, so a pane ID reused after a tmux restart can't
+send you to another bay. `bay who` never changes bay's state.
+
 ### Surface commands
 
 #### `bay surface new <kind> [args] [--bay BAY] [--dock DOCK] [--window|--split h|v]`
@@ -996,6 +1062,30 @@ bay ls
 ```
 
 Shows every bay, dirty/merged flags, branch, PR, and waiting indicators.
+
+### Message the agent in another bay
+
+Claude sessions under different Claude logins (for example `~/.claude`
+and `~/.claude2` via `CLAUDE_CONFIG_DIR`) don't see each other in
+`ListAgents`, so don't address another bay by session name. Address it
+by bay, and resolve the bay address each time you send:
+
+1. `bay who loom:b100 --json`. If `occupied` is false, nobody is there
+   to receive a message. Don't send; tell your user, or try again later.
+2. Call `SendMessage` with `to` set to the printed `address`
+   (`uds:/tmp/cc-socks/<pid>.sock`).
+3. Sign the message with your own bay address (the `bay_address` from
+   `bay who --json` with no argument), e.g. `— from loom:b7:agent`.
+
+A `uds:` address lasts only as long as that session. A reply sent soon
+after can go to the message's `from` address. A later reply, or one sent
+after either side restarts or changes login, should run `bay who` on the
+signed bay address again.
+
+Caveat: Claude Code's `SendMessage` documentation does not describe
+`uds:` addressing. It has been tested on Claude Code 2.1.329 only,
+across both logins. Older sessions may not accept it. `version` in the
+`bay who` output shows what the target runs.
 
 ### Navigate to a waiting agent
 
