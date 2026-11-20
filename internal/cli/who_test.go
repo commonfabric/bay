@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -240,5 +241,45 @@ func TestRunWho_NoArgIsCurrentPaneEvenWithSelfSurface(t *testing.T) {
 	}
 	if res.BayAddress != "labs:b1:agent" || res.PID != 500 {
 		t.Fatalf("unexpected result %+v", res)
+	}
+}
+
+// failingListPanes is a tmux mock whose ListPanes fails.
+type failingListPanes struct{ *tmux.Mock }
+
+func (f failingListPanes) ListPanes(string) ([]tmux.Pane, error) {
+	return nil, errors.New("tmux: server busy")
+}
+
+func TestRunWho_TmuxFailureIsAnError(t *testing.T) {
+	// A tmux query that fails must not make a surface look absent, or
+	// the default could silently pick another surface.
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent")
+	eng.Tmux = failingListPanes{mockTmux}
+	procs := append(shellWithClaude(pids["agent"], 500), shellWithClaude(pids["shell"], 600)...)
+	if res, err := runWho(eng, &whoFakeSystem{procs: procs}, "b1"); err == nil {
+		t.Fatalf("expected an error, got %+v", res)
+	}
+}
+
+func TestRunWho_NoArgUsesPaneNotWorkingDirectory(t *testing.T) {
+	// An agent in b1's pane that has cd'd into b2's worktree is still b1.
+	eng, mockTmux, pids := whoFixtureTmux(t, "agent")
+	b2, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true})
+	if err != nil {
+		t.Fatalf("BayNew b2: %v", err)
+	}
+	os.MkdirAll(b2.Path, 0o755)
+	t.Chdir(b2.Path)
+	bay, _ := eng.BayShow("labs", "b1")
+	agent := bay.FindSurface("agent")
+	mockTmux.SetCurrentWindowID(agent.Tmux.WindowID)
+	mockTmux.SetCurrentPaneID(agent.Tmux.PaneID)
+	res, err := runWho(eng, &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.BayAddress != "labs:b1:agent" {
+		t.Fatalf("got %s, want labs:b1:agent", res.BayAddress)
 	}
 }

@@ -173,7 +173,8 @@ func Describe(sys System, p Process) (*Occupant, error) {
 
 	socks, sockErr := sys.UnixSockets(p.PID)
 	if sockErr != nil {
-		// Inspection is unavailable. The session record names the
+		// Inspection could not run (UnixSockets reports a process with
+		// no sockets, or one that has exited, as an empty list). The session record names the
 		// socket, and readRecord has checked the record belongs to
 		// this process; without one there is nothing to go on.
 		if rec != nil && rec.MessagingSocketPath != "" {
@@ -233,9 +234,9 @@ func readRecord(sys System, login string, p Process) *sessionRecord {
 
 // pickSocket chooses the messaging socket among the named unix sockets
 // the process has open, in order of evidence: the one the session record
-// names; the one named <pid>.sock (Claude Code's naming, whatever the
-// directory); the only one. A record path the process does not have open
-// is not used. Several candidates with nothing to choose between them is
+// names (and, when the record names one, nothing else); the one named
+// <pid>.sock (Claude Code's naming, whatever the directory); the only
+// one. A record path the process does not have open is not used. Several candidates with nothing to choose between them is
 // an error rather than a guess, since a wrong guess sends the message to
 // some other listener.
 func pickSocket(socks []string, rec *sessionRecord, pid int) (string, error) {
@@ -243,11 +244,14 @@ func pickSocket(socks []string, rec *sessionRecord, pid int) (string, error) {
 		return "", ErrNoSocket
 	}
 	if rec != nil && rec.MessagingSocketPath != "" {
+		// The record belongs to this process and names its socket; if
+		// that socket is not open, no other socket is the messaging one.
 		for _, s := range socks {
 			if s == rec.MessagingSocketPath {
 				return s, nil
 			}
 		}
+		return "", ErrNoSocket
 	}
 	pidName := fmt.Sprintf("%d.sock", pid)
 	for _, s := range socks {

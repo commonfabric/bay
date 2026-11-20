@@ -2,6 +2,7 @@ package occupant
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -54,10 +55,17 @@ func ParsePS(out []byte) []Process {
 	return procs
 }
 
-// UnixSockets lists the named unix sockets the process has open.
+// UnixSockets lists the named unix sockets the process has open. lsof
+// exits 1 with no output when nothing matches, which includes a process
+// that has exited; that is an empty list, not a failed inspection.
 func (RealSystem) UnixSockets(pid int) ([]string, error) {
 	out, err := exec.Command("lsof", "-a", "-U", "-p", strconv.Itoa(pid), "-F", "n").Output()
-	if err != nil && len(out) == 0 {
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+	case errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(bytes.TrimSpace(out)) == 0:
+		return nil, nil
+	default:
 		return nil, fmt.Errorf("lsof: %w", err)
 	}
 	return ParseLsofNames(out), nil

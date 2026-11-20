@@ -256,6 +256,21 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
+	t.Run("record names a socket that is not open: no other socket is used", func(t *testing.T) {
+		sys := &fakeSystem{
+			home:    "/home/u",
+			sockets: map[int][]string{88226: {"/tmp/other.sock"}},
+			files:   map[string]string{"/home/u/.claude/sessions/88226.json": rec88226},
+		}
+		o, err := Describe(sys, p)
+		if !errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want ErrNoSocket", err)
+		}
+		if o.Address() != "" {
+			t.Fatalf("address %q, want none", o.Address())
+		}
+	})
+
 	t.Run("no record: <pid>.sock chosen over an unrelated socket listed first", func(t *testing.T) {
 		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/other.sock", "/tmp/cc-socks/88226.sock"}}}
 		o, err := Describe(sys, p)

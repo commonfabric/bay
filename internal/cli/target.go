@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/commonfabric/bay/internal/engine"
-	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // parseBayArg parses a bay positional argument like "b1" or "labs:b1".
@@ -116,14 +115,7 @@ func resolveSurfaceArgOrSelf(eng *engine.Engine, posArg, bayFlag, dockFlag strin
 	if bay.FindSurface("self") != nil {
 		return dockName, bayName, "self", nil
 	}
-	return currentPaneSurface(eng, dockName, bay)
-}
-
-// currentPaneSurface resolves the surface owning the current tmux pane,
-// in the given bay or, failing that, among its dock's dock-level
-// surfaces (returned with an empty bay name).
-func currentPaneSurface(eng *engine.Engine, dockName string, bay *manifest.Bay) (string, string, string, error) {
-	bayName := bay.ID
+	// Otherwise resolve to the surface owning the current tmux pane.
 	paneID, tmuxErr := eng.Tmux.CurrentPaneID()
 	if tmuxErr != nil {
 		return "", "", "", fmt.Errorf("cannot determine current pane")

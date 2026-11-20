@@ -81,20 +81,11 @@ argument, reports the current pane's surface (use it to sign messages).`,
 }
 
 // parseWhoTarget splits a bay address: bay, dock:bay or bay:surface,
-// or dock:bay:surface. An empty target is the current pane's surface,
-// even in a bay that has a surface literally named "self".
+// or dock:bay:surface. An empty target is the current pane's surface.
 func parseWhoTarget(eng *engine.Engine, target string) (dockName, bayName, surface string, err error) {
 	switch target {
 	case "":
-		dockName, bayName, err := eng.ResolveSelf()
-		if err != nil {
-			return "", "", "", err
-		}
-		bay, err := eng.BayShow(dockName, bayName)
-		if err != nil {
-			return "", "", "", err
-		}
-		return currentPaneSurface(eng, dockName, bay)
+		return surfaceOfCurrentPane(eng)
 	case "self":
 		return resolveSurfaceArgOrSelf(eng, "self", "", "")
 	}
@@ -129,6 +120,31 @@ func parseWhoTarget(eng *engine.Engine, target string) (dockName, bayName, surfa
 	return dockName, bayName, surface, err
 }
 
+// surfaceOfCurrentPane finds the bay surface that owns the current tmux
+// pane, searching every bay. The pane, not the working directory, is
+// the caller's identity: an agent may have cd'd into another bay's
+// worktree, and a bay may have a surface literally named "self".
+func surfaceOfCurrentPane(eng *engine.Engine) (string, string, string, error) {
+	paneID, err := eng.Tmux.CurrentPaneID()
+	if err != nil || paneID == "" {
+		return "", "", "", fmt.Errorf("cannot determine current pane")
+	}
+	m, err := eng.LoadManifest()
+	if err != nil {
+		return "", "", "", err
+	}
+	for _, d := range m.Docks {
+		for _, b := range d.Bays {
+			for _, s := range b.Surfaces {
+				if s.Tmux != nil && s.Tmux.PaneID == paneID {
+					return d.Name, b.ID, s.Name, nil
+				}
+			}
+		}
+	}
+	return "", "", "", fmt.Errorf("current pane %s is not a bay surface", paneID)
+}
+
 func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult, error) {
 	dockName, bayName, sName, err := parseWhoTarget(eng, target)
 	if err != nil {
@@ -151,7 +167,10 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 	if bay == nil {
 		return nil, fmt.Errorf("bay %q not found in dock %q", bayName, dockName)
 	}
-	panePIDs := eng.LiveSurfacePanePIDs(dock, bay)
+	panePIDs, err := eng.LiveSurfacePanePIDs(dock, bay)
+	if err != nil {
+		return nil, err
+	}
 	procs, err := sys.Processes()
 	if err != nil {
 		return nil, err

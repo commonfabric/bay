@@ -1,6 +1,10 @@
 package engine
 
-import "github.com/commonfabric/bay/internal/manifest"
+import (
+	"fmt"
+
+	"github.com/commonfabric/bay/internal/manifest"
+)
 
 // LiveSurfacePanePIDs maps each of a bay's tmux surfaces to the root
 // process of its pane, for surfaces whose recorded pane is verifiably
@@ -11,21 +15,30 @@ import "github.com/commonfabric/bay/internal/manifest"
 // surface is included only when the dock's session exists and carries
 // the dock's session-ID marker, the recorded window is in that session,
 // and the recorded pane is in that window. Surfaces that fail any check
-// are absent from the map.
-func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) map[string]int {
+// are absent from the map. A tmux query that fails is an error, so a
+// surface is never reported absent because tmux could not be read.
+func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) (map[string]int, error) {
 	pids := map[string]int{}
 	if dock.SessionID == "" {
-		return pids
+		return pids, nil
 	}
-	if ok, _ := e.Tmux.HasSession(dock.Name); !ok {
-		return pids
+	ok, err := e.Tmux.HasSession(dock.Name)
+	if err != nil {
+		return nil, fmt.Errorf("checking tmux session %q: %w", dock.Name, err)
 	}
-	if marker, _ := e.Tmux.GetSessionOption(dock.Name, sessionIDOption); marker != dock.SessionID {
-		return pids
+	if !ok {
+		return pids, nil
+	}
+	marker, err := e.Tmux.GetSessionOption(dock.Name, sessionIDOption)
+	if err != nil {
+		return nil, fmt.Errorf("reading tmux session %q marker: %w", dock.Name, err)
+	}
+	if marker != dock.SessionID {
+		return pids, nil
 	}
 	windows, err := e.Tmux.ListWindows(dock.Name)
 	if err != nil {
-		return pids
+		return nil, fmt.Errorf("listing windows of tmux session %q: %w", dock.Name, err)
 	}
 	inSession := make(map[string]bool, len(windows))
 	for _, w := range windows {
@@ -38,11 +51,13 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) map
 		}
 		panes, ok := panesByWindow[s.Tmux.WindowID]
 		if !ok {
-			panes = map[string]int{}
-			if list, err := e.Tmux.ListPanes(s.Tmux.WindowID); err == nil {
-				for _, p := range list {
-					panes[p.ID] = p.PID
-				}
+			list, err := e.Tmux.ListPanes(s.Tmux.WindowID)
+			if err != nil {
+				return nil, fmt.Errorf("listing panes of window %s: %w", s.Tmux.WindowID, err)
+			}
+			panes = make(map[string]int, len(list))
+			for _, p := range list {
+				panes[p.ID] = p.PID
 			}
 			panesByWindow[s.Tmux.WindowID] = panes
 		}
@@ -50,5 +65,5 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) map
 			pids[s.Name] = pid
 		}
 	}
-	return pids
+	return pids, nil
 }

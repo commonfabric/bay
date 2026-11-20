@@ -737,7 +737,8 @@ JSON (`--json`):
 ```
 
 An unoccupied surface has `"occupied": false`, a `reason`, and no
-`pid`/`address`. `login`, `session_name`, `status` and `version` come
+`address`. It has a `pid` (and the session fields) only when a Claude
+process is in the pane but has no messaging socket open. `login`, `session_name`, `status` and `version` come
 from Claude Code's own session record and may be missing. `address` is
 always read from the process's open sockets. The exit status is 0 for
 both occupied and unoccupied results. It is non-zero when the address
