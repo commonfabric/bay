@@ -79,22 +79,23 @@ func lsofResult(out []byte, err error) ([]string, error) {
 
 // ParseLsofNames extracts socket paths from `lsof -F n` output: lines
 // "n/path" are named sockets; "n->0x…" are peer endpoints and skipped.
-// Linux lsof appends " type=STREAM" (or another type) to a unix socket's
-// name; that annotation is not part of the path.
+// Linux lsof appends " type=STREAM" (or another socket type) to a unix
+// socket's name; that annotation is not part of the path. Only the exact
+// socket-type names are stripped, so a path that happens to contain
+// " type=" is kept whole.
 func ParseLsofNames(out []byte) []string {
 	var paths []string
 	for _, line := range strings.Split(string(out), "\n") {
 		if !strings.HasPrefix(line, "n/") {
 			continue
 		}
-		name := line[1:]
-		if i := strings.LastIndex(name, " type="); i >= 0 && !strings.Contains(name[i+len(" type="):], " ") {
-			name = name[:i]
-		}
-		paths = append(paths, name)
+		paths = append(paths, linuxSocketType.ReplaceAllString(line[1:], ""))
 	}
 	return paths
 }
+
+// linuxSocketType matches the socket-type annotation Linux lsof appends.
+var linuxSocketType = regexp.MustCompile(` type=(?:STREAM|DGRAM|SEQPACKET|RAW|RDM|PACKET|UNKNOWN)$`)
 
 // Getenv reads one variable from another process's environment: from
 // /proc on Linux, from `ps -E` on macOS.

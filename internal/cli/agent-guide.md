@@ -739,8 +739,9 @@ JSON (`--json`):
 An unoccupied surface has `"occupied": false`, a `reason`, and no
 `address`. It has a `pid` (and the session fields) only when a Claude
 process is in the pane but no messaging socket of its own is open.
-`login`, `session_name`, `status` and `version` come from Claude Code's
-own session record and may be missing.
+`login` is the process's `CLAUDE_CONFIG_DIR` (`~/.claude` when unset).
+`session_name`, `status` and `version` come from Claude Code's own
+session record in that directory. Any of them may be missing.
 
 `address` is always a socket `lsof` shows open in the Claude process:
 the one the session record names, or, with no record, the one named

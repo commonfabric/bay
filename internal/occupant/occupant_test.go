@@ -360,8 +360,13 @@ func TestParseLsofNames(t *testing.T) {
 			t.Fatalf("%q: got %v", out, got)
 		}
 	}
+	// A literal " type=" inside a macOS path is part of the path.
+	got := ParseLsofNames([]byte("n/tmp/agents type=work/88226.sock\n"))
+	if len(got) != 1 || got[0] != "/tmp/agents type=work/88226.sock" {
+		t.Fatalf("got %q", got)
+	}
 	// A space elsewhere in the path is kept.
-	got := ParseLsofNames([]byte("n/tmp/a dir/1.sock type=STREAM\nn/tmp/b dir/2.sock\n"))
+	got = ParseLsofNames([]byte("n/tmp/a dir/1.sock type=STREAM\nn/tmp/b dir/2.sock\n"))
 	if len(got) != 2 || got[0] != "/tmp/a dir/1.sock" || got[1] != "/tmp/b dir/2.sock" {
 		t.Fatalf("got %q", got)
 	}
