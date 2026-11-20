@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -281,5 +282,78 @@ func TestRunWho_NoArgUsesPaneNotWorkingDirectory(t *testing.T) {
 	}
 	if res.BayAddress != "labs:b1:agent" {
 		t.Fatalf("got %s, want labs:b1:agent", res.BayAddress)
+	}
+}
+
+// failingListPanesFor fails ListPanes for one window only.
+type failingListPanesFor struct {
+	*tmux.Mock
+	window string
+}
+
+func (f failingListPanesFor) ListPanes(windowID string) ([]tmux.Pane, error) {
+	if windowID == f.window {
+		return nil, errors.New("tmux: can't find window")
+	}
+	return f.Mock.ListPanes(windowID)
+}
+
+func TestRunWho_ExplicitSurfaceIgnoresOtherWindows(t *testing.T) {
+	// An unrelated window vanishing mid-lookup must not fail an explicit
+	// lookup whose own pane is live.
+	eng, mockTmux, _, _ := testNavEngine(t)
+	if _, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+		t.Fatalf("BayNew: %v", err)
+	}
+	if err := eng.SurfaceAdd(engine.SurfaceAddOptions{DockName: "labs", BayName: "b1", Type: manifest.SurfaceTypeShell, Name: "agent"}); err != nil {
+		t.Fatalf("SurfaceAdd: %v", err)
+	}
+	bay, _ := eng.BayShow("labs", "b1")
+	shell, agent := bay.FindSurface("shell"), bay.FindSurface("agent")
+	if shell.Tmux.WindowID == agent.Tmux.WindowID {
+		t.Fatalf("fixture: want agent in its own window")
+	}
+	pid, _ := mockTmux.GetPanePID(agent.Tmux.PaneID)
+	eng.Tmux = failingListPanesFor{mockTmux, shell.Tmux.WindowID}
+	res, err := runWho(eng, &whoFakeSystem{procs: shellWithClaude(pid, 500)}, "labs:b1:agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Occupied || res.PID != 500 {
+		t.Fatalf("unexpected result %+v", res)
+	}
+}
+
+func TestRunWho_NoArgSkipsStalePaneRecord(t *testing.T) {
+	// b1's shell record carries a pane ID that now belongs to b2's agent
+	// (as after a tmux restart). From that pane, the caller is b2:agent.
+	eng, mockTmux, _, dir := testNavEngine(t)
+	if _, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+		t.Fatalf("BayNew b1: %v", err)
+	}
+	b2, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true})
+	if err != nil {
+		t.Fatalf("BayNew b2: %v", err)
+	}
+	os.MkdirAll(b2.Path, 0o755)
+	if err := eng.SurfaceAdd(engine.SurfaceAddOptions{DockName: "labs", BayName: b2.ID, Type: manifest.SurfaceTypeShell, Name: "agent", SplitDir: "v"}); err != nil {
+		t.Fatalf("SurfaceAdd: %v", err)
+	}
+	m, _ := eng.LoadManifest()
+	dock := m.FindDock("labs")
+	agent := dock.FindBayByID(b2.ID).FindSurface("agent")
+	dock.FindBayByID("b1").FindSurface("shell").Tmux.PaneID = agent.Tmux.PaneID
+	if err := manifest.Save(filepath.Join(dir, "manifest.json"), m); err != nil {
+		t.Fatal(err)
+	}
+	mockTmux.SetCurrentWindowID(agent.Tmux.WindowID)
+	mockTmux.SetCurrentPaneID(agent.Tmux.PaneID)
+	pid, _ := mockTmux.GetPanePID(agent.Tmux.PaneID)
+	res, err := runWho(eng, &whoFakeSystem{procs: shellWithClaude(pid, 500)}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.BayAddress != "labs:"+b2.ID+":agent" || !res.Occupied {
+		t.Fatalf("got %+v, want labs:%s:agent", res, b2.ID)
 	}
 }

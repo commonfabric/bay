@@ -133,10 +133,22 @@ func surfaceOfCurrentPane(eng *engine.Engine) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", err
 	}
-	for _, d := range m.Docks {
-		for _, b := range d.Bays {
+	// A pane ID alone can match a stale record (IDs are reused after a
+	// tmux restart), so a match counts only when the pane is verifiably
+	// the bay's own.
+	for i := range m.Docks {
+		d := &m.Docks[i]
+		for j := range d.Bays {
+			b := &d.Bays[j]
 			for _, s := range b.Surfaces {
-				if s.Tmux != nil && s.Tmux.PaneID == paneID {
+				if s.Tmux == nil || s.Tmux.PaneID != paneID {
+					continue
+				}
+				live, err := eng.LiveSurfacePanePIDs(d, b, s.Name)
+				if err != nil {
+					return "", "", "", err
+				}
+				if _, ok := live[s.Name]; ok {
 					return d.Name, b.ID, s.Name, nil
 				}
 			}
@@ -167,7 +179,11 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 	if bay == nil {
 		return nil, fmt.Errorf("bay %q not found in dock %q", bayName, dockName)
 	}
-	panePIDs, err := eng.LiveSurfacePanePIDs(dock, bay)
+	var only []string
+	if sName != "" {
+		only = []string{sName}
+	}
+	panePIDs, err := eng.LiveSurfacePanePIDs(dock, bay, only...)
 	if err != nil {
 		return nil, err
 	}

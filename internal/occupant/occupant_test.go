@@ -205,29 +205,40 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
-	t.Run("no record: socket from lsof alone", func(t *testing.T) {
-		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/x/y.sock"}}}
+	t.Run("no record: a sole socket that isn't <pid>.sock is not taken", func(t *testing.T) {
+		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/other.sock"}}}
+		o, err := Describe(sys, p)
+		if !errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want ErrNoSocket", err)
+		}
+		if o.Address() != "" {
+			t.Fatalf("address %q, want none", o.Address())
+		}
+	})
+
+	t.Run("no record: <pid>.sock in any directory", func(t *testing.T) {
+		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/var/x/88226.sock"}}}
 		o, err := Describe(sys, p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if o.Address() != "uds:/x/y.sock" || o.Name != "" {
+		if o.Address() != "uds:/var/x/88226.sock" || o.Name != "" {
 			t.Fatalf("unexpected occupant %+v", o)
 		}
 	})
 
-	t.Run("lsof fails: record's socket is the fallback", func(t *testing.T) {
+	t.Run("lsof fails: an error even with a record, never the recorded path", func(t *testing.T) {
 		sys := &fakeSystem{
 			home:    "/home/u",
 			sockErr: errors.New("lsof: not found"),
 			files:   map[string]string{"/home/u/.claude/sessions/88226.json": rec88226},
 		}
 		o, err := Describe(sys, p)
-		if err != nil {
-			t.Fatal(err)
+		if err == nil || errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want an inspection error", err)
 		}
-		if o.Socket != "/tmp/cc-socks/88226.sock" {
-			t.Fatalf("socket %q", o.Socket)
+		if o.Address() != "" {
+			t.Fatalf("address %q, want none", o.Address())
 		}
 	})
 
@@ -282,10 +293,10 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
-	t.Run("several unidentifiable sockets: an error, not a guess", func(t *testing.T) {
+	t.Run("several unidentifiable sockets: none is taken", func(t *testing.T) {
 		sys := &fakeSystem{home: "/home/u", sockets: map[int][]string{88226: {"/tmp/a.sock", "/tmp/b.sock"}}}
-		if _, err := Describe(sys, p); err == nil || errors.Is(err, ErrNoSocket) {
-			t.Fatalf("err = %v, want an ambiguity error", err)
+		if _, err := Describe(sys, p); !errors.Is(err, ErrNoSocket) {
+			t.Fatalf("err = %v, want ErrNoSocket", err)
 		}
 	})
 

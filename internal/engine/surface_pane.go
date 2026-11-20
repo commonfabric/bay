@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/commonfabric/bay/internal/manifest"
 )
@@ -17,7 +18,10 @@ import (
 // and the recorded pane is in that window. Surfaces that fail any check
 // are absent from the map. A tmux query that fails is an error, so a
 // surface is never reported absent because tmux could not be read.
-func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) (map[string]int, error) {
+//
+// With names, only those surfaces are checked, and only their windows
+// are queried, so an unrelated window closing mid-lookup can't fail it.
+func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, names ...string) (map[string]int, error) {
 	pids := map[string]int{}
 	if dock.SessionID == "" {
 		return pids, nil
@@ -46,6 +50,9 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay) (ma
 	}
 	panesByWindow := map[string]map[string]int{}
 	for _, s := range bay.Surfaces {
+		if len(names) > 0 && !slices.Contains(names, s.Name) {
+			continue
+		}
 		if s.Tmux == nil || s.Tmux.PaneID == "" || !inSession[s.Tmux.WindowID] {
 			continue
 		}

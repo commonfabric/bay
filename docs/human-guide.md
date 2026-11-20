@@ -562,8 +562,9 @@ address uds:/tmp/cc-socks/88226.sock
 
 Bay follows the surface's tmux pane to the `claude` process in it (the
 pane's own process or one started from a shell there), and reads the
-socket that process listens on. It needs no configuration and does not
-change either login's files. Without a surface, it uses the surface
+socket that process has open (with `lsof`, which must be installed). It
+needs no configuration and changes neither bay's state nor either
+login's files. Without a surface, it uses the surface
 named `agent`, or the one surface running Claude. If several surfaces
 run Claude and none is named `agent`, it lists them and fails.
 

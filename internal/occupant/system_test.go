@@ -25,3 +25,34 @@ func TestRealUnixSockets_ExitedProcess(t *testing.T) {
 		t.Fatalf("exited process: sockets %v", socks)
 	}
 }
+
+// TestLsofResult checks how an lsof run is read, using real exit errors
+// from sh: exit 1 with no output at all is "no match"; exit 1 with a
+// diagnostic on stderr, or any other exit, is an inspection error.
+func TestLsofResult(t *testing.T) {
+	run := func(script string) ([]byte, error) {
+		return exec.Command("sh", "-c", script).Output()
+	}
+	tests := []struct {
+		name    string
+		script  string
+		want    []string
+		wantErr bool
+	}{
+		{"match", `printf 'p1\nf3\nn/tmp/1.sock\n'`, []string{"/tmp/1.sock"}, false},
+		{"no match", `exit 1`, nil, false},
+		{"exit 1 with diagnostic", `echo 'lsof: WARNING: permission denied' >&2; exit 1`, nil, true},
+		{"other exit", `exit 2`, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := lsofResult(run(tt.script))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(got) != len(tt.want) || (len(got) > 0 && got[0] != tt.want[0]) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

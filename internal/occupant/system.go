@@ -55,18 +55,24 @@ func ParsePS(out []byte) []Process {
 	return procs
 }
 
-// UnixSockets lists the named unix sockets the process has open. lsof
-// exits 1 with no output when nothing matches, which includes a process
-// that has exited; that is an empty list, not a failed inspection.
+// UnixSockets lists the named unix sockets the process has open.
 func (RealSystem) UnixSockets(pid int) ([]string, error) {
 	out, err := exec.Command("lsof", "-a", "-U", "-p", strconv.Itoa(pid), "-F", "n").Output()
-	var exitErr *exec.ExitError
-	switch {
-	case err == nil:
-	case errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(bytes.TrimSpace(out)) == 0:
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("lsof: %w", err)
+	return lsofResult(out, err)
+}
+
+// lsofResult interprets an lsof run. lsof exits 1 with no output at all
+// when nothing matches, which includes a process that has exited: that
+// is an empty list. Exit 1 with a diagnostic on stderr (a permission
+// problem, say), or any other failure, is an inspection error.
+func lsofResult(out []byte, err error) ([]string, error) {
+	if err != nil {
+		var exitErr *exec.ExitError
+		noMatch := errors.As(err, &exitErr) && exitErr.ExitCode() == 1 &&
+			len(bytes.TrimSpace(out)) == 0 && len(bytes.TrimSpace(exitErr.Stderr)) == 0
+		if !noMatch {
+			return nil, fmt.Errorf("lsof: %w", err)
+		}
 	}
 	return ParseLsofNames(out), nil
 }
