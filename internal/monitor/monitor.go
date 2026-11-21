@@ -630,30 +630,57 @@ func (m *Monitor) clearHighlight(windowID string) error {
 	return nil
 }
 
-// Start forks the monitor as a background process and writes the PID file.
+// Start forks the monitor as a background process. The child (bay
+// monitor run) writes its own PID file.
+//
+// The child does not share the caller's stdin or stdout: they read from
+// and write to /dev/null. Its stderr is appended to LogPath. A command
+// whose output is being captured, as in x=$(bay ls --json), therefore
+// sees end-of-file when that command exits, not when the monitor does.
 func (m *Monitor) Start() error {
-	// Find our own executable.
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("finding executable: %w", err)
 	}
+	return startDetached(exe, []string{exe, "monitor", "run"}, m.LogPath())
+}
+
+// LogPath is the file the background monitor's stderr is appended to,
+// in the same directory as the PID file.
+func (m *Monitor) LogPath() string {
+	return filepath.Join(filepath.Dir(m.pidPath), "monitor.log")
+}
+
+// startDetached starts argv[0]=exe with stdin and stdout on /dev/null
+// and stderr appended to logPath, then releases it so it outlives the
+// caller.
+func startDetached(exe string, argv []string, logPath string) error {
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", os.DevNull, err)
+	}
+	defer devNull.Close()
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		return fmt.Errorf("creating monitor log directory: %w", err)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("opening monitor log: %w", err)
+	}
+	defer logFile.Close()
 
 	attr := &os.ProcAttr{
 		Dir:   "/",
 		Env:   os.Environ(),
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Files: []*os.File{devNull, devNull, logFile},
 	}
-	proc, err := os.StartProcess(exe, []string{exe, "monitor", "run"}, attr)
+	proc, err := os.StartProcess(exe, argv, attr)
 	if err != nil {
 		return fmt.Errorf("starting monitor process: %w", err)
 	}
-	// Release the process so it continues after we exit.
-	// The child process (bay monitor run) writes its own PID file,
-	// so we must not write it here to avoid a race condition.
 	if err := proc.Release(); err != nil {
 		return fmt.Errorf("releasing monitor process: %w", err)
 	}
-
 	return nil
 }
 

@@ -999,6 +999,11 @@ output with `running`, `pid`, `freshness`, `reason`, `monitor`, and
 `current` fields. `freshness` is one of `not_running`, `current`,
 `stale`, `unknown`, or `different_executable`.
 
+The monitor started in the background never holds the caller's stdout,
+so capturing a bay command's output (`x=$(bay ls --json)`) returns when
+that command exits. The monitor's error output goes to `monitor.log` in
+bay's data directory, next to `monitor.pid`.
+
 Waiting detection uses three mechanisms, all feeding into
 `--next-waiting` navigation:
 
