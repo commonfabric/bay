@@ -1149,6 +1149,13 @@ executable path. A stale or unknown monitor can be restarted with
 heartbeat is old but the version and binary match, status still reports
 `current` and includes a heartbeat warning.
 
+The background monitor does not hold the terminal or the output of the
+command that started it. Its error output goes to `monitor.log` in bay's
+data directory (`~/.local/share/bay/monitor.log`, or under
+`$XDG_DATA_HOME/bay`). If that file can't be written, the error
+output is discarded and the monitor still starts. Check that file when
+the monitor stops unexpectedly.
+
 ## Listing views
 
 `bay pwd` shows your current location:

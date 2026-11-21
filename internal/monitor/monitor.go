@@ -630,31 +630,78 @@ func (m *Monitor) clearHighlight(windowID string) error {
 	return nil
 }
 
-// Start forks the monitor as a background process and writes the PID file.
+// Start forks the monitor as a background process. The child (bay
+// monitor run) writes its own PID file.
+//
+// The child does not share the caller's stdin or stdout: they read from
+// and write to /dev/null. Its stderr is appended to LogPath when that is
+// a regular file that can be opened, and goes to /dev/null otherwise. A
+// command whose output is being captured, as in x=$(bay ls --json),
+// therefore sees end-of-file when that command exits, not when the
+// monitor does.
 func (m *Monitor) Start() error {
-	// Find our own executable.
-	exe, err := os.Executable()
+	exe, err := executable()
 	if err != nil {
 		return fmt.Errorf("finding executable: %w", err)
+	}
+	return startDetached(exe, []string{exe, "monitor", "run"}, m.LogPath())
+}
+
+// executable locates the bay binary that Start runs.
+var executable = os.Executable
+
+// LogPath is the file the background monitor's stderr is appended to,
+// in the same directory as the PID file.
+func (m *Monitor) LogPath() string {
+	return filepath.Join(filepath.Dir(m.pidPath), "monitor.log")
+}
+
+// startDetached starts argv[0]=exe with stdin and stdout on /dev/null
+// and stderr on openLog(logPath), then releases it so it outlives the
+// caller.
+func startDetached(exe string, argv []string, logPath string) error {
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", os.DevNull, err)
+	}
+	defer devNull.Close()
+	stderr := devNull
+	if logFile := openLog(logPath); logFile != nil {
+		defer logFile.Close()
+		stderr = logFile
 	}
 
 	attr := &os.ProcAttr{
 		Dir:   "/",
 		Env:   os.Environ(),
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Files: []*os.File{devNull, devNull, stderr},
 	}
-	proc, err := os.StartProcess(exe, []string{exe, "monitor", "run"}, attr)
+	proc, err := os.StartProcess(exe, argv, attr)
 	if err != nil {
 		return fmt.Errorf("starting monitor process: %w", err)
 	}
-	// Release the process so it continues after we exit.
-	// The child process (bay monitor run) writes its own PID file,
-	// so we must not write it here to avoid a race condition.
 	if err := proc.Release(); err != nil {
 		return fmt.Errorf("releasing monitor process: %w", err)
 	}
-
 	return nil
+}
+
+// openLog opens path for appending, creating it if needed. It returns nil
+// when the file can't be opened or is not a regular file. The open is
+// non-blocking, so a named pipe at path returns at once.
+func openLog(path string) *os.File {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND|syscall.O_NONBLOCK, 0o644)
+	if err != nil {
+		return nil
+	}
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
+		f.Close()
+		return nil
+	}
+	return f
 }
 
 // Stop reads the PID file, sends SIGTERM, and removes the PID file.
