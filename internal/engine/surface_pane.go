@@ -27,31 +27,37 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, nam
 	if err != nil || q == nil {
 		return map[string]int{}, err
 	}
-	return q.bayPanePIDs(bay, names)
+	pids, errs := q.bayPanePIDs(bay, names)
+	for _, s := range bay.Surfaces { // first failure in surface order
+		if err := errs[s.Name]; err != nil {
+			return nil, err
+		}
+	}
+	return pids, nil
 }
 
 // LiveDockPanePIDs is LiveSurfacePanePIDs for every bay in the dock,
-// keyed by bay ID, checking the dock's tmux session once. A failure to
-// read one bay's panes (a window closing mid-lookup, say) is reported in
-// bayErrs for that bay alone; the other bays' results stand. err is for
-// a failure to read the dock's session itself.
-func (e *Engine) LiveDockPanePIDs(dock *manifest.Dock) (pids map[string]map[string]int, bayErrs map[string]error, err error) {
+// keyed by bay ID then surface name, checking the dock's tmux session
+// once. A surface whose window can't be read (it closed mid-lookup,
+// say) is reported in surfErrs, keyed the same way, for that surface
+// alone; every other surface's result stands, including other surfaces
+// of the same bay. err is for a failure to read the dock's session.
+func (e *Engine) LiveDockPanePIDs(dock *manifest.Dock) (pids map[string]map[string]int, surfErrs map[string]map[string]error, err error) {
 	pids = map[string]map[string]int{}
-	bayErrs = map[string]error{}
+	surfErrs = map[string]map[string]error{}
 	q, err := e.newPaneQuery(dock)
 	if err != nil || q == nil {
-		return pids, bayErrs, err
+		return pids, surfErrs, err
 	}
 	for i := range dock.Bays {
 		id := dock.Bays[i].ID
-		bp, err := q.bayPanePIDs(&dock.Bays[i], nil)
-		if err != nil {
-			bayErrs[id] = err
-			continue
-		}
+		bp, errs := q.bayPanePIDs(&dock.Bays[i], nil)
 		pids[id] = bp
+		if len(errs) > 0 {
+			surfErrs[id] = errs
+		}
 	}
-	return pids, bayErrs, nil
+	return pids, surfErrs, nil
 }
 
 // paneQuery holds one dock's verified tmux state: the windows of its
@@ -60,6 +66,7 @@ type paneQuery struct {
 	e         *Engine
 	inSession map[string]bool
 	panes     map[string]map[string]int // window ID -> pane ID -> PID
+	failed    map[string]error          // window ID -> ListPanes failure
 }
 
 // newPaneQuery checks that the dock's tmux session exists and is the
@@ -88,15 +95,20 @@ func (e *Engine) newPaneQuery(dock *manifest.Dock) (*paneQuery, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listing windows of tmux session %q: %w", dock.Name, err)
 	}
-	q := &paneQuery{e: e, inSession: make(map[string]bool, len(windows)), panes: map[string]map[string]int{}}
+	q := &paneQuery{e: e, inSession: make(map[string]bool, len(windows)), panes: map[string]map[string]int{}, failed: map[string]error{}}
 	for _, w := range windows {
 		q.inSession[w.ID] = true
 	}
 	return q, nil
 }
 
-func (q *paneQuery) bayPanePIDs(bay *manifest.Bay, names []string) (map[string]int, error) {
-	pids := map[string]int{}
+// bayPanePIDs resolves the bay's surfaces (or only names) to live pane
+// PIDs. A surface whose window can't be listed gets an entry in errs
+// instead; the failure is remembered for that window, so its other
+// surfaces get the same error without querying tmux again.
+func (q *paneQuery) bayPanePIDs(bay *manifest.Bay, names []string) (pids map[string]int, errs map[string]error) {
+	pids = map[string]int{}
+	errs = map[string]error{}
 	for _, s := range bay.Surfaces {
 		if len(names) > 0 && !slices.Contains(names, s.Name) {
 			continue
@@ -104,23 +116,39 @@ func (q *paneQuery) bayPanePIDs(bay *manifest.Bay, names []string) (map[string]i
 		if s.Tmux == nil || s.Tmux.PaneID == "" || !q.inSession[s.Tmux.WindowID] {
 			continue
 		}
-		panes, ok := q.panes[s.Tmux.WindowID]
-		if !ok {
-			list, err := q.e.Tmux.ListPanes(s.Tmux.WindowID)
-			if err != nil {
-				return nil, fmt.Errorf("listing panes of window %s: %w", s.Tmux.WindowID, err)
-			}
-			panes = make(map[string]int, len(list))
-			for _, p := range list {
-				if !p.Dead { // a dead pane's PID is stale
-					panes[p.ID] = p.PID
-				}
-			}
-			q.panes[s.Tmux.WindowID] = panes
+		panes, err := q.windowPanes(s.Tmux.WindowID)
+		if err != nil {
+			errs[s.Name] = err
+			continue
 		}
 		if pid, ok := panes[s.Tmux.PaneID]; ok {
 			pids[s.Name] = pid
 		}
 	}
-	return pids, nil
+	return pids, errs
+}
+
+// windowPanes returns the window's live panes (pane ID -> PID), querying
+// tmux once per window and remembering a failure as well as a result.
+func (q *paneQuery) windowPanes(windowID string) (map[string]int, error) {
+	if err, ok := q.failed[windowID]; ok {
+		return nil, err
+	}
+	if panes, ok := q.panes[windowID]; ok {
+		return panes, nil
+	}
+	list, err := q.e.Tmux.ListPanes(windowID)
+	if err != nil {
+		err = fmt.Errorf("listing panes of window %s: %w", windowID, err)
+		q.failed[windowID] = err
+		return nil, err
+	}
+	panes := make(map[string]int, len(list))
+	for _, p := range list {
+		if !p.Dead { // a dead pane's PID is stale
+			panes[p.ID] = p.PID
+		}
+	}
+	q.panes[windowID] = panes
+	return panes, nil
 }

@@ -784,7 +784,7 @@ bay peers --dock loom     # one dock
 plus `"self": true` on your own surface. A surface whose Claude has no
 messaging socket, or whose sockets can't be inspected, is listed with
 no `address` and a `reason`. A dock whose tmux session can't be read,
-or a bay whose panes can't be read, is skipped with a warning on stderr,
+or a surface whose tmux window can't be read, is skipped with a warning on stderr,
 so one failure doesn't hide the rest.
 
 ### Surface commands

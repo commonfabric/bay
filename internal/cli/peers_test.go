@@ -164,3 +164,33 @@ func mustJSON(t *testing.T, m *manifest.Manifest) string {
 	}
 	return string(data)
 }
+
+func TestRunPeers_TmuxFailureSkipsOnlyThatWindow(t *testing.T) {
+	// Within one bay: the shell window vanishing mid-lookup must not hide
+	// the agent in the bay's other window.
+	eng, mockTmux, _, _ := testNavEngine(t)
+	if _, err := eng.BayNew(engine.BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+		t.Fatalf("BayNew: %v", err)
+	}
+	if err := eng.SurfaceAdd(engine.SurfaceAddOptions{DockName: "labs", BayName: "b1", Type: manifest.SurfaceTypeShell, Name: "agent"}); err != nil {
+		t.Fatalf("SurfaceAdd: %v", err)
+	}
+	bay, _ := eng.BayShow("labs", "b1")
+	shell, agent := bay.FindSurface("shell"), bay.FindSurface("agent")
+	if shell.Tmux.WindowID == agent.Tmux.WindowID {
+		t.Fatal("fixture: want agent in its own window")
+	}
+	pid, _ := mockTmux.GetPanePID(agent.Tmux.PaneID)
+	eng.Tmux = failingListPanesFor{mockTmux, shell.Tmux.WindowID}
+	var warn bytes.Buffer
+	rows, err := runPeers(eng, &whoFakeSystem{procs: shellWithClaude(pid, 500)}, "", &warn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].BayAddress != "labs:b1:agent" {
+		t.Fatalf("rows %+v, want labs:b1:agent", rows)
+	}
+	if !strings.Contains(warn.String(), "skipping labs:b1:shell") {
+		t.Fatalf("warn %q", warn.String())
+	}
+}
