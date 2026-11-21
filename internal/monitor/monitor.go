@@ -634,16 +634,21 @@ func (m *Monitor) clearHighlight(windowID string) error {
 // monitor run) writes its own PID file.
 //
 // The child does not share the caller's stdin or stdout: they read from
-// and write to /dev/null. Its stderr is appended to LogPath. A command
-// whose output is being captured, as in x=$(bay ls --json), therefore
-// sees end-of-file when that command exits, not when the monitor does.
+// and write to /dev/null. Its stderr is appended to LogPath when that is
+// a regular file that can be opened, and goes to /dev/null otherwise. A
+// command whose output is being captured, as in x=$(bay ls --json),
+// therefore sees end-of-file when that command exits, not when the
+// monitor does.
 func (m *Monitor) Start() error {
-	exe, err := os.Executable()
+	exe, err := executable()
 	if err != nil {
 		return fmt.Errorf("finding executable: %w", err)
 	}
 	return startDetached(exe, []string{exe, "monitor", "run"}, m.LogPath())
 }
+
+// executable locates the bay binary that Start runs.
+var executable = os.Executable
 
 // LogPath is the file the background monitor's stderr is appended to,
 // in the same directory as the PID file.
@@ -652,7 +657,7 @@ func (m *Monitor) LogPath() string {
 }
 
 // startDetached starts argv[0]=exe with stdin and stdout on /dev/null
-// and stderr appended to logPath, then releases it so it outlives the
+// and stderr on openLog(logPath), then releases it so it outlives the
 // caller.
 func startDetached(exe string, argv []string, logPath string) error {
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
@@ -660,19 +665,16 @@ func startDetached(exe string, argv []string, logPath string) error {
 		return fmt.Errorf("opening %s: %w", os.DevNull, err)
 	}
 	defer devNull.Close()
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		return fmt.Errorf("creating monitor log directory: %w", err)
+	stderr := devNull
+	if logFile := openLog(logPath); logFile != nil {
+		defer logFile.Close()
+		stderr = logFile
 	}
-	logFile, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	if err != nil {
-		return fmt.Errorf("opening monitor log: %w", err)
-	}
-	defer logFile.Close()
 
 	attr := &os.ProcAttr{
 		Dir:   "/",
 		Env:   os.Environ(),
-		Files: []*os.File{devNull, devNull, logFile},
+		Files: []*os.File{devNull, devNull, stderr},
 	}
 	proc, err := os.StartProcess(exe, argv, attr)
 	if err != nil {
@@ -682,6 +684,24 @@ func startDetached(exe string, argv []string, logPath string) error {
 		return fmt.Errorf("releasing monitor process: %w", err)
 	}
 	return nil
+}
+
+// openLog opens path for appending, creating it if needed. It returns nil
+// when the file can't be opened or is not a regular file. The open is
+// non-blocking, so a named pipe at path returns at once.
+func openLog(path string) *os.File {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND|syscall.O_NONBLOCK, 0o644)
+	if err != nil {
+		return nil
+	}
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
+		f.Close()
+		return nil
+	}
+	return f
 }
 
 // Stop reads the PID file, sends SIGTERM, and removes the PID file.
