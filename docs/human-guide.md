@@ -585,6 +585,14 @@ Agents use the `address` as `SendMessage`'s `to`. `bay agent-guide`
 gives them the full procedure. `uds:` addressing is not part of Claude
 Code's documented interface. It was tested on Claude Code 2.1.329.
 
+To wait for something in another bay, an agent either asks the other
+agent to message it when that thing happens, or subscribes with
+`SendMessage`'s `notify_when_idle` to get one notice when the other
+session next finishes its turn or exits. Both work across logins. Bay
+does not send events itself. Across logins, an exit is reported with
+the same "idle" notice as a finished turn; `bay who` shows whether the
+session is still there. This was tested on Claude Code 2.1.330.
+
 ### .worktreeinclude
 
 To copy gitignored local files (`.env`, credentials, overrides) from

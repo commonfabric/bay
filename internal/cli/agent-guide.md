@@ -1126,6 +1126,37 @@ Caveat: Claude Code's `SendMessage` documentation does not describe
 across both logins. Older sessions may not accept it. `version` in the
 `bay who` and `bay peers` output shows what the target runs.
 
+### Wait for something in another bay
+
+Bay does not send events itself. Two Claude Code mechanisms cover
+waiting, and both work across logins:
+
+- **Ask the other agent to tell you.** For anything that agent can see
+  (a PR merging, tests passing, a stage finished), say in your message
+  what to wait for and ask it to `SendMessage` you when it happens. Sign
+  the message with your bay address so the agent can find you again with
+  `bay who` if your session restarts.
+- **Subscribe to its next idle.** Pass `notify_when_idle: true` to
+  `SendMessage`, with or without a message. You get one
+  `[Cross-session idle notice]` when that session next finishes its turn
+  or exits. Use it as a backstop, in case the agent stops or exits
+  without messaging you. It is one-shot: subscribe again after each
+  notice to keep watching.
+
+Across logins, three things differ from messaging within one login:
+
+- `SendMessage` reports that idle-notice support is "unknown" and that a
+  notice may never come. It says so because it can't read the other
+  login's session records. The notices do arrive.
+- An exit produces the same "is idle now" notice as a finished turn. To
+  tell them apart, run `bay who` on the bay address: `occupied: false`
+  means the session exited.
+- The notice carries less detail, because the other session can't find
+  your session in its own login's records.
+
+Don't wait by running `bay who` or `bay peers` in a loop, or by sending
+"are you done?" messages. Tested on Claude Code 2.1.330.
+
 ### Navigate to a waiting agent
 
 Within current bay:
