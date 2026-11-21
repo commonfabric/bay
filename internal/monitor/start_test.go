@@ -52,10 +52,19 @@ func runStartHelper(t *testing.T, dir string) (stdout []byte) {
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestStartHelper$")
 	cmd.Env = append(os.Environ(), startHelperEnv+"="+dir)
-	in, err := cmd.StdinPipe()
+	// The line is in the pipe before the helper starts, and the test
+	// holds both ends until it returns, so the line stays readable for
+	// as long as anything could inherit the helper's stdin.
+	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer stdinR.Close()
+	defer stdinW.Close()
+	if _, err := io.WriteString(stdinW, "caller-input\n"); err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stdin = stdinR
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -63,11 +72,10 @@ func runStartHelper(t *testing.T, dir string) (stdout []byte) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { killChild(t, filepath.Join(dir, "child.pid")) })
-	if _, err := io.WriteString(in, "caller-input\n"); err != nil {
-		t.Fatal(err)
-	}
-	defer in.Close()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill() // a helper blocked inside Start
+		killChild(t, filepath.Join(dir, "child.pid"))
+	})
 
 	// The pipe reaches end-of-file only when every holder of its write
 	// end has exited. The detached child must not be one of them.
