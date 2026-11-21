@@ -56,42 +56,61 @@ func ParsePS(out []byte) []Process {
 }
 
 // UnixSockets lists the named unix sockets the process has open.
-func (RealSystem) UnixSockets(pid int) ([]string, error) {
-	out, err := exec.Command("lsof", "-a", "-U", "-p", strconv.Itoa(pid), "-F", "n").Output()
+func (r RealSystem) UnixSockets(pid int) ([]string, error) {
+	m, err := r.UnixSocketsOf([]int{pid})
+	return m[pid], err
+}
+
+// UnixSocketsOf lists the named unix sockets of several processes with
+// one lsof run. A process with none, or one that has exited, is absent
+// from the map.
+func (RealSystem) UnixSocketsOf(pids []int) (map[int][]string, error) {
+	if len(pids) == 0 {
+		return map[int][]string{}, nil
+	}
+	list := make([]string, len(pids))
+	for i, p := range pids {
+		list[i] = strconv.Itoa(p)
+	}
+	out, err := exec.Command("lsof", "-a", "-U", "-p", strings.Join(list, ","), "-F", "pn").Output()
 	return lsofResult(out, err)
 }
 
-// lsofResult interprets an lsof run. lsof exits 1 with no output at all
-// when nothing matches, which includes a process that has exited: that
-// is an empty list. Exit 1 with a diagnostic on stderr (a permission
-// problem, say), or any other failure, is an inspection error.
-func lsofResult(out []byte, err error) ([]string, error) {
+// lsofResult interprets an lsof run. lsof exits 1, saying nothing on
+// stderr, when some requested process matched nothing (no unix sockets,
+// or it has exited); the output for the others is still complete. Exit 1
+// with a diagnostic on stderr (a permission problem, say), or any other
+// failure, is an inspection error.
+func lsofResult(out []byte, err error) (map[int][]string, error) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		noMatch := errors.As(err, &exitErr) && exitErr.ExitCode() == 1 &&
-			len(bytes.TrimSpace(out)) == 0 && len(bytes.TrimSpace(exitErr.Stderr)) == 0
+			len(bytes.TrimSpace(exitErr.Stderr)) == 0
 		if !noMatch {
 			return nil, fmt.Errorf("lsof: %w", err)
 		}
 	}
-	return ParseLsofNames(out), nil
+	return ParseLsof(out), nil
 }
 
-// ParseLsofNames extracts socket paths from `lsof -F n` output: lines
-// "n/path" are named sockets; "n->0x…" are peer endpoints and skipped.
-// Linux lsof appends " type=STREAM" (or another socket type) to a unix
-// socket's name; that annotation is not part of the path. Only the exact
-// socket-type names are stripped, so a path that happens to contain
-// " type=" is kept whole.
-func ParseLsofNames(out []byte) []string {
-	var paths []string
+// ParseLsof extracts socket paths per process from `lsof -F pn` output:
+// "p<pid>" starts a process; "n/path" is a named socket; "n->0x…" is a
+// peer endpoint and skipped. Linux lsof appends " type=STREAM" (or
+// another socket type) to a unix socket's name; that annotation is not
+// part of the path. Only the exact socket-type names are stripped, so a
+// path that happens to contain " type=" is kept whole.
+func ParseLsof(out []byte) map[int][]string {
+	m := map[int][]string{}
+	pid := 0
 	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.HasPrefix(line, "n/") {
-			continue
+		switch {
+		case strings.HasPrefix(line, "p"):
+			pid, _ = strconv.Atoi(line[1:])
+		case strings.HasPrefix(line, "n/") && pid != 0:
+			m[pid] = append(m[pid], linuxSocketType.ReplaceAllString(line[1:], ""))
 		}
-		paths = append(paths, linuxSocketType.ReplaceAllString(line[1:], ""))
 	}
-	return paths
+	return m
 }
 
 // linuxSocketType matches the socket-type annotation Linux lsof appends.

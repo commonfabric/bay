@@ -349,28 +349,55 @@ garbage line
 	}
 }
 
-func TestParseLsofNames(t *testing.T) {
+func TestParseLsof(t *testing.T) {
 	// macOS form, then Linux form with its " type=STREAM" annotation.
 	for _, out := range []string{
 		"p88226\nf9\nn->0x6298022bb12dbb12\nf13\nn/tmp/cc-socks/88226.sock\nf14\nn->0xac9d\n",
 		"p88226\nf13\nn/tmp/cc-socks/88226.sock type=STREAM\nf14\nntype=STREAM\n",
 	} {
-		got := ParseLsofNames([]byte(out))
+		got := ParseLsof([]byte(out))[88226]
 		if len(got) != 1 || got[0] != "/tmp/cc-socks/88226.sock" {
 			t.Fatalf("%q: got %v", out, got)
 		}
 	}
-	// A literal " type=" inside a macOS path is part of the path.
-	got := ParseLsofNames([]byte("n/tmp/agents type=work/88226.sock\n"))
-	if len(got) != 1 || got[0] != "/tmp/agents type=work/88226.sock" {
-		t.Fatalf("got %q", got)
+	// A literal " type=" inside a macOS path is part of the path, a
+	// space elsewhere is kept, and sockets stay with their process.
+	got := ParseLsof([]byte("p1\nf3\nn/tmp/agents type=work/1.sock\np2\nf4\nn/tmp/a dir/2.sock type=STREAM\nf5\nn/tmp/b dir/2b.sock\n"))
+	if len(got[1]) != 1 || got[1][0] != "/tmp/agents type=work/1.sock" {
+		t.Fatalf("pid 1: got %q", got[1])
 	}
-	// A space elsewhere in the path is kept.
-	got = ParseLsofNames([]byte("n/tmp/a dir/1.sock type=STREAM\nn/tmp/b dir/2.sock\n"))
-	if len(got) != 2 || got[0] != "/tmp/a dir/1.sock" || got[1] != "/tmp/b dir/2.sock" {
-		t.Fatalf("got %q", got)
+	if len(got[2]) != 2 || got[2][0] != "/tmp/a dir/2.sock" || got[2][1] != "/tmp/b dir/2b.sock" {
+		t.Fatalf("pid 2: got %q", got[2])
 	}
 }
+
+func TestPrefetch(t *testing.T) {
+	base := &batchFake{fakeSystem: fakeSystem{sockets: map[int][]string{1: {"/one-by-one.sock"}, 3: {"/three.sock"}}}}
+	base.batch = map[int][]string{1: {"/batched.sock"}}
+	sys := Prefetch(base, []int{1, 2})
+	if got, _ := sys.UnixSockets(1); len(got) != 1 || got[0] != "/batched.sock" {
+		t.Fatalf("pid 1: got %v", got)
+	}
+	if got, _ := sys.UnixSockets(2); len(got) != 0 {
+		t.Fatalf("pid 2 (no sockets in batch): got %v", got)
+	}
+	if got, _ := sys.UnixSockets(3); len(got) != 1 || got[0] != "/three.sock" {
+		t.Fatalf("pid 3 (not prefetched): got %v", got)
+	}
+	base.batchErr = errors.New("lsof: boom")
+	if Prefetch(base, []int{1}) != System(base) {
+		t.Fatal("failed batch should fall back to the plain System")
+	}
+}
+
+// batchFake adds UnixSocketsOf to fakeSystem.
+type batchFake struct {
+	fakeSystem
+	batch    map[int][]string
+	batchErr error
+}
+
+func (b *batchFake) UnixSocketsOf([]int) (map[int][]string, error) { return b.batch, b.batchErr }
 
 func TestEnvFromPSE(t *testing.T) {
 	out := []byte("claude --flag CLAUDE_CONFIG_DIR=/arg HOME=/Users/u CLAUDE_CONFIG_DIR=/Users/u/.claude2 TERM=xterm\n")

@@ -568,6 +568,19 @@ login's files. Without a surface, it uses the surface
 named `agent`, or the one surface running Claude. If several surfaces
 run Claude and none is named `agent`, it lists them and fails.
 
+`bay peers` lists every bay surface with a Claude session in it, under
+either login, with the same fields. It's the cross-login version of
+Claude Code's `ListAgents`. Only bay surfaces are listed:
+
+```
+$ bay peers
+BAY ADDRESS       STATUS  LOGIN       SESSION  VERSION  ADDRESS
+loom:b7:agent *   busy    ~/.claude2  b7-fe    2.1.329  uds:/tmp/cc-socks/88226.sock
+loom:b100:agent   idle    ~/.claude   b100-05  2.1.329  uds:/tmp/cc-socks/7249.sock
+```
+
+`*` marks your own surface.
+
 Agents use the `address` as `SendMessage`'s `to`. `bay agent-guide`
 gives them the full procedure. `uds:` addressing is not part of Claude
 Code's documented interface. It was tested on Claude Code 2.1.329.
@@ -804,6 +817,8 @@ bay pwd --json                              # machine-readable context
 bay who [[dock:]bay[:surface]]              # Claude session in a surface + its
                                             # SendMessage address (any login)
 bay who loom:b100 --json                    # machine-readable
+bay peers                                   # every Claude session in a bay surface,
+                                            # across logins (--json, --dock)
 bay status-line <field>                     # output for tmux status bar
 ```
 

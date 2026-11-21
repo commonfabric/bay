@@ -16,6 +16,15 @@ import (
 // defaultWhoSurface is the surface `bay who <bay>` looks at first.
 const defaultWhoSurface = "agent"
 
+// Agent kinds and transports reported by `bay who` and `bay peers`. Only
+// Claude is detected today; the fields exist so other agents and
+// transports (a bay inbox) can be added without changing the JSON shape.
+const (
+	agentClaude = "claude"
+	// transportClaudeUDS: Claude Code's SendMessage with `to` = address.
+	transportClaudeUDS = "claude-uds"
+)
+
 // whoResult is the JSON shape of `bay who --json`.
 type whoResult struct {
 	Dock        string `json:"dock"`
@@ -30,6 +39,8 @@ type whoResult struct {
 	SessionName string `json:"session_name,omitempty"`
 	Status      string `json:"status,omitempty"`
 	Version     string `json:"version,omitempty"`
+	Agent       string `json:"agent,omitempty"`     // agent kind in the surface: "claude"
+	Transport   string `json:"transport,omitempty"` // how to send to address: "claude-uds"
 	Address     string `json:"address,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 }
@@ -38,8 +49,11 @@ func newWhoCmd() *cobra.Command {
 	var jsonOutput bool
 
 	cmd := &cobra.Command{
-		Use:   "who [[dock:]bay[:surface]]",
-		Short: "Show the Claude session in a bay surface and its messaging address",
+		Use: "who [[dock:]bay[:surface]]",
+		// Read-only, and agents capture its output: never fork the
+		// monitor, which would hold the caller's stdout open.
+		Annotations: map[string]string{noMonitorAutostartAnnotation: "true"},
+		Short:       "Show the Claude session in a bay surface and its messaging address",
 		Long: `Show the Claude Code session occupying a bay surface, whichever Claude
 login it runs under, and the address to reach it with SendMessage.
 
@@ -238,7 +252,18 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 		return res, nil
 	}
 
-	occ, err := occupant.Describe(sys, *proc)
+	if err := describeOccupant(res, sys, *proc); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// describeOccupant fills res from the Claude process occupying its
+// surface. A process with no messaging socket leaves res unoccupied with
+// a reason; any other failure is returned.
+func describeOccupant(res *whoResult, sys occupant.System, proc occupant.Process) error {
+	res.Agent = agentClaude
+	occ, err := occupant.Describe(sys, proc)
 	if occ != nil {
 		res.PID = occ.PID
 		res.Login = occ.LoginDir
@@ -249,14 +274,15 @@ func runWho(eng *engine.Engine, sys occupant.System, target string) (*whoResult,
 	}
 	if errors.Is(err, occupant.ErrNoSocket) {
 		res.Reason = err.Error()
-		return res, nil
+		return nil
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 	res.Occupied = true
 	res.Address = occ.Address()
-	return res, nil
+	res.Transport = transportClaudeUDS
+	return nil
 }
 
 // pickWhoSurface chooses the surface for an address without one. The

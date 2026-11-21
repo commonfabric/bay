@@ -732,6 +732,8 @@ JSON (`--json`):
   "session_name": "b100-fe",
   "status": "busy",
   "version": "2.1.329",
+  "agent": "claude",
+  "transport": "claude-uds",
   "address": "uds:/tmp/cc-socks/88226.sock"
 }
 ```
@@ -741,7 +743,15 @@ An unoccupied surface has `"occupied": false`, a `reason`, and no
 process is in the pane but no messaging socket of its own is open.
 `login` is the process's `CLAUDE_CONFIG_DIR` (`~/.claude` when unset).
 `session_name`, `status` and `version` come from Claude Code's own
-session record in that directory. Any of them may be missing.
+session record in that directory. Any of them may be missing. `status`
+is whatever Claude Code records: `busy`, `idle`, `waiting` and `shell`
+have been seen.
+
+`agent` is the kind of agent found in the surface (`claude`; no other
+kind is detected yet), and `transport` says how to send to `address`:
+`claude-uds` means Claude Code's `SendMessage` with `to` set to the
+address. Read `transport` rather than assuming one, since other agents
+and transports may be added.
 
 `address` is always a socket `lsof` shows open in the Claude process:
 the one the session record names, or, with no record, the one named
@@ -754,6 +764,28 @@ is not "nobody is there".
 A surface counts as occupied only when its recorded pane is still in the
 dock's own tmux session, so a pane ID reused after a tmux restart can't
 send you to another bay. `bay who` never changes bay's state.
+
+#### `bay peers [--dock DOCK]`
+
+List every bay surface that has a Claude session in it, under any Claude
+login, one row per surface. This is the cross-login counterpart of
+Claude Code's `ListAgents`, which shows only sessions under your own
+login. Rows are keyed by bay address, which survives a session restart
+or a move to another login. Only bay surfaces are listed: Claude
+sessions outside bays are not. Read-only.
+
+```
+bay peers                 # table: bay address, status, login, session, version, address
+bay peers --json          # machine-readable
+bay peers --dock loom     # one dock
+```
+
+`--json` prints an array of `bay who --json` objects, one per surface,
+plus `"self": true` on your own surface. A surface whose Claude has no
+messaging socket, or whose sockets can't be inspected, is listed with
+no `address` and a `reason`. A dock whose tmux session can't be read,
+or a surface whose tmux window can't be read, is skipped with a warning on stderr,
+so one failure doesn't hide the rest.
 
 ### Surface commands
 
@@ -1068,12 +1100,13 @@ Shows every bay, dirty/merged flags, branch, PR, and waiting indicators.
 Claude sessions under different Claude logins (for example `~/.claude`
 and `~/.claude2` via `CLAUDE_CONFIG_DIR`) don't see each other in
 `ListAgents`, so don't address another bay by session name. Address it
-by bay, and resolve the bay address each time you send:
+by bay, and resolve the bay address each time you send. To see who is
+there to talk to, run `bay peers`.
 
 1. `bay who loom:b100 --json`. If `occupied` is false, nobody is there
    to receive a message. Don't send; tell your user, or try again later.
-2. Call `SendMessage` with `to` set to the printed `address`
-   (`uds:/tmp/cc-socks/<pid>.sock`).
+2. If `transport` is `claude-uds`, call `SendMessage` with `to` set to
+   the printed `address` (`uds:/tmp/cc-socks/<pid>.sock`).
 3. Sign the message with your own bay address (the `bay_address` from
    `bay who --json` with no argument), e.g. `— from loom:b7:agent`.
 
@@ -1085,7 +1118,7 @@ signed bay address again.
 Caveat: Claude Code's `SendMessage` documentation does not describe
 `uds:` addressing. It has been tested on Claude Code 2.1.329 only,
 across both logins. Older sessions may not accept it. `version` in the
-`bay who` output shows what the target runs.
+`bay who` and `bay peers` output shows what the target runs.
 
 ### Navigate to a waiting agent
 

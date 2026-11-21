@@ -150,6 +150,8 @@ func NewRootCmd(version string) *cobra.Command {
 	statusLineCmd.GroupID = "navigation"
 	whoCmd := newWhoCmd()
 	whoCmd.GroupID = "navigation"
+	peersCmd := newPeersCmd()
+	peersCmd.GroupID = "navigation"
 
 	// Infrastructure commands
 	dockCmd := newDockCmd()
@@ -195,6 +197,7 @@ func NewRootCmd(version string) *cobra.Command {
 		pwdCmd,
 		statusLineCmd,
 		whoCmd,
+		peersCmd,
 		dockCmd,
 		configCmd,
 		setupCmd,

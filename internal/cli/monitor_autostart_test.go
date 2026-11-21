@@ -112,6 +112,8 @@ func TestMonitorAutostart_RealOptOutCommandsAreAnnotated(t *testing.T) {
 		"version",
 		"agent-guide",
 		"prepare-worker",
+		"who",   // read-only; agents capture its output
+		"peers", // read-only; agents capture its output
 	}
 	for _, name := range mustOptOut {
 		cmd, _, err := root.Find([]string{name})

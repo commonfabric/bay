@@ -59,7 +59,7 @@ type Occupant struct {
 	Socket    string // messaging socket path
 	SessionID string // from the session record; may be empty
 	Name      string // session name, from the session record; may be empty
-	Status    string // "busy" / "idle", from the session record; may be empty
+	Status    string // e.g. "busy", "idle", "waiting", "shell", from the session record; may be empty
 	Version   string // Claude Code version, from the session record; may be empty
 }
 
@@ -69,6 +69,45 @@ func (o *Occupant) Address() string {
 		return ""
 	}
 	return "uds:" + o.Socket
+}
+
+// socketLister is implemented by a System that can list several
+// processes' sockets in one call (RealSystem: one lsof run).
+type socketLister interface {
+	UnixSocketsOf(pids []int) (map[int][]string, error)
+}
+
+// Prefetch returns a System whose UnixSockets answers for pids from one
+// batched lookup, when sys supports batching; otherwise sys itself. If
+// the batched lookup fails, sys is returned and each call inspects on
+// its own, so the failure is reported per process.
+func Prefetch(sys System, pids []int) System {
+	l, ok := sys.(socketLister)
+	if !ok || len(pids) == 0 {
+		return sys
+	}
+	m, err := l.UnixSocketsOf(pids)
+	if err != nil {
+		return sys
+	}
+	known := make(map[int]bool, len(pids))
+	for _, p := range pids {
+		known[p] = true
+	}
+	return prefetched{System: sys, known: known, socks: m}
+}
+
+type prefetched struct {
+	System
+	known map[int]bool
+	socks map[int][]string
+}
+
+func (p prefetched) UnixSockets(pid int) ([]string, error) {
+	if p.known[pid] {
+		return p.socks[pid], nil
+	}
+	return p.System.UnixSockets(pid)
 }
 
 // claudeComm is the executable name Claude Code runs under.
