@@ -16,50 +16,91 @@ import (
 // surface is included only when the dock's session exists and carries
 // the dock's session-ID marker, the recorded window is in that session,
 // and the recorded pane is in that window and alive (a dead pane kept by
-// remain-on-exit has a stale PID). Surfaces that fail any check
-// are absent from the map. A tmux query that fails is an error, so a
-// surface is never reported absent because tmux could not be read.
+// remain-on-exit has a stale PID). Surfaces that fail any check are
+// absent from the map. A tmux query that fails is an error, so a surface
+// is never reported absent because tmux could not be read.
 //
 // With names, only those surfaces are checked, and only their windows
 // are queried, so an unrelated window closing mid-lookup can't fail it.
 func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, names ...string) (map[string]int, error) {
-	pids := map[string]int{}
+	q, err := e.newPaneQuery(dock)
+	if err != nil || q == nil {
+		return map[string]int{}, err
+	}
+	return q.bayPanePIDs(bay, names)
+}
+
+// LiveDockPanePIDs is LiveSurfacePanePIDs for every bay in the dock,
+// keyed by bay ID, checking the dock's tmux session once.
+func (e *Engine) LiveDockPanePIDs(dock *manifest.Dock) (map[string]map[string]int, error) {
+	out := map[string]map[string]int{}
+	q, err := e.newPaneQuery(dock)
+	if err != nil || q == nil {
+		return out, err
+	}
+	for i := range dock.Bays {
+		pids, err := q.bayPanePIDs(&dock.Bays[i], nil)
+		if err != nil {
+			return nil, err
+		}
+		out[dock.Bays[i].ID] = pids
+	}
+	return out, nil
+}
+
+// paneQuery holds one dock's verified tmux state: the windows of its
+// owned session, and the live panes of each window queried so far.
+type paneQuery struct {
+	e         *Engine
+	inSession map[string]bool
+	panes     map[string]map[string]int // window ID -> pane ID -> PID
+}
+
+// newPaneQuery checks that the dock's tmux session exists and is the
+// dock's own (its session-ID marker matches). It returns nil when the
+// session is missing or not the dock's, and an error when tmux can't be
+// read.
+func (e *Engine) newPaneQuery(dock *manifest.Dock) (*paneQuery, error) {
 	if dock.SessionID == "" {
-		return pids, nil
+		return nil, nil
 	}
 	ok, err := e.Tmux.HasSession(dock.Name)
 	if err != nil {
 		return nil, fmt.Errorf("checking tmux session %q: %w", dock.Name, err)
 	}
 	if !ok {
-		return pids, nil
+		return nil, nil
 	}
 	marker, err := e.Tmux.GetSessionOption(dock.Name, sessionIDOption)
 	if err != nil {
 		return nil, fmt.Errorf("reading tmux session %q marker: %w", dock.Name, err)
 	}
 	if marker != dock.SessionID {
-		return pids, nil
+		return nil, nil
 	}
 	windows, err := e.Tmux.ListWindows(dock.Name)
 	if err != nil {
 		return nil, fmt.Errorf("listing windows of tmux session %q: %w", dock.Name, err)
 	}
-	inSession := make(map[string]bool, len(windows))
+	q := &paneQuery{e: e, inSession: make(map[string]bool, len(windows)), panes: map[string]map[string]int{}}
 	for _, w := range windows {
-		inSession[w.ID] = true
+		q.inSession[w.ID] = true
 	}
-	panesByWindow := map[string]map[string]int{}
+	return q, nil
+}
+
+func (q *paneQuery) bayPanePIDs(bay *manifest.Bay, names []string) (map[string]int, error) {
+	pids := map[string]int{}
 	for _, s := range bay.Surfaces {
 		if len(names) > 0 && !slices.Contains(names, s.Name) {
 			continue
 		}
-		if s.Tmux == nil || s.Tmux.PaneID == "" || !inSession[s.Tmux.WindowID] {
+		if s.Tmux == nil || s.Tmux.PaneID == "" || !q.inSession[s.Tmux.WindowID] {
 			continue
 		}
-		panes, ok := panesByWindow[s.Tmux.WindowID]
+		panes, ok := q.panes[s.Tmux.WindowID]
 		if !ok {
-			list, err := e.Tmux.ListPanes(s.Tmux.WindowID)
+			list, err := q.e.Tmux.ListPanes(s.Tmux.WindowID)
 			if err != nil {
 				return nil, fmt.Errorf("listing panes of window %s: %w", s.Tmux.WindowID, err)
 			}
@@ -69,7 +110,7 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, nam
 					panes[p.ID] = p.PID
 				}
 			}
-			panesByWindow[s.Tmux.WindowID] = panes
+			q.panes[s.Tmux.WindowID] = panes
 		}
 		if pid, ok := panes[s.Tmux.PaneID]; ok {
 			pids[s.Name] = pid
