@@ -31,21 +31,27 @@ func (e *Engine) LiveSurfacePanePIDs(dock *manifest.Dock, bay *manifest.Bay, nam
 }
 
 // LiveDockPanePIDs is LiveSurfacePanePIDs for every bay in the dock,
-// keyed by bay ID, checking the dock's tmux session once.
-func (e *Engine) LiveDockPanePIDs(dock *manifest.Dock) (map[string]map[string]int, error) {
-	out := map[string]map[string]int{}
+// keyed by bay ID, checking the dock's tmux session once. A failure to
+// read one bay's panes (a window closing mid-lookup, say) is reported in
+// bayErrs for that bay alone; the other bays' results stand. err is for
+// a failure to read the dock's session itself.
+func (e *Engine) LiveDockPanePIDs(dock *manifest.Dock) (pids map[string]map[string]int, bayErrs map[string]error, err error) {
+	pids = map[string]map[string]int{}
+	bayErrs = map[string]error{}
 	q, err := e.newPaneQuery(dock)
 	if err != nil || q == nil {
-		return out, err
+		return pids, bayErrs, err
 	}
 	for i := range dock.Bays {
-		pids, err := q.bayPanePIDs(&dock.Bays[i], nil)
+		id := dock.Bays[i].ID
+		bp, err := q.bayPanePIDs(&dock.Bays[i], nil)
 		if err != nil {
-			return nil, err
+			bayErrs[id] = err
+			continue
 		}
-		out[dock.Bays[i].ID] = pids
+		pids[id] = bp
 	}
-	return out, nil
+	return pids, bayErrs, nil
 }
 
 // paneQuery holds one dock's verified tmux state: the windows of its

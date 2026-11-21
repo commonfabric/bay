@@ -25,8 +25,11 @@ func newPeersCmd() *cobra.Command {
 	var dockFlag string
 
 	cmd := &cobra.Command{
-		Use:   "peers",
-		Short: "List the Claude sessions in bay surfaces, across Claude logins",
+		Use: "peers",
+		// Read-only, and agents capture its output: never fork the
+		// monitor, which would hold the caller's stdout open.
+		Annotations: map[string]string{noMonitorAutostartAnnotation: "true"},
+		Short:       "List the Claude sessions in bay surfaces, across Claude logins",
 		Long: `List every bay surface that has a Claude Code session in it, whichever
 Claude login the session runs under, with its bay address and the address
 to reach it with SendMessage.
@@ -67,7 +70,7 @@ bays are not. Read-only.`,
 }
 
 // runPeers lists the Claude occupants of every bay surface, in manifest
-// order. A dock whose tmux state can't be read is skipped, and a session
+// order. A dock or bay whose tmux state can't be read is skipped, and a session
 // whose sockets can't be inspected is listed without an address, each
 // with a warning on warn, so one failure doesn't hide the rest.
 func runPeers(eng *engine.Engine, sys occupant.System, dockFilter string, warn io.Writer) ([]peerResult, error) {
@@ -93,13 +96,17 @@ func runPeers(eng *engine.Engine, sys occupant.System, dockFilter string, warn i
 		if dockFilter != "" && dock.Name != dockFilter {
 			continue
 		}
-		panePIDs, err := eng.LiveDockPanePIDs(dock)
+		panePIDs, bayErrs, err := eng.LiveDockPanePIDs(dock)
 		if err != nil {
 			fmt.Fprintf(warn, "warning: skipping dock %s: %v\n", dock.Name, err)
 			continue
 		}
 		for j := range dock.Bays {
 			bay := &dock.Bays[j]
+			if err := bayErrs[bay.ID]; err != nil {
+				fmt.Fprintf(warn, "warning: skipping %s:%s: %v\n", dock.Name, bay.ID, err)
+				continue
+			}
 			for _, s := range bay.Surfaces {
 				pid, ok := panePIDs[bay.ID][s.Name]
 				if !ok {

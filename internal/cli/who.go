@@ -49,8 +49,11 @@ func newWhoCmd() *cobra.Command {
 	var jsonOutput bool
 
 	cmd := &cobra.Command{
-		Use:   "who [[dock:]bay[:surface]]",
-		Short: "Show the Claude session in a bay surface and its messaging address",
+		Use: "who [[dock:]bay[:surface]]",
+		// Read-only, and agents capture its output: never fork the
+		// monitor, which would hold the caller's stdout open.
+		Annotations: map[string]string{noMonitorAutostartAnnotation: "true"},
+		Short:       "Show the Claude session in a bay surface and its messaging address",
 		Long: `Show the Claude Code session occupying a bay surface, whichever Claude
 login it runs under, and the address to reach it with SendMessage.
 

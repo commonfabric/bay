@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -75,26 +76,54 @@ func TestRunPeers_ListsClaudeSurfacesAcrossLogins(t *testing.T) {
 
 func TestRunPeers_DockFilter(t *testing.T) {
 	eng, pids := peersFixture(t)
-	sys := &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}
-	if _, err := runPeers(eng, sys, "nosuch", &bytes.Buffer{}); err == nil {
-		t.Error("unknown dock: expected an error")
+	labs2Dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(labs2Dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	rows, err := runPeers(eng, sys, "labs", &bytes.Buffer{})
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("rows %+v, err %v", rows, err)
+	if err := eng.DockNew("labs2", labs2Dir, "", "claude", ""); err != nil {
+		t.Fatalf("DockNew labs2: %v", err)
 	}
-}
-
-func TestRunPeers_TmuxFailureSkipsDockWithWarning(t *testing.T) {
-	eng, pids := peersFixture(t)
-	eng.Tmux = failingListPanes{eng.Tmux.(*tmux.Mock)}
-	var warn bytes.Buffer
-	rows, err := runPeers(eng, &whoFakeSystem{procs: shellWithClaude(pids["agent"], 500)}, "", &warn)
+	other, err := eng.BayNew(engine.BayNewOptions{Dock: "labs2", Shell: true})
+	if err != nil {
+		t.Fatalf("BayNew labs2: %v", err)
+	}
+	otherPID, err := eng.Tmux.GetPanePID(other.Surfaces[0].Tmux.PaneID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 0 || !strings.Contains(warn.String(), "skipping dock labs") {
-		t.Fatalf("rows %+v, warn %q", rows, warn.String())
+	sys := &whoFakeSystem{procs: append(shellWithClaude(pids["agent"], 500), shellWithClaude(otherPID, 700)...)}
+
+	if _, err := runPeers(eng, sys, "nosuch", &bytes.Buffer{}); err == nil {
+		t.Error("unknown dock: expected an error")
+	}
+	all, err := runPeers(eng, sys, "", &bytes.Buffer{})
+	if err != nil || len(all) != 2 {
+		t.Fatalf("unfiltered: rows %+v, err %v", all, err)
+	}
+	for dock, want := range map[string]string{"labs": "labs:b1:agent", "labs2": "labs2:" + other.ID + ":shell"} {
+		rows, err := runPeers(eng, sys, dock, &bytes.Buffer{})
+		if err != nil || len(rows) != 1 || rows[0].BayAddress != want {
+			t.Errorf("--dock %s: rows %+v, err %v; want only %s", dock, rows, err, want)
+		}
+	}
+}
+
+func TestRunPeers_TmuxFailureSkipsOnlyThatBay(t *testing.T) {
+	// b2's window vanishing mid-lookup must not hide b1's live session.
+	eng, pids := peersFixture(t)
+	b2, _ := eng.BayShow("labs", "b2")
+	eng.Tmux = failingListPanesFor{eng.Tmux.(*tmux.Mock), b2.Surfaces[0].Tmux.WindowID}
+	procs := append(shellWithClaude(pids["agent"], 500), shellWithClaude(pids["b2:shell"], 600)...)
+	var warn bytes.Buffer
+	rows, err := runPeers(eng, &whoFakeSystem{procs: procs}, "", &warn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].BayAddress != "labs:b1:agent" {
+		t.Fatalf("rows %+v, want only labs:b1:agent", rows)
+	}
+	if !strings.Contains(warn.String(), "skipping labs:b2") {
+		t.Fatalf("warn %q", warn.String())
 	}
 }
 
