@@ -25,7 +25,7 @@ func newDocketCmd() *cobra.Command {
 docket is a separate tool that keeps a tree of work items. These commands
 read its files and do not change them.`,
 	}
-	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd())
+	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd(), newDocketKeysCmd())
 	return cmd
 }
 
@@ -98,11 +98,7 @@ Its window has the item list on the left. The right side shows the bay
 window of the item chosen in the list, with all of that window's panes.
 The bay window stays in its own tmux session and is not changed.
 
-Keys in this session:
-  Option-l, Option-h   show the next or previous item (also Option-J, Option-K)
-  Option-d             move between the list and the right side
-  Option-D             go back to the tmux session you came from
-Every other key, including the tmux prefix, goes to the window on the right.`,
+` + docket.KeysHelp,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			view, err := newDocketView()
@@ -142,6 +138,47 @@ func newDocketSidebarCmd() *cobra.Command {
 			return runSidebar(view, stateDir)
 		},
 	}
+}
+
+func newDocketKeysCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "keys",
+		Short:  "Print the docket view's keys; in a terminal, wait for a key press",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fd := int(os.Stdin.Fd())
+			if !term.IsTerminal(fd) {
+				fmt.Println(docket.KeysHelp)
+				return nil
+			}
+			fmt.Print(strings.ReplaceAll(docket.KeysHelp, "\n", "\r\n"))
+			old, err := term.MakeRaw(fd)
+			if err != nil {
+				return err
+			}
+			defer term.Restore(fd, old)
+			_, _ = os.Stdin.Read(make([]byte, 16))
+			return nil
+		},
+	}
+}
+
+// showKeys opens a tmux popup that lists the view's keys and closes on a
+// key press.
+func showKeys() error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(docket.KeysHelp, "\n")
+	width := 0
+	for _, line := range lines {
+		width = max(width, len(line))
+	}
+	_, err = realTmux("display-popup", "-E", "-T", " docket view keys ",
+		"-w", fmt.Sprint(width+4), "-h", fmt.Sprint(len(lines)+2), shellQuote(self)+" docket keys")
+	return err
 }
 
 // readKeys sends one name per key press: a printable character as itself,
@@ -258,6 +295,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 					if _, err := realTmux("detach-client"); err != nil {
 						note = err.Error()
 					}
+				}
+				action = docket.None
+			}
+			if action == docket.Help {
+				if err := showKeys(); err != nil {
+					note = err.Error()
 				}
 				action = docket.None
 			}

@@ -90,20 +90,14 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 	}
 }
 
-func TestStepKeysSkipAreasAndAskForTheRowToBeShown(t *testing.T) {
+func TestMovingTheCursorAsksForTheRowToBeShownAndEnterFoldsAnArea(t *testing.T) {
 	s := NewSidebar(tree())
-	if a := s.Key("n"); a != Show || s.Current().Name != "restart" {
-		t.Fatalf("first step: %v on %s", a, s.Current().Name)
+	// The removed item-step keys do nothing.
+	if a := s.Key("n"); a != None || !s.Current().Desk {
+		t.Errorf("n: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Key("n"); a != Show || s.Current().Name != "sidebar" {
-		t.Fatalf("second step: %v on %s", a, s.Current().Name)
-	}
-	if a := s.Key("p"); a != Show || s.Current().Name != "restart" {
-		t.Fatalf("step back: %v on %s", a, s.Current().Name)
-	}
-	s.Key("p")
-	if a := s.Key("p"); a != None || !s.Current().Desk {
-		t.Errorf("step past the top: %v on %s", a, s.Current().Name)
+	if a := s.Key("?"); a != Help {
+		t.Errorf("?: %v", a)
 	}
 	// j and k show the row they land on, and report nothing at an end.
 	if a := s.Key("k"); a != None {
@@ -160,8 +154,9 @@ func TestFilterSearchesEveryLevelAndEscapeRestoresTheList(t *testing.T) {
 
 func TestCursorStaysOnItsItemWhenTheItemsChange(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("n")
-	s.Key("n")
+	for k := 0; k < 4; k++ {
+		s.Key("j")
+	}
 	items := tree()
 	items["first"] = Item{Name: "first", Title: "New", Kind: "goal", Parent: ptr("people"),
 		Status: "open", Level: "front", Created: "0"}
@@ -299,7 +294,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l n", "M-h p", "M-J n", "M-K p"} {
+	for _, key := range []string{"M-l j", "M-h k", "M-J j", "M-K k", "M-F Space"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each step key does nothing while a pane of the view is zoomed.
 		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent

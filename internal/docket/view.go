@@ -115,16 +115,17 @@ func (v *View) Setup() error {
 	// with no binding there goes to the pane, so in the right pane it
 	// reaches the second client and the window it shows.
 	//
-	// The keys that step between items do nothing while a pane of the view
-	// is zoomed, because the list is then hidden.
+	// The keys that act on the list from either pane do nothing while a
+	// pane of the view is zoomed, because the list is then hidden.
 	step := func(key string) []string {
 		return []string{"if-shell", "-F", "-t", viewTarget, "#{window_zoomed_flag}", "", "send-keys -t '" + sidebarPane + "' " + key}
 	}
 	binds := [][]string{
-		append([]string{"M-l"}, step("n")...),
-		append([]string{"M-h"}, step("p")...),
-		append([]string{"M-J"}, step("n")...),
-		append([]string{"M-K"}, step("p")...),
+		append([]string{"M-l"}, step("j")...),
+		append([]string{"M-h"}, step("k")...),
+		append([]string{"M-J"}, step("j")...),
+		append([]string{"M-K"}, step("k")...),
+		append([]string{"M-F"}, step("Space")...),
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		{"M-D", "switch-client", "-l"},
 	}

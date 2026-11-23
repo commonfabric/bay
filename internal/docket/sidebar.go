@@ -136,18 +136,18 @@ const (
 	ShowAndFocus
 	// Quit asks the caller to take the terminal out of the view.
 	Quit
+	// Help asks the caller to show KeysHelp.
+	Help
 )
 
-// move steps the cursor by delta rows. With leaves set it skips areas, so
-// that each step lands on something that has a session to show.
-func (s *Sidebar) move(delta int, leaves bool) bool {
-	for k := s.cursor + delta; k >= 0 && k < len(s.rows); k += delta {
-		if !leaves || !s.rows[k].Area {
-			s.cursor = k
-			return true
-		}
+// move steps the cursor by delta rows and reports whether it moved.
+func (s *Sidebar) move(delta int) bool {
+	k := s.cursor + delta
+	if k < 0 || k >= len(s.rows) {
+		return false
 	}
-	return false
+	s.cursor = k
+	return true
 }
 
 // JumpRows is how many rows J and K move the cursor.
@@ -155,13 +155,7 @@ const JumpRows = 10
 
 // Key applies one key press and reports what the caller must do.
 //
-// Moving the cursor shows the row it lands on. j and k move by one row. J
-// and K move by JumpRows rows, stopping at the first or last row. n and p
-// move to the next or previous row that is not an area; the tmux keys
-// that step between items send these. g and G go to the first and
-// last row. Enter shows the row and moves focus to it; on an area
-// it folds or unfolds. Space folds. a switches between front items and
-// all levels. / starts a filter, which Enter keeps and Escape clears.
+// Moving the cursor shows the row it lands on. KeysHelp lists the keys.
 func (s *Sidebar) Key(key string) Action {
 	if s.typing {
 		switch key {
@@ -184,19 +178,11 @@ func (s *Sidebar) Key(key string) Action {
 	}
 	switch key {
 	case "j", "down":
-		if s.move(1, false) {
+		if s.move(1) {
 			return Show
 		}
 	case "k", "up":
-		if s.move(-1, false) {
-			return Show
-		}
-	case "n":
-		if s.move(1, true) {
-			return Show
-		}
-	case "p":
-		if s.move(-1, true) {
+		if s.move(-1) {
 			return Show
 		}
 	case "J", "K":
@@ -237,6 +223,8 @@ func (s *Sidebar) Key(key string) Action {
 			s.filter = ""
 			s.rebuild()
 		}
+	case "?":
+		return Help
 	case "q":
 		return Quit
 	}
@@ -273,7 +261,7 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 	for len(lines) < body {
 		lines = append(lines, "")
 	}
-	foot := "enter show  / find  a all  space fold"
+	foot := "? keys  / find  a all  space fold"
 	if s.typing {
 		foot = "/" + s.filter + "_"
 	} else if s.filter != "" {

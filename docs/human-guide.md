@@ -853,30 +853,32 @@ Bay's keys and commands work on the right side as they do in the dock. Bay
 finds the dock from the window, so a command run in a bay window acts on
 that window's dock whichever session shows it.
 
-Keys in the list:
+Press `?` in the list for a popup of every key. Keys in the list:
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Move down / up; the right side shows the row the cursor is on |
+| `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
 | `J` / `K` | Move down / up ten rows |
-| `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
-| `n` / `p` | Move to the next / previous item, passing over areas |
-| `Enter` | Show the item and move to the right side; on an area, fold or unfold |
-| `Space` | Fold or unfold an area |
+| `g` / `G` | Go to the first / last row |
+| `Enter` | Show the row and move to the right side; on an area, fold or unfold |
+| `Space` | Fold or unfold the area under the cursor |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
 | `a` | Switch between front-level items and all levels |
+| `?` | Show the keys |
+| `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
 
-Keys anywhere in the `docket` session:
+Keys from either side of the `docket` session:
 
 | Key | Action |
 |-----|--------|
-| `Option+l` / `Option+h` | Show the next / previous item, from either side |
+| `Option+l` / `Option+h` | Move down / up one row |
 | `Option+J` / `Option+K` | The same; `Option+j` / `Option+k` still select the pane below / above |
+| `Option+F` | Fold or unfold the area under the cursor |
 | `Option+d` | Move between the list and the right side |
 | `Option+D` | Go back to the tmux session you came from |
 
-The keys that show the next or previous item do nothing while a pane of the
-view is zoomed, because the list is then hidden.
+The keys that move the cursor or fold from either side do nothing while a
+pane of the view is zoomed, because the list is then hidden.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being
