@@ -134,7 +134,7 @@ const (
 	Show
 	// ShowAndFocus displays it and moves the keyboard focus to it.
 	ShowAndFocus
-	// Quit ends the sidebar.
+	// Quit asks the caller to take the terminal out of the view.
 	Quit
 )
 
