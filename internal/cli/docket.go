@@ -187,11 +187,17 @@ func showKeys() error {
 // wheel press: the button, the column and the line.
 var mousePress = regexp.MustCompile(`\x1b\[<(\d+);\d+;(\d+)M`)
 
+// wheelBurst is the longest gap between two wheel presses that belong to
+// the same notch of the wheel.
+const wheelBurst = 40 * time.Millisecond
+
 // readKeys sends one name per key press: a printable character as itself,
 // and "enter", "esc", "backspace", "up" or "down" for those keys. A press
 // of the left mouse button is "click:" and its line, counted from 0. The
 // wheel is "wheelup" or "wheeldown".
 func readKeys(keys chan<- string) {
+	var lastWheel string
+	var lastWheelAt time.Time
 	buf := make([]byte, 64)
 	for {
 		n, err := os.Stdin.Read(buf)
@@ -219,11 +225,19 @@ func readKeys(keys chan<- string) {
 				switch m[1] {
 				case "0":
 					keys <- fmt.Sprintf("click:%d", line-1)
-				// Turning the wheel up moves the cursor down.
-				case "64":
-					keys <- "wheeldown"
-				case "65":
-					keys <- "wheelup"
+				// Turning the wheel up moves the cursor down. A terminal
+				// reports one notch of the wheel as several presses in
+				// quick succession, and they count as one.
+				case "64", "65":
+					now := time.Now()
+					if m[1] != lastWheel || now.Sub(lastWheelAt) > wheelBurst {
+						if m[1] == "64" {
+							keys <- "wheeldown"
+						} else {
+							keys <- "wheelup"
+						}
+					}
+					lastWheel, lastWheelAt = m[1], now
 				}
 			}
 			if !strings.HasPrefix(chunk, "\x1b") {
