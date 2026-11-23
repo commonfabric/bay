@@ -456,3 +456,39 @@ func TestShiftJAndKJumpTenRowsAndStopAtTheEnds(t *testing.T) {
 		t.Errorf("K: %v at %d", a, at())
 	}
 }
+
+func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Render(30, 20)
+	// Rows: the desk, people, restart, tooling, sidebar.
+	if a := s.Click(2); a != Show || s.Current().Name != "restart" {
+		t.Errorf("click on an item: %v on %s", a, s.Current().Name)
+	}
+	if a := s.Click(1); a != None || s.Current().Name != "people" || !s.Current().Folded {
+		t.Errorf("click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+	}
+	at := s.Current().Name
+	for _, line := range []int{-1, len(s.Rows()), 19, 40} {
+		if a := s.Click(line); a != None || s.Current().Name != at {
+			t.Errorf("click on line %d: %v on %s", line, a, s.Current().Name)
+		}
+	}
+	// A click counts from the first row drawn, not the first row.
+	s = NewSidebar(tree())
+	s.Key("G")
+	s.Render(30, 3) // room for the last two rows
+	rows := s.Rows()
+	last := len(rows) - 1
+	if rows[last].Area || rows[last-1].Area {
+		t.Fatalf("the test needs two rows that are not areas at the end")
+	}
+	if a := s.Click(0); a != Show || s.Current().Name != rows[last-1].Name {
+		t.Errorf("click on the first row drawn: %v on %s", a, s.Current().Name)
+	}
+	if a := s.Click(1); a != Show || s.Current().Name != rows[last].Name {
+		t.Errorf("click on the second row drawn: %v on %s", a, s.Current().Name)
+	}
+	if a := s.Key("wheelup"); a != Show || s.Current().Name != rows[last-1].Name {
+		t.Errorf("wheel: %v on %s", a, s.Current().Name)
+	}
+}

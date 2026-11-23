@@ -11,6 +11,8 @@ const KeysHelp = `In the list:
   /               find by name, title or bay across every level;
                   Enter keeps the filter, Esc clears it
   a               switch between front items and all levels
+  click           go to the row; on an area, also fold or unfold it
+  wheel           move down or up one row
   ?               show this list
   q               leave the view; it keeps running
 

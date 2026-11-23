@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -181,8 +183,14 @@ func showKeys() error {
 	return err
 }
 
+// mousePress matches the report a terminal sends for a mouse button or
+// wheel press: the button, the column and the line.
+var mousePress = regexp.MustCompile(`\x1b\[<(\d+);\d+;(\d+)M`)
+
 // readKeys sends one name per key press: a printable character as itself,
-// and "enter", "esc", "backspace", "up" or "down" for those keys.
+// and "enter", "esc", "backspace", "up" or "down" for those keys. A press
+// of the left mouse button is "click:" and its line, counted from 0. The
+// wheel is "wheelup" or "wheeldown".
 func readKeys(keys chan<- string) {
 	buf := make([]byte, 64)
 	for {
@@ -206,6 +214,17 @@ func readKeys(keys chan<- string) {
 		case "\x03":
 			keys <- "ctrl-c"
 		default:
+			for _, m := range mousePress.FindAllStringSubmatch(chunk, -1) {
+				line, _ := strconv.Atoi(m[2])
+				switch m[1] {
+				case "0":
+					keys <- fmt.Sprintf("click:%d", line-1)
+				case "64":
+					keys <- "wheelup"
+				case "65":
+					keys <- "wheeldown"
+				}
+			}
 			if !strings.HasPrefix(chunk, "\x1b") {
 				for _, r := range chunk {
 					keys <- string(r)
@@ -222,8 +241,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 		return fmt.Errorf("the sidebar needs a terminal: %w", err)
 	}
 	defer term.Restore(fd, old)
-	fmt.Print("\x1b[?1049h\x1b[?25l")
-	defer fmt.Print("\x1b[?25h\x1b[?1049l")
+	// Use the alternate screen, hide the cursor, and ask for mouse presses.
+	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h")
+	defer fmt.Print("\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l")
 
 	items, err := docket.LoadItems(stateDir)
 	if err != nil {
@@ -286,7 +306,13 @@ func runSidebar(view *docket.View, stateDir string) error {
 				return nil
 			}
 			note = ""
-			action := sidebar.Key(key)
+			var action docket.Action
+			if line, ok := strings.CutPrefix(key, "click:"); ok {
+				n, _ := strconv.Atoi(line)
+				action = sidebar.Click(n)
+			} else {
+				action = sidebar.Key(key)
+			}
 			if action == docket.Quit {
 				// Leave the view without closing it: return the terminal
 				// to the tmux session it came from, or detach it when it

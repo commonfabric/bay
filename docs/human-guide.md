@@ -864,6 +864,8 @@ Press `?` in the list for a popup of every key. Keys in the list:
 | `Space` | Fold or unfold the area under the cursor |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
 | `a` | Switch between front-level items and all levels |
+| Click | Go to the row; on an area, also fold or unfold it |
+| Wheel | Move down / up one row |
 | `?` | Show the keys |
 | `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
 

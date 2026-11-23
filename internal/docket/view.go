@@ -128,6 +128,9 @@ func (v *View) Setup() error {
 		append([]string{"M-F"}, step("Space")...),
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		{"M-D", "switch-client", "-l"},
+		// A mouse press moves the keyboard to the pane under it and is
+		// passed on to that pane.
+		{"MouseDown1Pane", "select-pane", "-t", "=", ";", "send-keys", "-M"},
 	}
 	for _, b := range binds {
 		if _, err := v.Tmux(append([]string{"bind-key", "-T", KeyTable}, b...)...); err != nil {

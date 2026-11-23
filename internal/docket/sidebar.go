@@ -36,6 +36,7 @@ type Sidebar struct {
 	rows     []Row
 	cursor   int
 	top      int // first row drawn
+	body     int // rows the last Render had room for
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -177,11 +178,11 @@ func (s *Sidebar) Key(key string) Action {
 		return None
 	}
 	switch key {
-	case "j", "down":
+	case "j", "down", "wheeldown":
 		if s.move(1) {
 			return Show
 		}
-	case "k", "up":
+	case "k", "up", "wheelup":
 		if s.move(-1) {
 			return Show
 		}
@@ -231,6 +232,22 @@ func (s *Sidebar) Key(key string) Action {
 	return None
 }
 
+// Click applies a mouse press on the given line of the last Render, where
+// the first line is 0. It moves the cursor to that line's row. On an area
+// it also folds or unfolds it. A press below the rows does nothing.
+func (s *Sidebar) Click(line int) Action {
+	k := s.top + line
+	if line < 0 || line >= s.body || k >= len(s.rows) {
+		return None
+	}
+	s.cursor = k
+	if s.rows[k].Area {
+		s.toggleFold()
+		return None
+	}
+	return Show
+}
+
 func (s *Sidebar) toggleFold() {
 	row := s.Current()
 	if !row.Area {
@@ -248,6 +265,7 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 	if body < 1 {
 		body = 1
 	}
+	s.body = body
 	if s.cursor < s.top {
 		s.top = s.cursor
 	}
