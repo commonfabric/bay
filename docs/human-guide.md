@@ -822,6 +822,57 @@ bay peers                                   # every Claude session in a bay surf
 bay status-line <field>                     # output for tmux status bar
 ```
 
+### The docket view
+
+```
+bay docket view                             # open the item list beside bay windows
+```
+
+docket is a separate tool that keeps a tree of work items. Each item names the
+bays where its work happens. `bay docket view` opens a tmux session named
+`docket` with one window:
+
+- The left side lists the items, grouped under their areas. Each line shows
+  the item's name, its count of open questions (`?2`, with `!` when one
+  holds up all work), and its work state: `●` running, `○` ready, `◌` held,
+  `·` no bay.
+- The right side shows the bay window of the item chosen in the list, with
+  all of that window's panes. An item with no bay window shows its record.
+  The first line of the list is the desk, docket's agent session for asking
+  about the whole tree.
+
+The bay window is not moved. It stays in its dock's tmux session, and the
+right side is a second tmux client looking at it. Two effects follow.
+Showing a window makes it the current window of its dock's session, so a
+terminal attached to that dock follows. A window takes the size of the right
+side while it is shown there.
+
+Keys in the list:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move down / up |
+| `Enter` | Show the item and move to the right side; on an area, fold or unfold |
+| `Space` | Fold or unfold an area |
+| `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
+| `a` | Switch between front-level items and all levels |
+
+Keys anywhere in the `docket` session:
+
+| Key | Action |
+|-----|--------|
+| `Option+l` / `Option+h` | Show the next / previous item |
+| `Option+d` | Move between the list and the right side |
+| `Option+D` | Go back to the tmux session you came from |
+
+Every other key goes to the window on the right, including the tmux prefix
+and the other `Option` keys, so bay's keybindings act on the bay being
+shown. The `docket` session has its own key table and no prefix; no other
+session's keys or options are changed.
+
+The command reads docket's files (`$DOCKET_STATE`, default
+`~/.local/share/docket`) and bay's manifest. It writes neither.
+
 ### Infrastructure
 
 ```

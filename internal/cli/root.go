@@ -169,6 +169,9 @@ func NewRootCmd(version string) *cobra.Command {
 	versionCmd := newVersionCmd(version)
 	versionCmd.GroupID = "other"
 
+	docketCmd := newDocketCmd()
+	docketCmd.GroupID = "navigation"
+
 	configCmd := newConfigCmd()
 	configCmd.GroupID = "infra"
 	prepareWorkerCmd := newPrepareWorkerCmd()
@@ -198,6 +201,7 @@ func NewRootCmd(version string) *cobra.Command {
 		statusLineCmd,
 		whoCmd,
 		peersCmd,
+		docketCmd,
 		dockCmd,
 		configCmd,
 		setupCmd,
