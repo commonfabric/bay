@@ -219,10 +219,11 @@ func readKeys(keys chan<- string) {
 				switch m[1] {
 				case "0":
 					keys <- fmt.Sprintf("click:%d", line-1)
+				// Turning the wheel up moves the cursor down.
 				case "64":
-					keys <- "wheelup"
-				case "65":
 					keys <- "wheeldown"
+				case "65":
+					keys <- "wheelup"
 				}
 			}
 			if !strings.HasPrefix(chunk, "\x1b") {
