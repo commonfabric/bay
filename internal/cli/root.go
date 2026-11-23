@@ -55,7 +55,7 @@ func newEngine() (*engine.Engine, error) {
 		}
 	}
 
-	t := tmuxpkg.NewReal()
+	t := dockTmux{Interface: tmuxpkg.NewReal(), manifestFile: p.ManifestFile}
 	g := gitpkg.NewReal()
 
 	return engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g), nil

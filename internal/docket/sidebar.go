@@ -152,9 +152,10 @@ func (s *Sidebar) move(delta int, leaves bool) bool {
 
 // Key applies one key press and reports what the caller must do.
 //
-// j and k move the cursor. J and K move it to the next or previous row
-// that is not an area and show that row; the tmux keys that step between
-// items send these. Enter shows the row and moves focus to it; on an area
+// Moving the cursor shows the row it lands on. j and k move by one row. J
+// and K move to the next or previous row that is not an area; the tmux
+// keys that step between items send these. g and G go to the first and
+// last row. Enter shows the row and moves focus to it; on an area
 // it folds or unfolds. Space folds. a switches between front items and
 // all levels. / starts a filter, which Enter keeps and Escape clears.
 func (s *Sidebar) Key(key string) Action {
@@ -179,9 +180,13 @@ func (s *Sidebar) Key(key string) Action {
 	}
 	switch key {
 	case "j", "down":
-		s.move(1, false)
+		if s.move(1, false) {
+			return Show
+		}
 	case "k", "up":
-		s.move(-1, false)
+		if s.move(-1, false) {
+			return Show
+		}
 	case "J":
 		if s.move(1, true) {
 			return Show
@@ -190,10 +195,15 @@ func (s *Sidebar) Key(key string) Action {
 		if s.move(-1, true) {
 			return Show
 		}
-	case "g":
+	case "g", "G":
+		was := s.cursor
 		s.cursor = 0
-	case "G":
-		s.cursor = len(s.rows) - 1
+		if key == "G" {
+			s.cursor = len(s.rows) - 1
+		}
+		if s.cursor != was {
+			return Show
+		}
 	case "enter":
 		if s.Current().Area {
 			s.toggleFold()

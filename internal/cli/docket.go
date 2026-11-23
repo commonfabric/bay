@@ -99,7 +99,7 @@ window of the item chosen in the list, with all of that window's panes.
 The bay window stays in its own tmux session and is not changed.
 
 Keys in this session:
-  Option-l, Option-h   show the next or previous item
+  Option-l, Option-h   show the next or previous item (also Option-J, Option-K)
   Option-d             move between the list and the right side
   Option-D             go back to the tmux session you came from
 Every other key, including the tmux prefix, goes to the window on the right.`,
@@ -226,7 +226,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		sidebar.SetItems(items)
 	}
 
-	keys := make(chan string)
+	keys := make(chan string, 64)
 	go readKeys(keys)
 	resized := make(chan os.Signal, 1)
 	signal.Notify(resized, syscall.SIGWINCH)
@@ -239,6 +239,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 
+	owed := false // the cursor moved and its row has not been shown
 	draw()
 	for {
 		select {
@@ -251,7 +252,17 @@ func runSidebar(view *docket.View, stateDir string) error {
 			if action == docket.Quit {
 				return nil
 			}
+			// While more keys are waiting, only the cursor moves. The row
+			// is shown once the keys stop, so a held key does not show
+			// every row it passes.
+			if action == docket.Show && len(keys) > 0 {
+				owed = true
+				action = docket.None
+			} else if action == docket.None && owed && len(keys) == 0 {
+				action = docket.Show
+			}
 			if action == docket.Show || action == docket.ShowAndFocus {
+				owed = false
 				shown, err := view.Show(sidebar.Current(), action == docket.ShowAndFocus)
 				note = shown
 				if err != nil {

@@ -1,6 +1,7 @@
 package docket
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,6 +105,23 @@ func TestStepKeysSkipAreasAndAskForTheRowToBeShown(t *testing.T) {
 	if a := s.Key("K"); a != None || !s.Current().Desk {
 		t.Errorf("step past the top: %v on %s", a, s.Current().Name)
 	}
+	// j and k show the row they land on, and report nothing at an end.
+	if a := s.Key("k"); a != None {
+		t.Errorf("k at the top: %v", a)
+	}
+	if a := s.Key("j"); a != Show || !s.Current().Area {
+		t.Errorf("j onto an area: %v on %s", a, s.Current().Name)
+	}
+	if a := s.Key("G"); a != Show {
+		t.Errorf("G: %v", a)
+	}
+	if a := s.Key("G"); a != None {
+		t.Errorf("G when already last: %v", a)
+	}
+	if a := s.Key("j"); a != None {
+		t.Errorf("j at the bottom: %v", a)
+	}
+	s.Key("g")
 	s.Key("j")
 	if a := s.Key("enter"); a != None || !s.Rows()[1].Folded {
 		t.Errorf("enter on an area: %v, folded %v", a, s.Rows()[1].Folded)
@@ -174,8 +192,11 @@ func TestRenderKeepsTheCursorInViewAndClipsLongLines(t *testing.T) {
 type fakeTmux struct {
 	calls   []string
 	exists  map[string]bool // window ids and "=session:window" targets that exist
-	panes   int             // panes in the view window
+	panes   int             // panes in the view window: the sidebar, then the client
+	noList  bool            // the sidebar's pane has gone and the client's remains
 	clients string          // ttys list-clients prints
+	aux     []string        // ids of the linked windows in the aux session
+	stuck   map[string]bool // ids unlink-window refuses to remove
 }
 
 func (f *fakeTmux) run(args ...string) (string, error) {
@@ -184,15 +205,30 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 	case "display-message":
 		return "/dev/ttys9\n", nil
 	case "list-windows":
+		if args[1] == "-t" {
+			out := ""
+			if f.exists[recordTarget] {
+				out = "@record\n"
+			}
+			return out + strings.Join(f.aux, "\n") + "\n", nil
+		}
 		// A window named like the docket sessions but in another session
 		// must not be taken for one of them.
 		out := "@1 =docket-desk-old:view\n"
 		for target := range f.exists {
-			out += target + " " + target + "\n"
+			id := target
+			if strings.HasPrefix(target, "=") {
+				id = "@" + target[strings.Index(target, ":")+1:]
+			}
+			out += id + " " + target + "\n"
 		}
 		return out, nil
 	case "list-panes":
-		return strings.Repeat("%1\n", f.panes), nil
+		started := []string{"\"bay docket sidebar\"", "\"env -u TMUX tmux attach-session -t '=docket-aux'\""}
+		if f.noList {
+			return started[1] + "\n", nil
+		}
+		return strings.Join(started[:f.panes], "\n") + "\n", nil
 	case "list-clients":
 		return f.clients, nil
 	case "new-session":
@@ -201,7 +237,25 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 			f.panes = 1
 		}
 	case "split-window":
-		f.panes++
+		if f.noList {
+			f.noList, f.panes = false, 2
+		} else {
+			f.panes++
+		}
+	case "link-window":
+		f.aux = append(f.aux, args[3])
+	case "unlink-window":
+		id := strings.TrimPrefix(args[2], auxTarget)
+		if f.stuck[id] {
+			return "", fmt.Errorf("window only linked to one session")
+		}
+		kept := f.aux[:0]
+		for _, w := range f.aux {
+			if w != id {
+				kept = append(kept, w)
+			}
+		}
+		f.aux = kept
 	}
 	return "", nil
 }
@@ -245,8 +299,13 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	if f.ran("bind-key -T docket M-l send-keys") != 1 || f.ran("bind-key -T docket M-h send-keys") != 1 {
-		t.Errorf("step keys not bound: %v", f.calls)
+	for _, key := range []string{"M-l J", "M-h K", "M-J J", "M-K K"} {
+		k, sent, _ := strings.Cut(key, " ")
+		// Each step key does nothing while a pane of the view is zoomed.
+		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent
+		if f.ran(want) != 1 {
+			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
+		}
 	}
 	for _, c := range f.calls {
 		if strings.HasPrefix(c, "bind-key") && !strings.HasPrefix(c, "bind-key -T docket ") {
@@ -264,26 +323,41 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}
 }
 
-func TestShowSwitchesTheRightPaneToTheBayWindowOrTheRecord(t *testing.T) {
-	f := &fakeTmux{exists: map[string]bool{"@7": true}, panes: 2, clients: "/dev/ttys1\n/dev/ttys9\n"}
+func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, "@9": false, recordTarget: true}, panes: 2, clients: "/dev/ttys1\n/dev/ttys9\n"}
+	delete(f.exists, "@9")
 	v := newFakeView(f)
 
 	note, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, true)
 	if err != nil || note != "" {
 		t.Fatalf("bay window: %q %v", note, err)
 	}
-	if f.ran("switch-client -c /dev/ttys9 -t @7") != 1 || f.ran("select-pane") != 1 {
+	if f.ran("link-window -d -s @7 -t =docket-aux:") != 1 ||
+		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@7") != 1 || f.ran("select-pane") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 
-	// loom/b9 is in the manifest but its window is gone.
+	// Showing the same window again links nothing more.
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("link-window") != 1 || f.ran("unlink-window") != 0 {
+		t.Errorf("calls: %v", f.calls)
+	}
+
+	// loom/b9 is in the manifest but its window is gone. The record is
+	// shown, and the window shown before leaves the view's session.
 	note, err = v.Show(Row{Name: "gone", Bays: []string{"loom/b9"}}, false)
 	if err != nil || !strings.Contains(note, "no window") {
 		t.Fatalf("missing window: %q %v", note, err)
 	}
 	if f.ran("respawn-window -k -t =docket-aux:record docket show gone") != 1 ||
-		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:record") != 1 {
+		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@record") != 1 ||
+		f.ran("unlink-window -t =docket-aux:@7") != 1 || len(f.aux) != 0 {
 		t.Errorf("calls: %v", f.calls)
+	}
+	if f.ran("unlink-window -t =docket-aux:@record") != 0 || f.ran("link-window -d -s @record") != 0 {
+		t.Errorf("the record window was linked or unlinked: %v", f.calls)
 	}
 	if f.ran("select-pane") != 1 {
 		t.Errorf("focus moved without being asked: %v", f.calls)
@@ -302,15 +376,29 @@ func TestShowSwitchesTheRightPaneToTheBayWindowOrTheRecord(t *testing.T) {
 	}
 }
 
+func TestShowKeepsAWindowThatOnlyTheViewHolds(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, "@5": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n",
+		aux: []string{"@5"}, stuck: map[string]bool{"@5": true}}
+	v := newFakeView(f)
+	note, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false)
+	if err != nil || !strings.Contains(note, "@5") {
+		t.Fatalf("note = %q, err = %v", note, err)
+	}
+	if f.ran("kill-window") != 0 || f.ran("unlink-window -k") != 0 {
+		t.Errorf("a window was killed: %v", f.calls)
+	}
+}
+
 func TestShowStartsTheDeskOnlyWhenItIsNotRunning(t *testing.T) {
-	f := &fakeTmux{exists: map[string]bool{}, panes: 2, clients: "/dev/ttys9\n"}
+	f := &fakeTmux{exists: map[string]bool{recordTarget: true}, panes: 2, clients: "/dev/ttys9\n"}
 	v := newFakeView(f)
 	for k := 0; k < 2; k++ {
 		if _, err := v.Show(Row{Name: DeskRow, Desk: true}, false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if f.ran("start-desk") != 1 || f.ran("switch-client -c /dev/ttys9 -t =docket-desk:desk") != 2 {
+	if f.ran("start-desk") != 1 || f.ran("link-window -d -s @desk") != 1 ||
+		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@desk") != 2 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
@@ -321,5 +409,18 @@ func TestShowRestartsTheRightPaneWhenItHasGoneAndFailsWithoutAClient(t *testing.
 	_, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false)
 	if err == nil || f.ran("split-window") != 1 || f.ran("switch-client") != 0 {
 		t.Errorf("err = %v, calls: %v", err, f.calls)
+	}
+}
+
+func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{recordTarget: true, viewTarget: true}, noList: true}
+	v := newFakeView(f)
+	for k := 0; k < 2; k++ {
+		if err := v.Setup(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f.ran("split-window -h -b -f -d -t =docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
+		t.Errorf("calls: %v", f.calls)
 	}
 }

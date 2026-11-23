@@ -841,17 +841,23 @@ bays where its work happens. `bay docket view` opens a tmux session named
   The first line of the list is the desk, docket's agent session for asking
   about the whole tree.
 
-The bay window is not moved. It stays in its dock's tmux session, and the
-right side is a second tmux client looking at it. Two effects follow.
-Showing a window makes it the current window of its dock's session, so a
-terminal attached to that dock follows. A window takes the size of the right
-side while it is shown there.
+The bay window is not moved. It stays in its dock's tmux session, and it is
+also linked into the view's own tmux session while it is shown. tmux lets
+one window belong to two sessions, and each session has its own current
+window. Choosing an item therefore does not change which window its dock's
+session shows, and the dock's tabs do not appear in the view. The window is
+the same window in both places: what you type on the right side reaches it,
+and it takes the size of the right side while it is shown there.
+
+Bay's keys and commands work on the right side as they do in the dock. Bay
+finds the dock from the window, so a command run in a bay window acts on
+that window's dock whichever session shows it.
 
 Keys in the list:
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Move down / up |
+| `j` / `k` | Move down / up; the right side shows the row the cursor is on |
 | `Enter` | Show the item and move to the right side; on an area, fold or unfold |
 | `Space` | Fold or unfold an area |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
@@ -861,9 +867,13 @@ Keys anywhere in the `docket` session:
 
 | Key | Action |
 |-----|--------|
-| `Option+l` / `Option+h` | Show the next / previous item |
+| `Option+l` / `Option+h` | Show the next / previous item, from either side |
+| `Option+J` / `Option+K` | The same; `Option+j` / `Option+k` still select the pane below / above |
 | `Option+d` | Move between the list and the right side |
 | `Option+D` | Go back to the tmux session you came from |
+
+The keys that show the next or previous item do nothing while a pane of the
+view is zoomed, because the list is then hidden.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being
