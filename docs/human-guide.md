@@ -860,7 +860,7 @@ Press `?` in the list for a popup of every key. Keys in the list:
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
-| `Enter` | Show the row and move to the right side; on an area, fold or unfold |
+| `Enter` | Show the row and move to the right side |
 | `Space` | Fold or unfold the area under the cursor |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
 | `a` | Switch between front-level items and all levels |
@@ -873,11 +873,10 @@ Keys from either side of the `docket` session:
 
 | Key | Action |
 |-----|--------|
-| `Option+l` / `Option+h` | Move down / up one row |
-| `Option+J` / `Option+K` | The same; `Option+j` / `Option+k` still select the pane below / above |
-| `Option+F` | Fold or unfold the area under the cursor |
+| `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
+| `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+d` | Move between the list and the right side |
-| `Option+D` | Go back to the tmux session you came from |
+| `Option+D` | Leave the view, as `q` does |
 
 The keys that move the cursor or fold from either side do nothing while a
 pane of the view is zoomed, because the list is then hidden.

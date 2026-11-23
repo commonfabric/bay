@@ -90,7 +90,7 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 	}
 }
 
-func TestMovingTheCursorAsksForTheRowToBeShownAndEnterFoldsAnArea(t *testing.T) {
+func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) {
 	s := NewSidebar(tree())
 	// The removed item-step keys do nothing.
 	if a := s.Key("n"); a != None || !s.Current().Desk {
@@ -117,8 +117,11 @@ func TestMovingTheCursorAsksForTheRowToBeShownAndEnterFoldsAnArea(t *testing.T) 
 	}
 	s.Key("g")
 	s.Key("j")
-	if a := s.Key("enter"); a != None || !s.Rows()[1].Folded {
+	if a := s.Key("enter"); a != None || s.Rows()[1].Folded {
 		t.Errorf("enter on an area: %v, folded %v", a, s.Rows()[1].Folded)
+	}
+	if a := s.Key(" "); a != None || !s.Rows()[1].Folded {
+		t.Errorf("space on an area: %v, folded %v", a, s.Rows()[1].Folded)
 	}
 	if got := names(s); strings.Contains(got, "restart") {
 		t.Errorf("a folded area still lists its items: %s", got)
@@ -294,7 +297,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l j", "M-h k", "M-J j", "M-K k", "M-F Space"} {
+	for _, key := range []string{"M-l j", "M-h k", "M-J j", "M-K k", "M-Space Space"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each step key does nothing while a pane of the view is zoomed.
 		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent
@@ -302,10 +305,22 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
 	}
+	if f.ran("unbind-key -a -T docket") != 1 || f.ran("unbind-key") != 1 {
+		t.Errorf("the view's key table was not emptied, or another was: %v", f.calls)
+	}
+	leaveBound := false
+	defer func() {
+		if !leaveBound {
+			t.Errorf("the key that leaves the view is not bound: %v", f.calls)
+		}
+	}()
 	if f.ran(`bind-key -T docket MouseDown1Pane select-pane -t = \; send-keys -M`) != 1 {
 		t.Errorf("the mouse press is not bound to both commands: %v", f.calls)
 	}
 	for _, c := range f.calls {
+		if c == "bind-key -T docket M-D if-shell -F #{client_last_session} switch-client -l detach-client" {
+			leaveBound = true
+		}
 		if strings.HasPrefix(c, "bind-key") && !strings.HasPrefix(c, "bind-key -T docket ") {
 			t.Errorf("a key was bound outside the docket table: %s", c)
 		}

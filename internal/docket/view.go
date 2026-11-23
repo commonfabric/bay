@@ -125,13 +125,20 @@ func (v *View) Setup() error {
 		append([]string{"M-h"}, step("k")...),
 		append([]string{"M-J"}, step("j")...),
 		append([]string{"M-K"}, step("k")...),
-		append([]string{"M-F"}, step("Space")...),
+		append([]string{"M-Space"}, step("Space")...),
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
-		{"M-D", "switch-client", "-l"},
+		// Leave the view: go back to the session the terminal came from,
+		// or detach when it came from outside tmux.
+		{"M-D", "if-shell", "-F", "#{client_last_session}", "switch-client -l", "detach-client"},
 		// A mouse press moves the keyboard to the pane under it and is
 		// passed on to that pane. The backslash keeps both commands in
 		// the binding; a bare ";" would end the bind-key command.
 		{"MouseDown1Pane", "select-pane", "-t", "=", "\\;", "send-keys", "-M"},
+	}
+	// The table belongs to the view. Emptying it first removes keys that an
+	// earlier version bound.
+	if _, err := v.Tmux("unbind-key", "-a", "-T", KeyTable); err != nil {
+		return fmt.Errorf("clear the view's keys: %w", err)
 	}
 	for _, b := range binds {
 		if _, err := v.Tmux(append([]string{"bind-key", "-T", KeyTable}, b...)...); err != nil {
