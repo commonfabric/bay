@@ -35,8 +35,9 @@ type Sidebar struct {
 	typing   bool // the filter is being typed
 	rows     []Row
 	cursor   int
-	top      int // first row drawn
-	body     int // rows the last Render had room for
+	top      int  // first row drawn
+	body     int  // rows the last Render had room for
+	scrolled bool // the wheel moved the rows since the last key
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -158,6 +159,18 @@ const JumpRows = 10
 //
 // Moving the cursor shows the row it lands on. KeysHelp lists the keys.
 func (s *Sidebar) Key(key string) Action {
+	// The wheel scrolls the rows and leaves the cursor where it is, so
+	// the cursor's row can go out of sight. Any other key brings the
+	// cursor's row back into sight.
+	switch key {
+	case "wheelup":
+		s.top, s.scrolled = s.top-1, true
+		return None
+	case "wheeldown":
+		s.top, s.scrolled = s.top+1, true
+		return None
+	}
+	s.scrolled = false
 	if s.typing {
 		switch key {
 		case "enter":
@@ -178,11 +191,11 @@ func (s *Sidebar) Key(key string) Action {
 		return None
 	}
 	switch key {
-	case "j", "down", "wheeldown":
+	case "j", "down":
 		if s.move(1) {
 			return Show
 		}
-	case "k", "up", "wheelup":
+	case "k", "up":
 		if s.move(-1) {
 			return Show
 		}
@@ -258,19 +271,23 @@ func (s *Sidebar) toggleFold() {
 
 // Render draws the sidebar as height lines of at most width columns. The
 // last line is the filter or a key reminder. The second result is the
-// index of the cursor's line.
+// index of the cursor's line, which is outside the lines when the wheel has
+// scrolled the cursor's row out of sight.
 func (s *Sidebar) Render(width, height int) ([]string, int) {
 	body := height - 1
 	if body < 1 {
 		body = 1
 	}
 	s.body = body
-	if s.cursor < s.top {
-		s.top = s.cursor
+	if !s.scrolled {
+		if s.cursor < s.top {
+			s.top = s.cursor
+		}
+		if s.cursor >= s.top+body {
+			s.top = s.cursor - body + 1
+		}
 	}
-	if s.cursor >= s.top+body {
-		s.top = s.cursor - body + 1
-	}
+	s.top = max(0, min(s.top, len(s.rows)-body))
 	var lines []string
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
 		lines = append(lines, clip(rowText(s.rows[k]), width))

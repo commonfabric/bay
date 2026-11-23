@@ -506,7 +506,51 @@ func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
 	if a := s.Click(1); a != Show || s.Current().Name != rows[last].Name {
 		t.Errorf("click on the second row drawn: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Key("wheelup"); a != Show || s.Current().Name != rows[last-1].Name {
-		t.Errorf("wheel: %v on %s", a, s.Current().Name)
+}
+
+func TestWheelScrollsTheRowsWithoutMovingTheCursorAndStopsAtTheEnds(t *testing.T) {
+	items := map[string]Item{}
+	for k := 0; k < 25; k++ {
+		name := fmt.Sprintf("item%02d", k)
+		items[name] = Item{Name: name, Level: "front", Status: "open"}
+	}
+	s := NewSidebar(items)
+	rows := s.Rows()
+	first := func() string {
+		lines, _ := s.Render(30, 6) // room for five rows
+		return lines[0]
+	}
+	top := first()
+	if a := s.Key("wheelup"); a != None || first() != top {
+		t.Errorf("wheel up at the top moved the rows: %v", a)
+	}
+	for k := 0; k < 3; k++ {
+		if a := s.Key("wheeldown"); a != None {
+			t.Errorf("the wheel asked for %v", a)
+		}
+	}
+	if got := first(); !strings.Contains(got, rows[3].Name) {
+		t.Errorf("after three steps the first line is %q, want %s", got, rows[3].Name)
+	}
+	if s.Current().Name != rows[0].Name {
+		t.Errorf("the wheel moved the cursor to %s", s.Current().Name)
+	}
+	if _, cursor := s.Render(30, 6); cursor >= 0 && cursor < 5 {
+		t.Errorf("the cursor's row is drawn at line %d after scrolling past it", cursor)
+	}
+	// A click lands on the row drawn under it.
+	if a := s.Click(1); a != Show || s.Current().Name != rows[4].Name {
+		t.Errorf("click after scrolling: %v on %s", a, s.Current().Name)
+	}
+	for k := 0; k < 100; k++ {
+		s.Key("wheeldown")
+	}
+	if got := first(); !strings.Contains(got, rows[len(rows)-5].Name) {
+		t.Errorf("the wheel scrolled past the end: first line %q", got)
+	}
+	// The next key brings the cursor's row back into sight.
+	s.Key("k")
+	if _, cursor := s.Render(30, 6); cursor < 0 || cursor >= 5 {
+		t.Errorf("after a key the cursor's row is not drawn: line %d", cursor)
 	}
 }

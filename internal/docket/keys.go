@@ -11,7 +11,7 @@ const KeysHelp = `In the list:
                   Enter keeps the filter, Esc clears it
   a               switch between front items and all levels
   click           go to the row; on an area, also fold or unfold it
-  wheel           move down or up one row
+  wheel           scroll the list; the cursor stays on its row
   ?               show this list
   q               leave the view; it keeps running
 
