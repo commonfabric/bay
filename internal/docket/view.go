@@ -129,8 +129,9 @@ func (v *View) Setup() error {
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		{"M-D", "switch-client", "-l"},
 		// A mouse press moves the keyboard to the pane under it and is
-		// passed on to that pane.
-		{"MouseDown1Pane", "select-pane", "-t", "=", ";", "send-keys", "-M"},
+		// passed on to that pane. The backslash keeps both commands in
+		// the binding; a bare ";" would end the bind-key command.
+		{"MouseDown1Pane", "select-pane", "-t", "=", "\\;", "send-keys", "-M"},
 	}
 	for _, b := range binds {
 		if _, err := v.Tmux(append([]string{"bind-key", "-T", KeyTable}, b...)...); err != nil {

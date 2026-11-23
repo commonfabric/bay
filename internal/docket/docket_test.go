@@ -302,6 +302,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
 	}
+	if f.ran(`bind-key -T docket MouseDown1Pane select-pane -t = \; send-keys -M`) != 1 {
+		t.Errorf("the mouse press is not bound to both commands: %v", f.calls)
+	}
 	for _, c := range f.calls {
 		if strings.HasPrefix(c, "bind-key") && !strings.HasPrefix(c, "bind-key -T docket ") {
 			t.Errorf("a key was bound outside the docket table: %s", c)
