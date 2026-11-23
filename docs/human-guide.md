@@ -853,7 +853,8 @@ Bay's keys and commands work on the right side as they do in the dock. Bay
 finds the dock from the window, so a command run in a bay window acts on
 that window's dock whichever session shows it.
 
-Press `?` in the list for a popup of every key. Keys in the list:
+The first line of the list says which levels are shown. Press `?` in the
+list for a popup of every key. Keys in the list:
 
 | Key | Action |
 |-----|--------|
@@ -862,9 +863,12 @@ Press `?` in the list for a popup of every key. Keys in the list:
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side |
 | `Space` | Fold or unfold the area under the cursor |
+| `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
-| `a` | Switch between front-level items and all levels |
-| Click | Go to the row; on an area, also fold or unfold it |
+| `a` | Show more levels: front, then front + back, then front + back + deep |
+| `s` | Show the item's state, open questions and what it waits on, in a popup; `q` closes it |
+| `b` | Collapse the list to a narrow strip |
+| Click | Go to the row; on an area, also fold or unfold it; on `«` collapse the list; on the collapsed strip, expand it |
 | Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
 | `?` | Show the keys |
 | `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
@@ -875,11 +879,14 @@ Keys from either side of the `docket` session:
 |-----|--------|
 | `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
 | `Option+Space` | Fold or unfold the area under the cursor |
+| `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
+| `Option+B` | Collapse or expand the list |
 | `Option+d` | Move between the list and the right side |
 | `Option+D` | Leave the view, as `q` does |
 
-The keys that move the cursor or fold from either side do nothing while a
-pane of the view is zoomed, because the list is then hidden.
+The keys that move the cursor or fold from either side do nothing while the
+list is collapsed or a pane of the view is zoomed, because the list is then
+out of sight.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being

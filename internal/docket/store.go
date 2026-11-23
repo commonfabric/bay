@@ -29,10 +29,19 @@ type Item struct {
 	Created   string     `json:"created"`
 	Questions []Question `json:"questions"`
 	Sites     []Site     `json:"sites"`
+	Holds     []Hold     `json:"holds"`
+	Links     []string   `json:"links"`
+}
+
+// Hold is one thing an item's work waits on.
+type Hold struct {
+	On string `json:"on"`
 }
 
 // Question is one question an item has for its owner.
 type Question struct {
+	ID        string  `json:"id"`
+	Text      string  `json:"text"`
 	Answered  *string `json:"answered"`
 	BlocksAll bool    `json:"blocks_all"`
 }

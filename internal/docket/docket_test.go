@@ -297,13 +297,22 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l j", "M-h k", "M-J j", "M-K k", "M-Space Space"} {
+	for _, key := range []string{"M-l F5", "M-h F6", "M-J F5", "M-K F6", "M-Space F7"} {
 		k, sent, _ := strings.Cut(key, " ")
-		// Each step key does nothing while a pane of the view is zoomed.
-		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent
+		// Each of these keys does nothing while the list is zoomed away
+		// or collapsed.
+		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view.{left} #{||:#{window_zoomed_flag},#{e|<|:#{pane_width},10}}  send-keys -t '=docket:view.{left}' " + sent
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
+	}
+	if f.ran("bind-key -T docket M-? send-keys -t =docket:view.{left} F8") != 1 {
+		t.Errorf("the state key is not bound: %v", f.calls)
+	}
+	if f.ran("bind-key -T docket M-B if-shell -F -t =docket:view.{left} #{e|<|:#{pane_width},10} "+
+		"resize-pane -t '=docket:view.{left}' -x 36 "+
+		"resize-pane -t '=docket:view.{left}' -x 2 ; select-pane -t '=docket:view.{right}'") != 1 {
+		t.Errorf("the collapse key is not bound: %v", f.calls)
 	}
 	if f.ran("unbind-key -a -T docket") != 1 || f.ran("unbind-key") != 1 {
 		t.Errorf("the view's key table was not emptied, or another was: %v", f.calls)
@@ -479,31 +488,31 @@ func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
 	s := NewSidebar(tree())
 	s.Render(30, 20)
 	// Rows: the desk, people, restart, tooling, sidebar.
-	if a := s.Click(2); a != Show || s.Current().Name != "restart" {
+	if a := s.Click(3, 5); a != Show || s.Current().Name != "restart" {
 		t.Errorf("click on an item: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Click(1); a != None || s.Current().Name != "people" || !s.Current().Folded {
+	if a := s.Click(2, 5); a != None || s.Current().Name != "people" || !s.Current().Folded {
 		t.Errorf("click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
 	}
 	at := s.Current().Name
-	for _, line := range []int{-1, len(s.Rows()), 19, 40} {
-		if a := s.Click(line); a != None || s.Current().Name != at {
+	for _, line := range []int{-1, len(s.Rows()) + 1, 19, 40} {
+		if a := s.Click(line, 5); a != None || s.Current().Name != at {
 			t.Errorf("click on line %d: %v on %s", line, a, s.Current().Name)
 		}
 	}
 	// A click counts from the first row drawn, not the first row.
 	s = NewSidebar(tree())
 	s.Key("G")
-	s.Render(30, 3) // room for the last two rows
+	s.Render(30, 4) // room for the last two rows
 	rows := s.Rows()
 	last := len(rows) - 1
 	if rows[last].Area || rows[last-1].Area {
 		t.Fatalf("the test needs two rows that are not areas at the end")
 	}
-	if a := s.Click(0); a != Show || s.Current().Name != rows[last-1].Name {
+	if a := s.Click(1, 5); a != Show || s.Current().Name != rows[last-1].Name {
 		t.Errorf("click on the first row drawn: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Click(1); a != Show || s.Current().Name != rows[last].Name {
+	if a := s.Click(2, 5); a != Show || s.Current().Name != rows[last].Name {
 		t.Errorf("click on the second row drawn: %v on %s", a, s.Current().Name)
 	}
 }
@@ -517,8 +526,8 @@ func TestWheelScrollsTheRowsWithoutMovingTheCursorAndStopsAtTheEnds(t *testing.T
 	s := NewSidebar(items)
 	rows := s.Rows()
 	first := func() string {
-		lines, _ := s.Render(30, 6) // room for five rows
-		return lines[0]
+		lines, _ := s.Render(30, 7) // the heading, five rows and the last line
+		return lines[1]
 	}
 	top := first()
 	if a := s.Key("wheelup"); a != None || first() != top {
@@ -535,11 +544,11 @@ func TestWheelScrollsTheRowsWithoutMovingTheCursorAndStopsAtTheEnds(t *testing.T
 	if s.Current().Name != rows[0].Name {
 		t.Errorf("the wheel moved the cursor to %s", s.Current().Name)
 	}
-	if _, cursor := s.Render(30, 6); cursor >= 0 && cursor < 5 {
+	if _, cursor := s.Render(30, 7); cursor >= 1 && cursor <= 5 {
 		t.Errorf("the cursor's row is drawn at line %d after scrolling past it", cursor)
 	}
 	// A click lands on the row drawn under it.
-	if a := s.Click(1); a != Show || s.Current().Name != rows[4].Name {
+	if a := s.Click(2, 5); a != Show || s.Current().Name != rows[4].Name {
 		t.Errorf("click after scrolling: %v on %s", a, s.Current().Name)
 	}
 	for k := 0; k < 100; k++ {
@@ -550,7 +559,7 @@ func TestWheelScrollsTheRowsWithoutMovingTheCursorAndStopsAtTheEnds(t *testing.T
 	}
 	// The next key brings the cursor's row back into sight.
 	s.Key("k")
-	if _, cursor := s.Render(30, 6); cursor < 0 || cursor >= 5 {
+	if _, cursor := s.Render(30, 7); cursor < 1 || cursor > 5 {
 		t.Errorf("after a key the cursor's row is not drawn: line %d", cursor)
 	}
 }
@@ -564,7 +573,7 @@ func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
 		{"\x7f\x03", "backspace ctrl-c", ""},
 		{"\x1b[A\x1bOB", "up down", ""},
 		{"é/", "é /", ""},
-		{"\x1b[<0;5;7M", "click:6", ""},
+		{"\x1b[<0;5;7M", "click:6:4", ""},
 		{"\x1b[<0;5;7m", "", ""}, // the button's release
 		{"\x1b[<64;5;7M" + wheel, "wheelup wheeldown", ""},
 		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""}, // another button, another key, Option-j
@@ -584,5 +593,148 @@ func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
 	_, rest := ParseKeys(wheel[:7])
 	if keys, rest := ParseKeys(rest + wheel[7:]); len(keys) != 1 || keys[0] != "wheeldown" || rest != "" {
 		t.Errorf("a report in two reads gave %q, rest %q", keys, rest)
+	}
+}
+
+func TestLevelsCycleAndTheHeadingSaysWhichAreShown(t *testing.T) {
+	items := tree()
+	items["later"] = Item{Name: "later", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "back", Created: "1"}
+	items["someday"] = Item{Name: "someday", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "deep", Created: "2"}
+	s := NewSidebar(items)
+	for _, c := range []struct{ heading, has, lacks string }{
+		{"« front", "restart", "later someday"},
+		{"« front + back", "restart later", "someday"},
+		{"« front + back + deep", "restart later someday", ""},
+		{"« front", "restart", "later someday"},
+	} {
+		lines, _ := s.Render(40, 30)
+		got := names(s)
+		if lines[0] != c.heading {
+			t.Errorf("heading = %q, want %q", lines[0], c.heading)
+		}
+		for _, name := range strings.Fields(c.has) {
+			if !strings.Contains(got, name) {
+				t.Errorf("%s: %s is missing from %s", c.heading, name, got)
+			}
+		}
+		for _, name := range strings.Fields(c.lacks) {
+			if strings.Contains(got, name) {
+				t.Errorf("%s: %s is shown in %s", c.heading, name, got)
+			}
+		}
+		s.Key("a")
+	}
+}
+
+func TestUnfoldAllShowsEveryAreaAndPutsTheFoldsBack(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	s.Key("j")
+	s.Key(" ") // fold people
+	folded := names(s)
+	if strings.Contains(folded, "restart") {
+		t.Fatalf("people is not folded: %s", folded)
+	}
+	s.Key("u")
+	if got := names(s); !strings.Contains(got, "restart") {
+		t.Errorf("unfold all left people folded: %s", got)
+	}
+	if lines, _ := s.Render(60, 30); !strings.Contains(lines[0], "all unfolded") {
+		t.Errorf("the heading does not say every area is unfolded: %q", lines[0])
+	}
+	// A fold made in between is dropped when the folds are put back.
+	for s.Current().Name != "tooling" {
+		s.Key("j")
+	}
+	s.Key(" ")
+	s.Key("u")
+	if got := names(s); got != folded {
+		t.Errorf("after putting the folds back: %s, want %s", got, folded)
+	}
+	// The areas above the cursor's row stay unfolded.
+	s.Key("u")
+	for s.Current().Name != "restart" {
+		s.Key("k")
+	}
+	s.Key("u")
+	if got := names(s); !strings.Contains(got, "restart") || s.Current().Name != "restart" {
+		t.Errorf("the cursor's row was folded away: %s, cursor on %s", got, s.Current().Name)
+	}
+}
+
+func TestCollapseAndExpandByKeyAndByClick(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Render(36, 20)
+	if a := s.Key("b"); a != Collapse {
+		t.Errorf("b: %v", a)
+	}
+	if a := s.Click(0, 0); a != Collapse {
+		t.Errorf("click on the mark: %v", a)
+	}
+	if a := s.Click(0, 9); a != None || !s.Current().Desk {
+		t.Errorf("click on the heading's text: %v on %s", a, s.Current().Name)
+	}
+	lines, cursor := s.Render(CollapsedWidth, 20)
+	if len(lines) != 20 || lines[0] != "»" || strings.TrimSpace(strings.Join(lines[1:], "")) != "" || cursor != -1 {
+		t.Errorf("collapsed: %q, cursor %d", lines, cursor)
+	}
+	if a := s.Click(5, 1); a != Expand || !s.Current().Desk {
+		t.Errorf("click on the collapsed list: %v on %s", a, s.Current().Name)
+	}
+}
+
+func TestKeysSentByTmuxWorkWhileAFilterIsBeingTyped(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("/")
+	s.Key("r")
+	before := names(s)
+	if a := s.Key("f5"); a != Show {
+		t.Errorf("f5 while typing: %v", a)
+	}
+	if a := s.Key("f8"); a != State {
+		t.Errorf("f8 while typing: %v", a)
+	}
+	if names(s) != before {
+		t.Errorf("a key sent by tmux changed the filter: %s", names(s))
+	}
+	// The same letters typed by hand go into the filter.
+	s.Key("s")
+	if names(s) == before {
+		t.Errorf("a typed letter did not change the filter")
+	}
+}
+
+func TestSummaryGivesTheStateQuestionsAndHolds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "items", "restart")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := `{"name":"restart","title":"Restart safely","kind":"goal","status":"open","level":"front","work":"held",
+		"sites":[{"kind":"bay","ref":"loom/b7"}],"links":["loom#12"],"holds":[{"on":"a review"}],
+		"questions":[{"id":"q1","text":"Old?","answered":"2026-01-01"},{"id":"q2","text":"Merge it?","blocks_all":true}]}`
+	record := "# Restart\n\n## Purpose\n\nWhy.\n\n## State\n\nPR open.\nWaiting.\n\n## History\n\n- old\n"
+	for name, text := range map[string]string{"item.json": item, "record.md": record} {
+		if err := os.WriteFile(filepath.Join(path, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := Summary(dir, "restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"restart — Restart safely", "held", "bays loom/b7", "links loom#12",
+		"Waits on: a review", "Question q2 (holds up all work): Merge it?", "PR open.\nWaiting."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary lacks %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"Old?", "Why.", "- old"} {
+		if strings.Contains(got, not) {
+			t.Errorf("summary includes %q:\n%s", not, got)
+		}
+	}
+	if _, err := Summary(dir, "nothing"); err == nil {
+		t.Error("an unknown item gave no error")
 	}
 }

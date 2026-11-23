@@ -115,17 +115,27 @@ func (v *View) Setup() error {
 	// with no binding there goes to the pane, so in the right pane it
 	// reaches the second client and the window it shows.
 	//
-	// The keys that act on the list from either pane do nothing while a
-	// pane of the view is zoomed, because the list is then hidden.
-	step := func(key string) []string {
-		return []string{"if-shell", "-F", "-t", viewTarget, "#{window_zoomed_flag}", "", "send-keys -t '" + sidebarPane + "' " + key}
+	//
+	// The keys that act on the list from either pane send it function
+	// keys. They do nothing while the list is out of sight: a pane of the
+	// view is zoomed, or the list is collapsed.
+	narrow := fmt.Sprintf("#{e|<|:#{pane_width},%d}", collapsedBelow)
+	hidden := "#{||:#{window_zoomed_flag}," + narrow + "}"
+	list := func(key string) []string {
+		return []string{"if-shell", "-F", "-t", sidebarPane, hidden, "", "send-keys -t '" + sidebarPane + "' " + key}
 	}
 	binds := [][]string{
-		append([]string{"M-l"}, step("j")...),
-		append([]string{"M-h"}, step("k")...),
-		append([]string{"M-J"}, step("j")...),
-		append([]string{"M-K"}, step("k")...),
-		append([]string{"M-Space"}, step("Space")...),
+		append([]string{"M-l"}, list("F5")...),
+		append([]string{"M-h"}, list("F6")...),
+		append([]string{"M-J"}, list("F5")...),
+		append([]string{"M-K"}, list("F6")...),
+		append([]string{"M-Space"}, list("F7")...),
+		// Show the chosen item's state.
+		{"M-?", "send-keys", "-t", sidebarPane, "F8"},
+		// Collapse the list and move to the right side, or expand it.
+		{"M-B", "if-shell", "-F", "-t", sidebarPane, narrow,
+			fmt.Sprintf("resize-pane -t '%s' -x %d", sidebarPane, SidebarWidth),
+			fmt.Sprintf("resize-pane -t '%s' -x %d ; select-pane -t '%s'", sidebarPane, CollapsedWidth, viewerPane)},
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		// Leave the view: go back to the session the terminal came from,
 		// or detach when it came from outside tmux.
@@ -146,6 +156,22 @@ func (v *View) Setup() error {
 		}
 	}
 	return nil
+}
+
+// Collapse shrinks the sidebar to CollapsedWidth and moves the keyboard to
+// the right pane.
+func (v *View) Collapse() error {
+	if _, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(CollapsedWidth)); err != nil {
+		return err
+	}
+	_, err := v.Tmux("select-pane", "-t", viewerPane)
+	return err
+}
+
+// Expand gives the sidebar its full width.
+func (v *View) Expand() error {
+	_, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(SidebarWidth))
+	return err
 }
 
 // ensureViewer starts whichever of the view window's two panes is

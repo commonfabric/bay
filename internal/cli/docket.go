@@ -26,7 +26,7 @@ func newDocketCmd() *cobra.Command {
 docket is a separate tool that keeps a tree of work items. These commands
 read its files and do not change them.`,
 	}
-	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd(), newDocketKeysCmd())
+	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd(), newDocketKeysCmd(), newDocketStateCmd())
 	return cmd
 }
 
@@ -165,6 +165,38 @@ func newDocketKeysCmd() *cobra.Command {
 	}
 }
 
+func newDocketStateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "state <item>",
+		Short:  "Print where a docket item's work stands",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			stateDir, err := docket.StateDir()
+			if err != nil {
+				return err
+			}
+			text, err := docket.Summary(stateDir, args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Print(text)
+			return nil
+		},
+	}
+}
+
+// showState opens a tmux popup with the item's summary in a pager.
+func showState(item string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	_, err = realTmux("display-popup", "-E", "-T", " "+item+" ", "-w", "80%", "-h", "70%",
+		shellQuote(self)+" docket state "+shellQuote(item)+" 2>&1 | less -R")
+	return err
+}
+
 // showKeys opens a tmux popup that lists the view's keys and closes on a
 // key press.
 func showKeys() error {
@@ -274,9 +306,11 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 			note = ""
 			var action docket.Action
-			if line, ok := strings.CutPrefix(key, "click:"); ok {
-				n, _ := strconv.Atoi(line)
-				action = sidebar.Click(n)
+			if at, ok := strings.CutPrefix(key, "click:"); ok {
+				line, column, _ := strings.Cut(at, ":")
+				l, _ := strconv.Atoi(line)
+				c, _ := strconv.Atoi(column)
+				action = sidebar.Click(l, c)
 			} else {
 				action = sidebar.Key(key)
 			}
@@ -291,10 +325,27 @@ func runSidebar(view *docket.View, stateDir string) error {
 				}
 				action = docket.None
 			}
-			if action == docket.Help {
-				if err := showKeys(); err != nil {
-					note = err.Error()
+			var err error
+			switch action {
+			case docket.Help:
+				err = showKeys()
+			case docket.State:
+				row := sidebar.Current()
+				if row.Desk {
+					note = "the desk has no item to show"
+				} else {
+					item, _, _ := strings.Cut(row.Name, " ")
+					err = showState(item)
 				}
+			case docket.Collapse:
+				err = view.Collapse()
+			case docket.Expand:
+				err = view.Expand()
+			}
+			if err != nil {
+				note = err.Error()
+			}
+			if action != docket.Show && action != docket.ShowAndFocus {
 				action = docket.None
 			}
 			// While more keys are waiting, only the cursor moves. The row

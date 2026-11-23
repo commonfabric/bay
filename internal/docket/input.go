@@ -12,8 +12,8 @@ import (
 // arrived. The caller puts those bytes in front of its next read.
 //
 // A printable character is named by itself. The other names are "enter",
-// "esc", "backspace", "up", "down" and "ctrl-c". A press of the left mouse
-// button is "click:" and its line, counted from 0. The wheel is "wheelup"
+// "esc", "backspace", "up", "down", "ctrl-c" and "f5" to "f8". A press of the left mouse
+// button is "click:", its line, ":" and its column, both counted from 0. The wheel is "wheelup"
 // or "wheeldown". Every other key and mouse report produces no name.
 func ParseKeys(input string) (keys []string, rest string) {
 	if input == "\x1b" {
@@ -80,6 +80,9 @@ func parseEscape(input string) (name string, used int, complete bool) {
 				if body == "" {
 					return arrow(final), k + 1, true
 				}
+				if final == '~' {
+					return functionKey(body), k + 1, true
+				}
 				return "", k + 1, true
 			}
 		}
@@ -88,6 +91,12 @@ func parseEscape(input string) (name string, used int, complete bool) {
 	// Escape followed by another character is that key with Option held.
 	_, size := utf8.DecodeRuneInString(input[1:])
 	return "", 1 + size, true
+}
+
+// functionKey names F5 to F8, which the view's tmux keys send, from the
+// number a terminal reports for them.
+func functionKey(number string) string {
+	return map[string]string{"15": "f5", "17": "f6", "18": "f7", "19": "f8"}[number]
 }
 
 func arrow(final byte) string {
@@ -107,13 +116,17 @@ func mouse(fields string, final byte) string {
 	if final != 'M' || len(parts) != 3 {
 		return ""
 	}
+	column, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return ""
+	}
 	line, err := strconv.Atoi(parts[2])
 	if err != nil {
 		return ""
 	}
 	switch parts[0] {
 	case "0":
-		return fmt.Sprintf("click:%d", line-1)
+		return fmt.Sprintf("click:%d:%d", line-1, column-1)
 	case "64":
 		return "wheelup"
 	case "65":

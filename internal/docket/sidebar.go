@@ -30,7 +30,8 @@ type Row struct {
 type Sidebar struct {
 	items    map[string]Item
 	folded   map[string]bool
-	allLevel bool
+	levels   int             // 0 front; 1 front and back; 2 every level
+	saved    map[string]bool // the folds to restore while every area is unfolded; else nil
 	filter   string
 	typing   bool // the filter is being typed
 	rows     []Row
@@ -38,6 +39,7 @@ type Sidebar struct {
 	top      int  // first row drawn
 	body     int  // rows the last Render had room for
 	scrolled bool // the wheel moved the rows since the last key
+	width    int  // columns the last Render had
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -62,8 +64,29 @@ func (s *Sidebar) shown(item Item) bool {
 		text := strings.ToLower(item.Name + " " + item.Title + " " + strings.Join(item.BayRefs(), " "))
 		return strings.Contains(text, strings.ToLower(s.filter))
 	}
-	return s.allLevel || item.Level == "front"
+	return levelRank(item.Level) <= s.levels
 }
+
+// levelRank orders the levels: front 0, back 1, deep and any other value 2.
+func levelRank(level string) int {
+	switch level {
+	case "front", "":
+		return 0
+	case "back":
+		return 1
+	}
+	return 2
+}
+
+// levelNames says which levels each setting of Sidebar.levels shows.
+var levelNames = []string{"front", "front + back", "front + back + deep"}
+
+// CollapsedWidth is the width of the sidebar's pane while it is collapsed.
+// A pane narrower than collapsedBelow is drawn as collapsed.
+const (
+	CollapsedWidth = 2
+	collapsedBelow = 10
+)
 
 // rebuild recomputes the rows. An area is shown when an item beneath it is
 // shown. A filter searches every level and ignores folds.
@@ -140,6 +163,12 @@ const (
 	Quit
 	// Help asks the caller to show KeysHelp.
 	Help
+	// State asks the caller to show the current row's item.
+	State
+	// Collapse asks the caller to shrink the sidebar to CollapsedWidth.
+	Collapse
+	// Expand asks the caller to give the sidebar its full width again.
+	Expand
 )
 
 // move steps the cursor by delta rows and reports whether it moved.
@@ -171,24 +200,14 @@ func (s *Sidebar) Key(key string) Action {
 		return None
 	}
 	s.scrolled = false
-	if s.typing {
-		switch key {
-		case "enter":
-			s.typing = false
-		case "esc":
-			s.typing, s.filter = false, ""
-		case "backspace":
-			if s.filter != "" {
-				r := []rune(s.filter)
-				s.filter = string(r[:len(r)-1])
-			}
-		default:
-			if len([]rune(key)) == 1 {
-				s.filter += key
-			}
-		}
-		s.rebuild()
-		return None
+	// The view's tmux keys send function keys, which act the same whether
+	// or not a filter is being typed.
+	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s"}[key]
+	if sent != "" {
+		key = sent
+	}
+	if s.typing && sent == "" {
+		return s.typeFilter(key)
 	}
 	switch key {
 	case "j", "down":
@@ -226,8 +245,14 @@ func (s *Sidebar) Key(key string) Action {
 	case " ":
 		s.toggleFold()
 	case "a":
-		s.allLevel = !s.allLevel
+		s.levels = (s.levels + 1) % len(levelNames)
 		s.rebuild()
+	case "u":
+		s.toggleUnfoldAll()
+	case "s":
+		return State
+	case "b":
+		return Collapse
 	case "/":
 		s.typing, s.filter = true, ""
 		s.rebuild()
@@ -244,10 +269,60 @@ func (s *Sidebar) Key(key string) Action {
 	return None
 }
 
-// Click applies a mouse press on the given line of the last Render, where
-// the first line is 0. It moves the cursor to that line's row. On an area
-// it also folds or unfolds it. A press below the rows does nothing.
-func (s *Sidebar) Click(line int) Action {
+// typeFilter applies one key while the filter is being typed.
+func (s *Sidebar) typeFilter(key string) Action {
+	switch key {
+	case "enter":
+		s.typing = false
+	case "esc":
+		s.typing, s.filter = false, ""
+	case "backspace":
+		if s.filter != "" {
+			r := []rune(s.filter)
+			s.filter = string(r[:len(r)-1])
+		}
+	default:
+		if len([]rune(key)) == 1 {
+			s.filter += key
+		}
+	}
+	s.rebuild()
+	return None
+}
+
+// toggleUnfoldAll unfolds every area, or puts the folds back as they were
+// before it did. Folds made in between are dropped. The areas above the
+// cursor's row stay unfolded, so that the row stays in the list.
+func (s *Sidebar) toggleUnfoldAll() {
+	if s.saved == nil {
+		s.saved, s.folded = s.folded, map[string]bool{}
+		s.rebuild()
+		return
+	}
+	s.folded, s.saved = s.saved, nil
+	name, _, _ := strings.Cut(s.Current().Name, " ")
+	for item, ok := s.items[name]; ok && item.Parent != nil; item, ok = s.items[*item.Parent] {
+		delete(s.folded, *item.Parent)
+	}
+	s.rebuild()
+}
+
+// Click applies a mouse press at the given line and column of the last
+// Render, both counted from 0. On a row it moves the cursor there, and on
+// an area it also folds or unfolds it. On the mark at the start of the
+// first line it collapses the sidebar, and anywhere on a collapsed sidebar
+// it expands it. Elsewhere it does nothing.
+func (s *Sidebar) Click(line, column int) Action {
+	if s.width < collapsedBelow {
+		return Expand
+	}
+	if line == 0 {
+		if column < 2 {
+			return Collapse
+		}
+		return None
+	}
+	line-- // the first line is the heading
 	k := s.top + line
 	if line < 0 || line >= s.body || k >= len(s.rows) {
 		return None
@@ -270,11 +345,19 @@ func (s *Sidebar) toggleFold() {
 }
 
 // Render draws the sidebar as height lines of at most width columns. The
-// last line is the filter or a key reminder. The second result is the
-// index of the cursor's line, which is outside the lines when the wheel has
-// scrolled the cursor's row out of sight.
+// first line is a heading that says which levels are shown. The last line
+// is the filter or a key reminder. The second result is the index of the
+// cursor's line, which is outside the lines when the wheel has scrolled
+// the cursor's row out of sight. A sidebar narrower than collapsedBelow is
+// drawn as a mark on the first line and nothing else.
 func (s *Sidebar) Render(width, height int) ([]string, int) {
-	body := height - 1
+	s.width = width
+	if width < collapsedBelow {
+		lines := make([]string, max(height, 1))
+		lines[0] = clip("»", width)
+		return lines, -1
+	}
+	body := height - 2
 	if body < 1 {
 		body = 1
 	}
@@ -288,22 +371,28 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 		}
 	}
 	s.top = max(0, min(s.top, len(s.rows)-body))
-	var lines []string
+	head := "« " + levelNames[s.levels]
+	if s.filter != "" || s.typing {
+		head = "« every level, found by name"
+	} else if s.saved != nil {
+		head += ", all unfolded"
+	}
+	lines := []string{clip(head, width)}
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
 		lines = append(lines, clip(rowText(s.rows[k]), width))
 	}
-	for len(lines) < body {
+	for len(lines) < body+1 {
 		lines = append(lines, "")
 	}
-	foot := "? keys  / find  a all  space fold"
+	foot := "? keys  / find  a levels  u unfold"
 	if s.typing {
 		foot = "/" + s.filter + "_"
 	} else if s.filter != "" {
 		foot = "/" + s.filter + "  (esc clears)"
-	} else if s.allLevel {
-		foot = "all levels  a front only  / find"
+	} else if s.saved != nil {
+		foot = "u puts the folds back  ? keys"
 	}
-	return append(lines, clip(foot, width)), s.cursor - s.top
+	return append(lines, clip(foot, width)), s.cursor - s.top + 1
 }
 
 func rowText(r Row) string {
