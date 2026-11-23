@@ -121,10 +121,10 @@ func (v *View) Setup() error {
 		return []string{"if-shell", "-F", "-t", viewTarget, "#{window_zoomed_flag}", "", "send-keys -t '" + sidebarPane + "' " + key}
 	}
 	binds := [][]string{
-		append([]string{"M-l"}, step("J")...),
-		append([]string{"M-h"}, step("K")...),
-		append([]string{"M-J"}, step("J")...),
-		append([]string{"M-K"}, step("K")...),
+		append([]string{"M-l"}, step("n")...),
+		append([]string{"M-h"}, step("p")...),
+		append([]string{"M-J"}, step("n")...),
+		append([]string{"M-K"}, step("p")...),
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		{"M-D", "switch-client", "-l"},
 	}

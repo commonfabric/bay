@@ -150,11 +150,15 @@ func (s *Sidebar) move(delta int, leaves bool) bool {
 	return false
 }
 
+// JumpRows is how many rows J and K move the cursor.
+const JumpRows = 10
+
 // Key applies one key press and reports what the caller must do.
 //
 // Moving the cursor shows the row it lands on. j and k move by one row. J
-// and K move to the next or previous row that is not an area; the tmux
-// keys that step between items send these. g and G go to the first and
+// and K move by JumpRows rows, stopping at the first or last row. n and p
+// move to the next or previous row that is not an area; the tmux keys
+// that step between items send these. g and G go to the first and
 // last row. Enter shows the row and moves focus to it; on an area
 // it folds or unfolds. Space folds. a switches between front items and
 // all levels. / starts a filter, which Enter keeps and Escape clears.
@@ -187,12 +191,22 @@ func (s *Sidebar) Key(key string) Action {
 		if s.move(-1, false) {
 			return Show
 		}
-	case "J":
+	case "n":
 		if s.move(1, true) {
 			return Show
 		}
-	case "K":
+	case "p":
 		if s.move(-1, true) {
+			return Show
+		}
+	case "J", "K":
+		was := s.cursor
+		if key == "J" {
+			s.cursor = min(s.cursor+JumpRows, len(s.rows)-1)
+		} else {
+			s.cursor = max(s.cursor-JumpRows, 0)
+		}
+		if s.cursor != was {
 			return Show
 		}
 	case "g", "G":

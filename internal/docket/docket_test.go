@@ -92,17 +92,17 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 
 func TestStepKeysSkipAreasAndAskForTheRowToBeShown(t *testing.T) {
 	s := NewSidebar(tree())
-	if a := s.Key("J"); a != Show || s.Current().Name != "restart" {
+	if a := s.Key("n"); a != Show || s.Current().Name != "restart" {
 		t.Fatalf("first step: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Key("J"); a != Show || s.Current().Name != "sidebar" {
+	if a := s.Key("n"); a != Show || s.Current().Name != "sidebar" {
 		t.Fatalf("second step: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Key("K"); a != Show || s.Current().Name != "restart" {
+	if a := s.Key("p"); a != Show || s.Current().Name != "restart" {
 		t.Fatalf("step back: %v on %s", a, s.Current().Name)
 	}
-	s.Key("K")
-	if a := s.Key("K"); a != None || !s.Current().Desk {
+	s.Key("p")
+	if a := s.Key("p"); a != None || !s.Current().Desk {
 		t.Errorf("step past the top: %v on %s", a, s.Current().Name)
 	}
 	// j and k show the row they land on, and report nothing at an end.
@@ -160,8 +160,8 @@ func TestFilterSearchesEveryLevelAndEscapeRestoresTheList(t *testing.T) {
 
 func TestCursorStaysOnItsItemWhenTheItemsChange(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("J")
-	s.Key("J")
+	s.Key("n")
+	s.Key("n")
 	items := tree()
 	items["first"] = Item{Name: "first", Title: "New", Kind: "goal", Parent: ptr("people"),
 		Status: "open", Level: "front", Created: "0"}
@@ -299,7 +299,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l J", "M-h K", "M-J J", "M-K K"} {
+	for _, key := range []string{"M-l n", "M-h p", "M-J n", "M-K p"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each step key does nothing while a pane of the view is zoomed.
 		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent
@@ -422,5 +422,42 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 	}
 	if f.ran("split-window -h -b -f -d -t =docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
 		t.Errorf("calls: %v", f.calls)
+	}
+}
+
+func TestShiftJAndKJumpTenRowsAndStopAtTheEnds(t *testing.T) {
+	items := map[string]Item{}
+	for k := 0; k < 25; k++ {
+		name := fmt.Sprintf("item%02d", k)
+		items[name] = Item{Name: name, Level: "front", Status: "open"}
+	}
+	s := NewSidebar(items)
+	last := len(s.Rows()) - 1
+	if last < 2*JumpRows {
+		t.Fatalf("too few rows to test a jump: %d", last+1)
+	}
+	at := func() int {
+		for k, r := range s.Rows() {
+			if r.Name == s.Current().Name {
+				return k
+			}
+		}
+		return -1
+	}
+	if a := s.Key("K"); a != None || at() != 0 {
+		t.Errorf("K at the top: %v at %d", a, at())
+	}
+	if a := s.Key("J"); a != Show || at() != JumpRows {
+		t.Errorf("J: %v at %d", a, at())
+	}
+	s.Key("J")
+	if a := s.Key("J"); a != Show || at() != last {
+		t.Errorf("J near the bottom: %v at %d, last %d", a, at(), last)
+	}
+	if a := s.Key("J"); a != None {
+		t.Errorf("J at the bottom: %v", a)
+	}
+	if a := s.Key("K"); a != Show || at() != last-JumpRows {
+		t.Errorf("K: %v at %d", a, at())
 	}
 }

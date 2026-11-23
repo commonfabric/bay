@@ -858,6 +858,8 @@ Keys in the list:
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move down / up; the right side shows the row the cursor is on |
+| `J` / `K` | Move down / up ten rows |
+| `n` / `p` | Move to the next / previous item, passing over areas |
 | `Enter` | Show the item and move to the right side; on an area, fold or unfold |
 | `Space` | Fold or unfold an area |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |

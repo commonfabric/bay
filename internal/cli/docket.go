@@ -114,8 +114,9 @@ Every other key, including the tmux prefix, goes to the window on the right.`,
 			}
 			target := "=" + docket.ViewSession + ":" + docket.ViewWindow
 			if os.Getenv("TMUX") == "" {
-				fmt.Printf("attach with: tmux attach -t %s\n", target)
-				return nil
+				attach := exec.Command("tmux", "attach-session", "-t", target)
+				attach.Stdin, attach.Stdout, attach.Stderr = os.Stdin, os.Stdout, os.Stderr
+				return attach.Run()
 			}
 			_, err = realTmux("switch-client", "-t", target)
 			return err
