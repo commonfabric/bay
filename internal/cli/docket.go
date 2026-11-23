@@ -251,7 +251,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 			note = ""
 			action := sidebar.Key(key)
 			if action == docket.Quit {
-				return nil
+				// Leave the view without closing it: return the terminal
+				// to the tmux session it came from, or detach it when it
+				// came from outside tmux. The list keeps running.
+				if _, err := realTmux("switch-client", "-l"); err != nil {
+					if _, err := realTmux("detach-client"); err != nil {
+						note = err.Error()
+					}
+				}
+				action = docket.None
 			}
 			// While more keys are waiting, only the cursor moves. The row
 			// is shown once the keys stop, so a held key does not show

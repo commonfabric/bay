@@ -859,6 +859,7 @@ Keys in the list:
 |-----|--------|
 | `j` / `k` | Move down / up; the right side shows the row the cursor is on |
 | `J` / `K` | Move down / up ten rows |
+| `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
 | `n` / `p` | Move to the next / previous item, passing over areas |
 | `Enter` | Show the item and move to the right side; on an area, fold or unfold |
 | `Space` | Fold or unfold an area |
