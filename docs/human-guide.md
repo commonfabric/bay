@@ -860,7 +860,7 @@ Press `?` in the list for a popup of every key. Keys in the list:
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
-| `Enter` | Show the row and move to the right side |
+| `Enter` | Move to the right side |
 | `Space` | Fold or unfold the area under the cursor |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
 | `a` | Switch between front-level items and all levels |

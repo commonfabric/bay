@@ -5,7 +5,7 @@ const KeysHelp = `In the list:
   j, k            move down or up one row; the right side shows it
   J, K            move down or up ten rows
   g, G            go to the first or last row
-  Enter           show the row and move to the right side
+  Enter           move to the right side
   Space           fold or unfold the area under the cursor
   /               find by name, title or bay across every level;
                   Enter keeps the filter, Esc clears it
