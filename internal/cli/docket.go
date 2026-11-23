@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -183,53 +182,21 @@ func showKeys() error {
 	return err
 }
 
-// mousePress matches the report a terminal sends for a mouse button or
-// wheel press: the button, the column and the line.
-var mousePress = regexp.MustCompile(`\x1b\[<(\d+);\d+;(\d+)M`)
-
-// readKeys sends one name per key press: a printable character as itself,
-// and "enter", "esc", "backspace", "up" or "down" for those keys. A press
-// of the left mouse button is "click:" and its line, counted from 0. The
-// wheel is "wheelup" or "wheeldown".
+// readKeys sends the name of each key and mouse press read from the
+// terminal, as docket.ParseKeys names them.
 func readKeys(keys chan<- string) {
-	buf := make([]byte, 64)
+	buf := make([]byte, 256)
+	pending := ""
 	for {
 		n, err := os.Stdin.Read(buf)
 		if err != nil {
 			close(keys)
 			return
 		}
-		chunk := string(buf[:n])
-		switch chunk {
-		case "\r", "\n":
-			keys <- "enter"
-		case "\x1b":
-			keys <- "esc"
-		case "\x7f", "\b":
-			keys <- "backspace"
-		case "\x1b[A", "\x1bOA":
-			keys <- "up"
-		case "\x1b[B", "\x1bOB":
-			keys <- "down"
-		case "\x03":
-			keys <- "ctrl-c"
-		default:
-			for _, m := range mousePress.FindAllStringSubmatch(chunk, -1) {
-				line, _ := strconv.Atoi(m[2])
-				switch m[1] {
-				case "0":
-					keys <- fmt.Sprintf("click:%d", line-1)
-				case "64":
-					keys <- "wheelup"
-				case "65":
-					keys <- "wheeldown"
-				}
-			}
-			if !strings.HasPrefix(chunk, "\x1b") {
-				for _, r := range chunk {
-					keys <- string(r)
-				}
-			}
+		var names []string
+		names, pending = docket.ParseKeys(pending + string(buf[:n]))
+		for _, name := range names {
+			keys <- name
 		}
 	}
 }

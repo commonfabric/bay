@@ -554,3 +554,35 @@ func TestWheelScrollsTheRowsWithoutMovingTheCursorAndStopsAtTheEnds(t *testing.T
 		t.Errorf("after a key the cursor's row is not drawn: line %d", cursor)
 	}
 }
+
+func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
+	wheel := "\x1b[<65;5;7M"
+	for _, c := range []struct{ input, want, rest string }{
+		{"j", "j", ""},
+		{"\r", "enter", ""},
+		{"\x1b", "esc", ""},
+		{"\x7f\x03", "backspace ctrl-c", ""},
+		{"\x1b[A\x1bOB", "up down", ""},
+		{"é/", "é /", ""},
+		{"\x1b[<0;5;7M", "click:6", ""},
+		{"\x1b[<0;5;7m", "", ""}, // the button's release
+		{"\x1b[<64;5;7M" + wheel, "wheelup wheeldown", ""},
+		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""}, // another button, another key, Option-j
+		// A report cut at each point leaves no stray keys.
+		{wheel + wheel[:1], "wheeldown", wheel[:1]},
+		{wheel + wheel[:2], "wheeldown", wheel[:2]},
+		{wheel + wheel[:7], "wheeldown", wheel[:7]},
+		{"j\x1bO", "j", "\x1bO"},
+		{"j\xc3", "j", "\xc3"}, // the first byte of é
+	} {
+		keys, rest := ParseKeys(c.input)
+		if got := strings.Join(keys, " "); got != c.want || rest != c.rest {
+			t.Errorf("ParseKeys(%q) = %q, rest %q; want %q, rest %q", c.input, got, rest, c.want, c.rest)
+		}
+	}
+	// The rest of a cut report completes it on the next read.
+	_, rest := ParseKeys(wheel[:7])
+	if keys, rest := ParseKeys(rest + wheel[7:]); len(keys) != 1 || keys[0] != "wheeldown" || rest != "" {
+		t.Errorf("a report in two reads gave %q, rest %q", keys, rest)
+	}
+}
