@@ -11,8 +11,11 @@ const KeysHelp = `In the list:
   Enter           move to the right side
   Space           fold or unfold the area under the cursor
   u               unfold every area; u again puts the folds back
-  /               find by name, title or bay across every level;
-                  Enter keeps the filter, Esc clears it
+  /               find by name, title or bay across every level; an area
+                  that matches lists all its items. The right side stays
+                  as it is while you type. Enter keeps the filter and
+                  shows the cursor's row. Esc clears the filter and
+                  returns the cursor to the row the right side shows
   a               show more levels: front, then front + back, then
                   front + back + deep; the line above the key
                   reminder says which

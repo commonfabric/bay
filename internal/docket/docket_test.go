@@ -114,6 +114,67 @@ func TestAnAreaShowsTheFirstItemBeneathItFoldedOrNot(t *testing.T) {
 	}
 }
 
+func TestAFilterListsEveryItemOfAnAreaItMatches(t *testing.T) {
+	s := NewSidebar(tree())
+	for _, key := range []string{"/", "t", "o", "o", "l"} {
+		s.Key(key)
+	}
+	// "tool" is in the name of the area tooling and of none of its items.
+	got := names(s)
+	if !strings.Contains(got, "tooling") || !strings.Contains(got, "sidebar") || strings.Contains(got, "restart") {
+		t.Errorf("rows = %s", got)
+	}
+}
+
+func TestAFilterLeavesTheRightSideAloneUntilItIsKeptOrLeft(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	s.Key("n")
+	if s.Current().Name != "restart" {
+		t.Fatalf("on %s", s.Current().Name)
+	}
+	// Typing a filter that drops restart moves the cursor to the first
+	// item listed and asks for nothing to be shown.
+	for _, key := range []string{"/", "s", "i", "d"} {
+		if a := s.Key(key); a != None {
+			t.Errorf("%s: %v", key, a)
+		}
+	}
+	if cur := s.Current(); cur.Area || cur.Desk || !strings.HasPrefix(cur.Name, "sidebar") {
+		t.Errorf("typing: on %s", cur.Name)
+	}
+	// Esc returns the cursor to the row the right side shows.
+	if a := s.Key("esc"); a != None || s.Current().Name != "restart" {
+		t.Errorf("esc: %v on %s", a, s.Current().Name)
+	}
+	// Enter keeps the filter and shows the cursor's row.
+	for _, key := range []string{"/", "s", "i", "d"} {
+		s.Key(key)
+	}
+	if a := s.Key("enter"); a != Show || !strings.HasPrefix(s.Current().Name, "sidebar") {
+		t.Errorf("enter: %v on %s", a, s.Current().Name)
+	}
+}
+
+func TestTheCursorReturnsToTheShownRowWhenItsOwnRowLeavesTheList(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("n") // restart, under people
+	s.Key("k") // people; the right side shows restart
+	s.Key("j") // restart again
+	items := tree()
+	gone := items["restart"]
+	gone.Status = "closed"
+	items["restart"] = gone
+	s.SetItems(items)
+	if s.Current().Name == "restart" {
+		t.Fatalf("restart is still listed")
+	}
+	s.SetItems(tree())
+	if s.Current().Name != "restart" {
+		t.Errorf("after restart came back: on %s", s.Current().Name)
+	}
+}
+
 func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 	s := NewSidebar(tree())
 	// Lines: the desk, people, restart, tooling, sidebar and its bays.
@@ -207,7 +268,7 @@ func TestFilterSearchesEveryLevelAndEscapeRestoresTheList(t *testing.T) {
 	if got := names(s); got != DeskRow+",people,images" {
 		t.Errorf("filtered rows = %s", got)
 	}
-	if a := s.Key("enter"); a != None {
+	if a := s.Key("enter"); a != Show {
 		t.Errorf("enter while typing = %v", a)
 	}
 	s.Key("j")
@@ -571,7 +632,7 @@ func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
 	if a := s.Click(2, 5); a != Show || s.Current().Name != "restart" {
 		t.Errorf("click on an item: %v on %s", a, s.Current().Name)
 	}
-	if a := s.Click(1, 5); a != None || s.Current().Name != "people" || !s.Current().Folded {
+	if a := s.Click(1, 5); a != Show || s.Current().Name != "people" || !s.Current().Folded {
 		t.Errorf("click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
 	}
 	at := s.Current().Name

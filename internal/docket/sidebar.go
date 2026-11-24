@@ -37,11 +37,13 @@ type Sidebar struct {
 	rows     []Row
 	first    map[string]Row // for each area row, the first row beneath it that is not an area
 	cursor   int
-	top      int  // first row drawn
-	body     int  // rows the last Render had room for
-	scrolled bool // the wheel moved the rows since the last key
-	width    int  // columns the last Render had
-	full     int  // columns the last Render had when it was not collapsed
+	showing  string // the name of the row the right side was last asked to show
+	moved    bool   // the cursor's row left the list, and the cursor is on another row
+	top      int    // first row drawn
+	body     int    // rows the last Render had room for
+	scrolled bool   // the wheel moved the rows since the last key
+	width    int    // columns the last Render had
+	full     int    // columns the last Render had when it was not collapsed
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -58,15 +60,23 @@ func (s *Sidebar) SetItems(items map[string]Item) {
 	s.rebuild()
 }
 
-func (s *Sidebar) shown(item Item) bool {
+// shown reports whether an item is listed. A filter lists the items whose
+// name, title or bays contain it, and every item of an area whose name or
+// title contains it; inArea says the item is in such an area.
+func (s *Sidebar) shown(item Item, inArea bool) bool {
 	if item.Status != "open" {
 		return false
 	}
 	if s.filter != "" {
-		text := strings.ToLower(item.Name + " " + item.Title + " " + strings.Join(item.BayRefs(), " "))
-		return strings.Contains(text, strings.ToLower(s.filter))
+		return inArea || s.matches(item)
 	}
 	return levelRank(item.Level) <= s.levels
+}
+
+// matches reports whether the filter is in the item's name, title or bays.
+func (s *Sidebar) matches(item Item) bool {
+	text := strings.ToLower(item.Name + " " + item.Title + " " + strings.Join(item.BayRefs(), " "))
+	return strings.Contains(text, strings.ToLower(s.filter))
 }
 
 // levelRank orders the levels: front 0, back 1, deep and any other value 2.
@@ -99,12 +109,13 @@ func (s *Sidebar) rebuild() {
 	}
 	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true}}
 	s.first = map[string]Row{}
-	var walk func(parent string, depth int) (rows []Row, open int, blocking bool)
-	walk = func(parent string, depth int) ([]Row, int, bool) {
+	var walk func(parent string, depth int, inArea bool) (rows []Row, open int, blocking bool)
+	walk = func(parent string, depth int, inArea bool) ([]Row, int, bool) {
 		var out []Row
 		open, blocking := 0, false
 		for _, item := range Children(s.items, parent) {
-			below, belowOpen, belowBlocking := walk(item.Name, depth+1)
+			inArea := inArea || (item.Kind == "area" && s.filter != "" && s.matches(item))
+			below, belowOpen, belowBlocking := walk(item.Name, depth+1, inArea)
 			if item.Kind == "area" {
 				if len(below) == 0 {
 					continue
@@ -124,7 +135,7 @@ func (s *Sidebar) rebuild() {
 				open, blocking = open+belowOpen, blocking || belowBlocking
 				continue
 			}
-			if s.shown(item) {
+			if s.shown(item, inArea) {
 				n, b := item.OpenQuestions()
 				bays := item.BayRefs()
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
@@ -142,14 +153,44 @@ func (s *Sidebar) rebuild() {
 		}
 		return out, open, blocking
 	}
-	tree, _, _ := walk("", 0)
+	tree, _, _ := walk("", 0, false)
 	s.rows = append(rows, tree...)
+	// The cursor stays on its row. When that row has left the list the
+	// cursor goes to the row the right side shows. When that has left
+	// too, the cursor goes to the first item a filter lists, or else to
+	// the first row, and returns to the shown row when it is listed again.
+	shown := s.rowNamed(s.showing)
+	if k := s.rowNamed(current); k >= 0 && !(s.moved && shown >= 0) {
+		s.cursor = k
+		return
+	}
+	if shown >= 0 {
+		s.cursor, s.moved = shown, false
+		return
+	}
+	s.moved = true
 	s.cursor = 0
+	if s.filter != "" {
+		s.moveToItem(1)
+	}
+}
+
+// rowNamed returns the index of the row with the given name, or -1.
+func (s *Sidebar) rowNamed(name string) int {
 	for k, r := range s.rows {
-		if r.Name == current {
-			s.cursor = k
+		if r.Name == name {
+			return k
 		}
 	}
+	return -1
+}
+
+// did records the row the right side is asked to show.
+func (s *Sidebar) did(action Action) Action {
+	if action == Show || action == ShowAndFocus {
+		s.showing, s.moved = s.Shown().Name, false
+	}
+	return action
 }
 
 // Collapsed reports whether the last Render drew the sidebar collapsed.
@@ -238,7 +279,9 @@ const JumpRows = 10
 // Key applies one key press and reports what the caller must do.
 //
 // Moving the cursor shows the row it lands on. KeysHelp lists the keys.
-func (s *Sidebar) Key(key string) Action {
+func (s *Sidebar) Key(key string) Action { return s.did(s.key(key)) }
+
+func (s *Sidebar) key(key string) Action {
 	// The wheel scrolls the rows and leaves the cursor where it is, so
 	// the cursor's row can go out of sight. Any other key brings the
 	// cursor's row back into sight.
@@ -333,9 +376,19 @@ func (s *Sidebar) Key(key string) Action {
 func (s *Sidebar) typeFilter(key string) Action {
 	switch key {
 	case "enter":
+		// Keeping the filter shows the row the cursor is on.
 		s.typing = false
+		s.rebuild()
+		return Show
 	case "esc":
+		// Leaving the filter returns the cursor to the row the right
+		// side shows, when that row is in the list.
 		s.typing, s.filter = false, ""
+		s.rebuild()
+		if k := s.rowNamed(s.showing); k >= 0 {
+			s.cursor = k
+		}
+		return None
 	case "backspace":
 		if s.filter != "" {
 			r := []rune(s.filter)
@@ -372,7 +425,9 @@ func (s *Sidebar) toggleUnfoldAll() {
 // an area it also folds or unfolds it. On the mark at the start of the
 // first bar it collapses the sidebar, and anywhere on a collapsed sidebar
 // it expands it. Elsewhere it does nothing.
-func (s *Sidebar) Click(line, column int) Action {
+func (s *Sidebar) Click(line, column int) Action { return s.did(s.click(line, column)) }
+
+func (s *Sidebar) click(line, column int) Action {
 	if s.width < collapsedBelow {
 		return Expand
 	}
@@ -389,7 +444,6 @@ func (s *Sidebar) Click(line, column int) Action {
 	s.cursor = k
 	if s.rows[k].Area {
 		s.toggleFold()
-		return None
 	}
 	return Show
 }
@@ -517,9 +571,12 @@ func keyHints(pairs ...string) []Span {
 // -1 when that row is not in the list, as under a folded area. For an
 // item followed by a row for each of its bays it is the first bay's row.
 func (s *Sidebar) shownRow() int {
-	target := s.Shown()
+	name := s.showing
+	if name == "" {
+		name = s.Shown().Name
+	}
 	for k, r := range s.rows {
-		if r.Name != target.Name {
+		if r.Name != name {
 			continue
 		}
 		if r.Bay == "" && len(r.Bays) > 1 && k+1 < len(s.rows) && s.rows[k+1].Bay != "" {
