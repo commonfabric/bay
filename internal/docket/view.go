@@ -53,6 +53,9 @@ type View struct {
 	RecordCommand func(item string) string
 	// StartDesk starts the desk agent's window when it is not running.
 	StartDesk func() error
+	// Width is the width a newly started sidebar is given: the width saved
+	// from the last time the list was used. 0 means SidebarWidth.
+	Width int
 }
 
 // windowID returns the id of a window, and "" when it does not exist.
@@ -167,6 +170,12 @@ func (v *View) ListHidden() bool {
 	return err == nil && strings.TrimSpace(out) == "10"
 }
 
+// Zoomed reports whether a pane of the view's window is zoomed.
+func (v *View) Zoomed() bool {
+	out, err := v.Tmux("display-message", "-p", "-t", sidebarPane, "#{window_zoomed_flag}")
+	return err == nil && strings.TrimSpace(out) == "1"
+}
+
 // Collapse shrinks the sidebar to CollapsedWidth and moves the keyboard to
 // the right pane.
 func (v *View) Collapse() error {
@@ -212,8 +221,11 @@ func (v *View) ensureViewer() error {
 			return fmt.Errorf("start the sidebar: %w", err)
 		}
 	}
-	// A pane was started, so the sidebar gets its first width. A width
+	// A pane was started, so the sidebar gets the saved width. A width
 	// chosen later is kept.
+	if v.Width >= CollapsedBelow {
+		return v.SetWidth(v.Width)
+	}
 	return v.SetWidth(SidebarWidth)
 }
 

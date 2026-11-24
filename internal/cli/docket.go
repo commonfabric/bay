@@ -49,7 +49,12 @@ func newDocketView() (*docket.View, error) {
 		return nil, err
 	}
 	manifestFile := bayPaths().ManifestFile
+	width := 0
+	if stateDir, err := docket.StateDir(); err == nil {
+		width = loadWidth(stateDir)
+	}
 	return &docket.View{
+		Width:          width,
 		Tmux:           realTmux,
 		SidebarCommand: shellQuote(self) + " docket sidebar",
 		TmuxCommand:    "tmux",
@@ -245,6 +250,31 @@ func saveMarks(stateDir string, marks map[string]string) error {
 		return err
 	}
 	return os.WriteFile(marksFile(stateDir), data, 0o644)
+}
+
+// widthFile is the file that keeps the list's width, beside its marks.
+func widthFile(stateDir string) string { return filepath.Join(stateDir, "view-width.json") }
+
+// loadWidth reads the list's saved width, and 0 when none is saved.
+func loadWidth(stateDir string) int {
+	var saved struct {
+		Width int `json:"width"`
+	}
+	if data, err := os.ReadFile(widthFile(stateDir)); err == nil {
+		_ = json.Unmarshal(data, &saved)
+	}
+	if saved.Width < docket.CollapsedBelow {
+		return 0
+	}
+	return saved.Width
+}
+
+func saveWidth(stateDir string, width int) error {
+	data, err := json.Marshal(map[string]int{"width": width})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(widthFile(stateDir), data, 0o644)
 }
 
 // keysPage is the text of the keys popup: the keys, the marks that are
@@ -456,6 +486,13 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 	}
 	forgetMarks()
+	// The list starts at the width it had when it was last used. Each
+	// width it is given later is saved, except a collapsed one and one a
+	// zoomed pane gives it.
+	if view.Width > 0 {
+		_ = view.SetWidth(view.Width)
+	}
+	considered := view.Width
 	note := ""
 	draw := func() {
 		width, height, err := term.GetSize(fd)
@@ -463,6 +500,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 			width, height = docket.SidebarWidth, 40
 		}
 		lines, cursor := sidebar.RenderLines(width, height)
+		if err == nil && width != considered && !sidebar.Collapsed() {
+			considered = width
+			if !view.Zoomed() {
+				_ = saveWidth(stateDir, width)
+			}
+		}
 		if note != "" && !sidebar.Collapsed() {
 			lines[len(lines)-1] = docket.Line{Spans: []docket.Span{{Text: note}}, Bar: true}
 		}

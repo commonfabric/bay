@@ -278,10 +278,10 @@ func levelRank(level string) int {
 var levelNames = []string{"front", "front + back", "front + back + shelved"}
 
 // CollapsedWidth is the width of the sidebar's pane while it is collapsed.
-// A pane narrower than collapsedBelow is drawn as collapsed.
+// A pane narrower than CollapsedBelow is drawn as collapsed.
 const (
 	CollapsedWidth = 2
-	collapsedBelow = 10
+	CollapsedBelow = 10
 )
 
 // rebuild recomputes the rows. An area is shown when an item beneath it is
@@ -411,12 +411,12 @@ func (s *Sidebar) did(action Action) Action {
 }
 
 // Collapsed reports whether the last Render drew the sidebar collapsed.
-func (s *Sidebar) Collapsed() bool { return s.width > 0 && s.width < collapsedBelow }
+func (s *Sidebar) Collapsed() bool { return s.width > 0 && s.width < CollapsedBelow }
 
 // FullWidth is the width to give the sidebar when it is expanded: the
 // width it last had while not collapsed, or SidebarWidth.
 func (s *Sidebar) FullWidth() int {
-	if s.full >= collapsedBelow {
+	if s.full >= CollapsedBelow {
 		return s.full
 	}
 	return SidebarWidth
@@ -665,7 +665,7 @@ func (s *Sidebar) toggleUnfoldAll() {
 func (s *Sidebar) Click(line, column int) Action { return s.did(s.click(line, column)) }
 
 func (s *Sidebar) click(line, column int) Action {
-	if s.width < collapsedBelow {
+	if s.width < CollapsedBelow {
 		return Expand
 	}
 	if line == s.body {
@@ -734,11 +734,11 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 // are shown, or shows the filter, and the other reminds of keys. The
 // second result is the index of the cursor's line, which is outside the
 // rows when the wheel has scrolled the cursor's row out of sight. A
-// sidebar narrower than collapsedBelow is drawn as the two bars with a mark
+// sidebar narrower than CollapsedBelow is drawn as the two bars with a mark
 // on the first of them, and no rows.
 func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	s.width = width
-	if width < collapsedBelow {
+	if width < CollapsedBelow {
 		// The mark that expands the sidebar is where the mark that
 		// collapses it was: at the start of the first bar.
 		lines := make([]Line, max(height, 2))

@@ -1191,3 +1191,15 @@ func TestListHiddenOnlyWhenAnotherPaneIsZoomed(t *testing.T) {
 		}
 	}
 }
+
+func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}}
+	v := newFakeView(f)
+	v.Width = 52
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("resize-pane -t =docket:view.{left} -x 52") != 1 || f.ran("resize-pane -t =docket:view.{left} -x 36") != 0 {
+		t.Errorf("sidebar not given the saved width: %v", f.calls)
+	}
+}

@@ -9,3 +9,22 @@ func TestFitPopupKeepsAPopupInsideTheTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestSavedWidthIsReadBackAndACollapsedOneIsIgnored(t *testing.T) {
+	dir := t.TempDir()
+	if got := loadWidth(dir); got != 0 {
+		t.Errorf("no saved width: got %d, want 0", got)
+	}
+	if err := saveWidth(dir, 52); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadWidth(dir); got != 52 {
+		t.Errorf("saved 52: got %d", got)
+	}
+	if err := saveWidth(dir, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadWidth(dir); got != 0 {
+		t.Errorf("saved a collapsed width: got %d, want 0", got)
+	}
+}

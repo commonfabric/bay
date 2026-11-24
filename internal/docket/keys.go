@@ -36,7 +36,8 @@ const KeysHelp = `In the list:
                   on « at the bottom, collapse the list; on » in
                   the same place, expand it
   drag            on the line between the panes, change the list's
-                  width; a double click there gives the first width
+                  width; a double click there gives the first width.
+                  The width is kept for the next start of the view
   wheel           scroll the list; the cursor stays on its row
   ?               show this list
   q               leave the view; it keeps running
