@@ -39,7 +39,11 @@ type Sidebar struct {
 	typing   bool // the filter is being typed
 	rows     []Row
 	marks    map[string]string // for each mark, a letter or digit, the name of its row
-	pending  string            // "m", "M" (from the right side) or "'" when the next key names a mark; else ""
+	pending  string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
+	closing  string            // the item x asks to close; else ""
+	dropping bool              // the reason for dropping closing is being typed
+	reason   string            // the reason typed so far
+	outcome  string            // "finished" or "dropped", once chosen
 	command  bool              // F12 came last: the next key is a command even while a filter is typed
 	back     string            // the row the cursor left on the last jump to a mark
 	notice   string            // what the last key has to tell the user
@@ -475,6 +479,8 @@ const (
 	// ResetWidth asks the caller to give the sidebar the width
 	// SidebarWidth.
 	ResetWidth
+	// CloseItem asks the caller to close an item. CloseRequest names it.
+	CloseItem
 )
 
 // move steps the cursor by delta rows and reports whether it moved.
@@ -545,9 +551,22 @@ func (s *Sidebar) key(key string) Action {
 	s.notice = ""
 	if pending := s.pending; pending != "" {
 		s.pending = ""
+		if sent == "" && pending == "x" {
+			return s.chooseOutcome(key)
+		}
 		if sent == "" {
 			return s.mark(pending, key)
 		}
+	}
+	if s.dropping {
+		if sent == "" {
+			return s.typeReason(key)
+		}
+		// A key sent from the right side gives up the close.
+		s.dropping, s.closing = false, ""
+	}
+	if s.closing != "" && s.pending == "" {
+		s.closing = ""
 	}
 	if s.typing && sent == "" {
 		return s.typeFilter(key)
@@ -604,6 +623,8 @@ func (s *Sidebar) key(key string) Action {
 		return ResetWidth
 	case "m", "'":
 		s.pending = key
+	case "x":
+		s.startClose()
 	case ">":
 		return Deeper
 	case "<":
@@ -622,6 +643,85 @@ func (s *Sidebar) key(key string) Action {
 		return Quit
 	}
 	return None
+}
+
+// startClose asks how the item under the cursor closes, or says why it
+// cannot. An item or area with open items under it is not closed, nor an
+// item that lists more than one bay: the list shows those as rows under
+// it.
+func (s *Sidebar) startClose() {
+	row := s.Current()
+	if row.Desk {
+		s.notice = "the desk cannot be closed"
+		return
+	}
+	name, _, _ := strings.Cut(row.Name, " ")
+	item, ok := s.items[name]
+	if !ok {
+		return
+	}
+	var open []string
+	for _, kid := range Children(s.items, name) {
+		if kid.Status == "open" {
+			open = append(open, kid.Name)
+		}
+	}
+	switch bays := item.BayRefs(); {
+	case len(open) > 0:
+		s.notice = name + " has open items under it: " + strings.Join(open, ", ")
+	case len(bays) > 1:
+		s.notice = fmt.Sprintf("%s lists %d bays; take all but one off it first", name, len(bays))
+	default:
+		s.closing, s.pending = name, "x"
+	}
+}
+
+// chooseOutcome applies the key after x: f closes the item as finished, d
+// asks for the reason it is dropped, and any other key gives up.
+func (s *Sidebar) chooseOutcome(key string) Action {
+	switch key {
+	case "f":
+		s.outcome = "finished"
+		return CloseItem
+	case "d":
+		s.dropping, s.reason = true, ""
+		return None
+	}
+	s.closing = ""
+	return None
+}
+
+// typeReason applies one key while the reason for dropping an item is
+// typed.
+func (s *Sidebar) typeReason(key string) Action {
+	switch key {
+	case "enter":
+		if strings.TrimSpace(s.reason) == "" {
+			s.notice = "a dropped item needs a reason"
+			return None
+		}
+		s.dropping, s.outcome = false, "dropped"
+		return CloseItem
+	case "esc":
+		s.dropping, s.closing = false, ""
+	case "backspace":
+		if r := []rune(s.reason); len(r) > 0 {
+			s.reason = string(r[:len(r)-1])
+		}
+	default:
+		if len([]rune(key)) == 1 {
+			s.reason += key
+		}
+	}
+	return None
+}
+
+// CloseRequest returns the item that CloseItem asks to close, how it
+// closes, and the reason when it is dropped.
+func (s *Sidebar) CloseRequest() (item, outcome, reason string) {
+	item, outcome, reason = s.closing, s.outcome, strings.TrimSpace(s.reason)
+	s.closing, s.outcome, s.reason = "", "", ""
+	return item, outcome, reason
 }
 
 // typeFilter applies one key while the filter is being typed.
@@ -808,6 +908,12 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	case s.pending == "'":
 		info = []Span{{"«", "key"}, {" go to a mark: press its letter", ""}}
 		hint = keyHints("'", "goes back", "esc", "cancels")
+	case s.pending == "x":
+		info = []Span{{"«", "key"}, {" close " + s.closing + "?", ""}}
+		hint = keyHints("f", "finished", "d", "dropped", "esc", "cancels")
+	case s.dropping:
+		info = []Span{{"«", "key"}, {" why drop it: " + s.reason + "_", ""}}
+		hint = keyHints("enter", "closes", "esc", "cancels")
 	case s.typing:
 		info = []Span{{"«", "key"}, {" " + levelNames[s.levels] + " · find: " + s.filter + "_", ""}}
 		hint = keyHints("enter", "keeps", "esc", "clears")

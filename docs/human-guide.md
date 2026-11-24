@@ -889,6 +889,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
 | `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
+| `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay |
 | `m` then a letter | Mark the row under the cursor with that letter or digit. The mark is drawn at the end of the row as `'a`. On the row that has the mark, `m` and the letter take it off. Marks are kept when the view is closed. A mark is forgotten when its item is closed or deleted. The `?` screen lists the marks that are set, above its legend |
 | `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `''` goes back to the row the last jump left |
 | `a` | Show more levels: front, then front + back, then front + back + shelved |
@@ -926,8 +927,8 @@ session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default
 `~/.local/share/docket`) and bay's manifest. It changes docket's items in
-one case: `>` and `<` change the level of the item under the cursor by
-running `docket set`. It keeps the marks and the list's width in
+two cases: `>` and `<` change the level of the item under the cursor by
+running `docket set`, and `x` closes it by running `docket close`. It keeps the marks and the list's width in
 `view-marks.json` and `view-width.json` in docket's folder. It writes
 nothing else, and nothing of bay's.
 

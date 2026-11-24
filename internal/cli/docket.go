@@ -26,7 +26,8 @@ func newDocketCmd() *cobra.Command {
 
 docket is a separate tool that keeps a tree of work items. These commands
 read its files. The view changes an item's level, by running
-'docket set', when > or < is pressed in the list. It keeps its marks and
+'docket set', when > or < is pressed in the list, and closes an item, by
+running 'docket close', when x is pressed. It keeps its marks and
 the list's width in files of its own in docket's folder.`,
 	}
 	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd(), newDocketKeysCmd(), newDocketStateCmd())
@@ -649,6 +650,19 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = view.SetWidth(docket.SidebarWidth)
 			case docket.MarksChanged:
 				err = saveMarks(stateDir, sidebar.Marks())
+			case docket.CloseItem:
+				item, outcome, reason := sidebar.CloseRequest()
+				args := []string{"close", item, outcome}
+				if reason != "" {
+					args = append(args, reason)
+				}
+				out, runErr := exec.Command("docket", args...).CombinedOutput()
+				if runErr != nil {
+					err = fmt.Errorf("docket close %s: %s", item, strings.TrimSpace(string(out)))
+				} else {
+					note = item + " is closed as " + outcome
+					reload()
+				}
 			case docket.Deeper, docket.Nearer:
 				item, level, ok := sidebar.LevelChange(action)
 				switch {

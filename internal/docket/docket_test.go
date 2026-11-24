@@ -1297,3 +1297,54 @@ func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
 		t.Errorf("a quote in a filter named a mark: %v", a)
 	}
 }
+
+func TestXClosesAnItemOnlyWithNothingListedUnderIt(t *testing.T) {
+	s := NewSidebar(tree())
+	press := func(keys ...string) (a Action) {
+		for _, k := range keys {
+			a = s.Key(k)
+		}
+		return a
+	}
+	// people has restart and the back item images under it.
+	press("n", "k")
+	if press("x"); s.Notice() != "people has open items under it: restart, images" {
+		t.Errorf("people: %q", s.Notice())
+	}
+	// restart lists one bay, which the list shows on restart's own row.
+	press("n")
+	if a := press("x", "f"); a != CloseItem {
+		t.Fatalf("x f on %s: %v", s.Current().Name, a)
+	}
+	if item, outcome, reason := s.CloseRequest(); item != "restart" || outcome != "finished" || reason != "" {
+		t.Errorf("request: %s %s %q", item, outcome, reason)
+	}
+	// Dropping needs a reason.
+	if a := press("x", "d", "enter"); a != None || s.Notice() != "a dropped item needs a reason" {
+		t.Errorf("empty reason: %v %q", a, s.Notice())
+	}
+	if a := press("n", "o", "enter"); a != CloseItem {
+		t.Fatalf("reason: %v", a)
+	}
+	if item, outcome, reason := s.CloseRequest(); item != "restart" || outcome != "dropped" || reason != "no" {
+		t.Errorf("request: %s %s %q", item, outcome, reason)
+	}
+	// Esc and any other key give up; j still moves after them.
+	if a := press("x", "esc"); a != None {
+		t.Errorf("esc: %v", a)
+	}
+	// tooling has sidebar open under it; the closed item old does not count.
+	press("j")
+	if press("x"); s.Current().Name != "tooling" || s.Notice() != "tooling has open items under it: sidebar" {
+		t.Errorf("%s: %q", s.Current().Name, s.Notice())
+	}
+	// sidebar lists two bays, shown as rows under it.
+	press("j")
+	if press("x"); s.Notice() != "sidebar lists 2 bays; take all but one off it first" {
+		t.Errorf("sidebar: %q", s.Notice())
+	}
+	press("g")
+	if press("x"); s.Notice() != "the desk cannot be closed" {
+		t.Errorf("desk: %q", s.Notice())
+	}
+}

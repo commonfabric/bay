@@ -25,6 +25,10 @@ const KeysHelp = `In the list:
                   A mark is forgotten when its item is closed or deleted.
   >, <            move the item under the cursor one level away from the
                   front, or one level toward it
+  x               close the item or area under the cursor: then f for
+                  finished, or d and a reason for dropped. Not done
+                  while open items are under it, or while it lists
+                  more than one bay
   a               show more levels: front, then front + back, then
                   front + back + shelved; the line above the key
                   reminder says which
