@@ -58,7 +58,18 @@ func (r *Real) NewSession(name string) error {
 	return runSilent("new-session", "-d", "-s", name)
 }
 
+// KillSession kills a session and its windows. A window of the session
+// that is also linked into another session is killed there too.
 func (r *Real) KillSession(name string) error {
+	if out, err := run("list-windows", "-t", exactSession(name), "-F", "#{window_id}"); err == nil {
+		for _, id := range strings.Fields(out) {
+			_ = runSilent("kill-window", "-t", sessionWindow(name, id))
+		}
+	}
+	// Killing the session's last window ends the session.
+	if ok, _ := r.HasSession(name); !ok {
+		return nil
+	}
 	return runSilent("kill-session", "-t", exactSession(name))
 }
 

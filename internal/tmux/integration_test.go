@@ -487,3 +487,26 @@ func TestIntegration_WindowTargetsNameTheSession(t *testing.T) {
 		t.Errorf("dock's current window = %s, want %s", got, first)
 	}
 }
+
+// TestIntegration_KillSessionKillsWindowsLinkedElsewhere checks that a
+// window of a killed session does not keep running in another session it
+// is linked into.
+func TestIntegration_KillSessionKillsWindowsLinkedElsewhere(t *testing.T) {
+	s := startTmux(t)
+	s.newDetachedSession("dock")
+	shared := s.firstWindowID("dock")
+	s.mustCmd("new-window", "-d", "-t", "=dock:")
+	s.newDetachedSession("aux")
+	s.mustCmd("link-window", "-d", "-s", "=dock:"+shared, "-t", "=aux:")
+	r := s.realImplementation(t)
+
+	if err := r.KillSession("dock"); err != nil {
+		t.Fatalf("KillSession: %v", err)
+	}
+	if aux := s.mustCmd("list-windows", "-t", "=aux", "-F", "#{window_id}"); strings.Contains(aux, shared) {
+		t.Errorf("aux windows = %q, want no %s", aux, shared)
+	}
+	if out, err := s.tmuxCmd("has-session", "-t", "=dock"); err == nil {
+		t.Errorf("dock session still exists: %s", out)
+	}
+}
