@@ -842,6 +842,7 @@ bays where its work happens. `bay docket view` opens a tmux session named
   | yellow `○` | The item's agent is waiting for its next instruction |
   | red `◌` | The item's work is held until something else happens |
   | dim `·` | The item has no bay |
+  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay beneath the area waits. The list checks every two seconds |
   | cyan `↳ dock/bay` | One bay of an item that has several |
   | yellow `?2` | Two questions wait for your answer; on an area, the total beneath it |
   | red `!` | One of those questions holds up all work |

@@ -2,6 +2,7 @@ package docket
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1412,5 +1413,28 @@ func TestAnAreaWithNoOpenItemsIsListedSoItCanBeClosed(t *testing.T) {
 	}
 	if a := s.Key("f"); a != CloseItem {
 		t.Errorf("f: %v", a)
+	}
+}
+
+func TestAWaitingBayMarksItsRowItsItemAndItsArea(t *testing.T) {
+	s := NewSidebar(tree())
+	if !s.SetWaiting(map[string]bool{"loom/b19": true}) || s.SetWaiting(map[string]bool{"loom/b19": true}) {
+		t.Error("SetWaiting reported a change wrongly")
+	}
+	marked := map[string]bool{}
+	for _, r := range s.Rows() {
+		if r.Waiting {
+			marked[r.Name] = true
+		}
+	}
+	want := map[string]bool{"tooling": true, "sidebar": true, "sidebar loom/b19": true}
+	if !maps.Equal(marked, want) {
+		t.Errorf("waiting rows = %v", marked)
+	}
+	for _, r := range s.Rows() {
+		text := Line{Spans: rowSpans(r)}.String()
+		if marked[r.Name] != strings.Contains(text, WaitingMark) {
+			t.Errorf("row %s drawn as %q", r.Name, text)
+		}
 	}
 }

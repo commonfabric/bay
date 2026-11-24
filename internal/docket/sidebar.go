@@ -2,6 +2,7 @@ package docket
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"unicode"
@@ -26,6 +27,7 @@ type Row struct {
 	Bays     []string
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
+	Waiting  bool   // a bay of the row waits for the person; on an area, a bay beneath it
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
@@ -49,6 +51,7 @@ type Sidebar struct {
 	back     string            // the row the cursor left on the last jump to a mark
 	notice   string            // what the last key has to tell the user
 	missing  map[string]bool   // the bays, as dock/bay, that do not exist
+	waiting  map[string]bool   // the bays, as dock/bay, whose agent waits for the person
 	first    map[string]Row    // for each area row, the first row beneath it that is not an area
 	cursor   int
 	showing  string // the name of the row the right side was last asked to show
@@ -249,6 +252,17 @@ func (s *Sidebar) SetMissing(missing map[string]bool) {
 	s.rebuild()
 }
 
+// SetWaiting tells the list which bays, as dock/bay, have an agent waiting
+// for the person, and reports whether that changed anything.
+func (s *Sidebar) SetWaiting(waiting map[string]bool) bool {
+	if maps.Equal(s.waiting, waiting) {
+		return false
+	}
+	s.waiting = waiting
+	s.rebuild()
+	return true
+}
+
 // SetItems replaces the items. The cursor stays on the row it was on when
 // that row is still shown.
 func (s *Sidebar) SetItems(items map[string]Item) {
@@ -327,8 +341,12 @@ func (s *Sidebar) rebuild() {
 					}
 				}
 				folded := s.folded[item.Name] && s.filter == ""
+				waiting := false
+				for _, r := range below {
+					waiting = waiting || r.Waiting
+				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-					Folded: folded, Open: belowOpen, Blocking: belowBlocking})
+					Folded: folded, Open: belowOpen, Blocking: belowBlocking, Waiting: waiting})
 				if !folded {
 					out = append(out, below...)
 				}
@@ -338,16 +356,17 @@ func (s *Sidebar) rebuild() {
 			if s.shown(item, inArea) {
 				n, b := item.OpenQuestions()
 				bays := item.BayRefs()
-				gone := len(bays) > 0
+				gone, waiting := len(bays) > 0, false
 				for _, ref := range bays {
 					gone = gone && s.missing[ref]
+					waiting = waiting || s.waiting[ref]
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
-					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone})
+					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone, Waiting: waiting})
 				if len(bays) > 1 {
 					for _, ref := range bays {
 						out = append(out, Row{Name: item.Name + " " + ref, Title: item.Title,
-							Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref]})
+							Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref]})
 					}
 				}
 				open, blocking = open+n, blocking || b
@@ -1042,6 +1061,9 @@ func (s *Sidebar) marksOf(name string) string {
 func rowSpans(r Row) []Span {
 	indent := strings.Repeat("  ", r.Depth)
 	var marks []Span
+	if r.Area && r.Waiting {
+		marks = append(marks, Span{" " + WaitingMark, "waiting"})
+	}
 	if r.Open > 0 {
 		marks = append(marks, Span{fmt.Sprintf(" ?%d", r.Open), "question"})
 		if r.Blocking {
@@ -1053,6 +1075,8 @@ func rowSpans(r Row) []Span {
 		return []Span{{"◆ " + r.Name, "desk"}}
 	case r.Bay != "" && r.Gone:
 		return []Span{{indent + "↳ " + r.Bay + " (gone)", "dim"}}
+	case r.Bay != "" && r.Waiting:
+		return []Span{{indent, ""}, {WaitingMark, "waiting"}, {" " + r.Bay, "bay"}}
 	case r.Bay != "":
 		return []Span{{indent + "↳ " + r.Bay, "bay"}}
 	case r.Area:
@@ -1063,6 +1087,9 @@ func rowSpans(r Row) []Span {
 		return append([]Span{{indent + fold + " " + r.Title, "area"}}, marks...)
 	}
 	symbol, style := WorkSymbol(r.Work, len(r.Bays) > 0 && !r.Gone)
+	if r.Waiting {
+		symbol, style = WaitingMark, "waiting"
+	}
 	spans := append([]Span{{indent, ""}, {symbol, style}, {" " + r.Name, ""}}, marks...)
 	if r.Gone {
 		spans = append(spans, Span{" (bay gone)", "dim"})
@@ -1072,6 +1099,11 @@ func rowSpans(r Row) []Span {
 	}
 	return spans
 }
+
+// WaitingMark is drawn in place of an item's work mark, or a bay's ↳,
+// while an agent in one of its bays waits for the person, and after an
+// area's title while a bay beneath the area waits.
+const WaitingMark = "▶"
 
 // WorkSymbol returns the mark drawn before an item and its style: one for
 // each work state, and a dot for an item that has no bay.
@@ -1102,6 +1134,8 @@ func Legend() []Line {
 		entry(Span{"○ item", "ready"}, "its agent is waiting for its next instruction"),
 		entry(Span{"◌ item", "held"}, "its work is held until something else happens"),
 		entry(Span{"· item", "dim"}, "it has no bay"),
+		entry(Span{WaitingMark + " item", "waiting"}, "an agent in its bay waits for you;"),
+		entry(Span{"", ""}, "after an area, in a bay beneath it"),
 		entry(Span{"↳ dock/bay", "bay"}, "one bay of an item that has several"),
 		entry(Span{"◆ the desk", "desk"}, "the agent session for the whole tree"),
 		entry(Span{"?2", "question"}, "two questions wait for your answer;"),

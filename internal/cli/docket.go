@@ -162,8 +162,70 @@ var styles = map[string]string{
 	"question": "\x1b[1;33m",
 	"blocking": "\x1b[1;31m",
 	"key":      barKey,
+	"waiting":  "\x1b[1;38;5;208m",
 	"shown":    shownStyle,
 	"heading":  "\x1b[1m",
+}
+
+// bayWindows maps each bay, as dock/bay, to the ids of its windows. It
+// reads bay's state file again only when the file has changed.
+type bayWindows struct {
+	read    time.Time
+	windows map[string][]string
+}
+
+func (b *bayWindows) load() map[string][]string {
+	file := bayPaths().ManifestFile
+	info, err := os.Stat(file)
+	if err != nil {
+		return nil
+	}
+	if b.windows != nil && info.ModTime().Equal(b.read) {
+		return b.windows
+	}
+	m, err := manifest.Load(file)
+	if err != nil {
+		return b.windows
+	}
+	b.read, b.windows = info.ModTime(), map[string][]string{}
+	for _, dock := range m.Docks {
+		for _, bay := range dock.Bays {
+			for _, s := range bay.Surfaces {
+				if s.Tmux != nil && s.Tmux.WindowID != "" {
+					ref := dock.Name + "/" + bay.ID
+					b.windows[ref] = append(b.windows[ref], dock.Name+"\t"+s.Tmux.WindowID)
+				}
+			}
+		}
+	}
+	return b.windows
+}
+
+// waitingBays returns the bays, as dock/bay, with a window that bay marks
+// as waiting for the person or that rang the terminal bell, as bay's own
+// lists of waiting bays count them. A window is looked up in its dock's
+// session, because a bell is recorded for each session the window is in.
+func waitingBays(windows map[string][]string) map[string]bool {
+	out, err := realTmux("list-windows", "-a", "-F", "#{session_name}\t#{window_id}\t#{@bay-waiting}\t#{window_bell_flag}")
+	if err != nil {
+		return nil
+	}
+	flagged := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.Split(line, "\t")
+		if len(parts) == 4 && (parts[2] == "1" || parts[3] == "1") {
+			flagged[parts[0]+"\t"+parts[1]] = true
+		}
+	}
+	waiting := map[string]bool{}
+	for ref, ids := range windows {
+		for _, id := range ids {
+			if flagged[id] {
+				waiting[ref] = true
+			}
+		}
+	}
+	return waiting
 }
 
 // missingBays returns the bays the items name, as dock/bay, that bay's
@@ -543,6 +605,8 @@ func runSidebar(view *docket.View, stateDir string) error {
 	}
 	sidebar := docket.NewSidebar(items)
 	sidebar.SetMissing(missingBays(items))
+	var windows bayWindows
+	sidebar.SetWaiting(waitingBays(windows.load()))
 	// The marks are kept in a file so that they outlast the list. A mark
 	// whose item is closed or gone is forgotten.
 	sidebar.SetMarks(loadMarks(stateDir))
@@ -759,12 +823,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 		case <-resized:
 		case <-tick.C:
-			info, err := os.Stat(stamp)
-			if err != nil || !info.ModTime().After(seen) {
+			changed := sidebar.SetWaiting(waitingBays(windows.load()))
+			if info, err := os.Stat(stamp); err == nil && info.ModTime().After(seen) {
+				seen = info.ModTime()
+				reload()
+				changed = true
+			}
+			if !changed {
 				continue
 			}
-			seen = info.ModTime()
-			reload()
 		}
 		draw()
 	}
