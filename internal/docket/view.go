@@ -117,11 +117,10 @@ func (v *View) Setup() error {
 	//
 	//
 	// The keys that act on the list from either pane send it function
-	// keys. They work while the list is collapsed, and do nothing while a
-	// pane of the view is zoomed.
-	hidden := "#{window_zoomed_flag}"
+	// keys. They work while the list is collapsed and while a pane of the
+	// view is zoomed.
 	list := func(key string) []string {
-		return []string{"if-shell", "-F", "-t", sidebarPane, hidden, "", "send-keys -t '" + sidebarPane + "' " + key}
+		return []string{"send-keys", "-t", sidebarPane, key}
 	}
 	binds := [][]string{
 		append([]string{"M-l"}, list("F5")...),
@@ -159,6 +158,13 @@ func (v *View) Setup() error {
 		}
 	}
 	return nil
+}
+
+// ListHidden reports whether the right pane is zoomed, which hides the
+// list.
+func (v *View) ListHidden() bool {
+	out, err := v.Tmux("display-message", "-p", "-t", sidebarPane, "#{window_zoomed_flag}#{pane_active}")
+	return err == nil && strings.TrimSpace(out) == "10"
 }
 
 // Collapse shrinks the sidebar to CollapsedWidth and moves the keyboard to

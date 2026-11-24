@@ -607,9 +607,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}
 	for _, key := range []string{"M-l F5", "M-h F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
 		k, sent, _ := strings.Cut(key, " ")
-		// Each of these keys does nothing while a pane of the view is
-		// zoomed. It works while the list is collapsed.
-		want := "bind-key -T docket " + k + " if-shell -F -t =docket:view.{left} #{window_zoomed_flag}  send-keys -t '=docket:view.{left}' " + sent
+		// Each of these keys reaches the list whether it is collapsed or
+		// hidden by a zoomed pane.
+		want := "bind-key -T docket " + k + " send-keys -t =docket:view.{left} " + sent
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
@@ -1164,5 +1164,30 @@ func TestWrapBreaksAtSpacesAndKeepsLineBreaks(t *testing.T) {
 	want := []string{"one two", "three", "", "four", "averyveryverylongword", "five"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("Wrap = %q, want %q", got, want)
+	}
+}
+
+func TestListHiddenOnlyWhenAnotherPaneIsZoomed(t *testing.T) {
+	for _, c := range []struct {
+		flags string
+		err   error
+		want  bool
+	}{
+		{"10\n", nil, true},             // zoomed, and the list is not the zoomed pane
+		{"11\n", nil, false},            // the list itself is zoomed
+		{"00\n", nil, false},            // nothing zoomed
+		{"", fmt.Errorf("gone"), false}, // tmux could not answer
+	} {
+		var asked string
+		v := &View{Tmux: func(args ...string) (string, error) {
+			asked = strings.Join(args, " ")
+			return c.flags, c.err
+		}}
+		if got := v.ListHidden(); got != c.want {
+			t.Errorf("flags %q: ListHidden = %v, want %v", c.flags, got, c.want)
+		}
+		if asked != "display-message -p -t =docket:view.{left} #{window_zoomed_flag}#{pane_active}" {
+			t.Errorf("asked tmux %q", asked)
+		}
 	}
 }

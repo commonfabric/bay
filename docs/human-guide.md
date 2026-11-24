@@ -914,8 +914,8 @@ Keys from either side of the `docket` session:
 | `Option+D` | Leave the view, as `q` does |
 
 The keys that move the cursor or fold from either side work while the list
-is collapsed; the row's name is then shown for a moment at the bottom of the
-terminal. They do nothing while a pane of the view is zoomed.
+is collapsed and while a pane of the view is zoomed. When the list cannot be
+seen, the row's name is shown for a moment at the bottom of the terminal.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being

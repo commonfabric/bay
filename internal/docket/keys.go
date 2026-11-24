@@ -51,8 +51,7 @@ From either side:
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-J, -K, -N, -P and Option-Space work while the list is collapsed, and
-the row's name is then shown for a moment. They do nothing while a pane is
-zoomed.
+Option-J, -K, -N, -P and Option-Space work while the list is collapsed or
+the right side is zoomed, and the row's name is then shown for a moment.
 Every other key, including the tmux prefix, goes to the window on the
 right.`

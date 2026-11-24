@@ -609,9 +609,10 @@ func runSidebar(view *docket.View, stateDir string) error {
 				if err != nil {
 					note = err.Error()
 				}
-				// A collapsed list cannot show where the cursor is, so
-				// the row's name is shown for a moment.
-				if sidebar.Collapsed() {
+				// A collapsed list, or one hidden by a zoomed right
+				// pane, cannot show where the cursor is, so the row's
+				// name is shown for a moment.
+				if sidebar.Collapsed() || view.ListHidden() {
 					row := sidebar.Current()
 					name := row.Name
 					if row.Area {
