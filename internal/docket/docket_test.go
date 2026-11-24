@@ -623,10 +623,10 @@ func TestLevelsCycleAndTheHeadingSaysWhichAreShown(t *testing.T) {
 	items["someday"] = Item{Name: "someday", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "deep", Created: "2"}
 	s := NewSidebar(items)
 	for _, c := range []struct{ heading, has, lacks string }{
-		{"« front", "restart", "later someday"},
-		{"« front + back", "restart later", "someday"},
-		{"« front + back + deep", "restart later someday", ""},
-		{"« front", "restart", "later someday"},
+		{"« front (a)", "restart", "later someday"},
+		{"« front + back (a)", "restart later", "someday"},
+		{"« front + back + deep (a)", "restart later someday", ""},
+		{"« front (a)", "restart", "later someday"},
 	} {
 		lines, _ := s.Render(40, 30)
 		got := names(s)

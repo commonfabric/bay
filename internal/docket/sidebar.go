@@ -453,8 +453,9 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	for len(lines) < body {
 		lines = append(lines, Line{})
 	}
-	info := "« " + levelNames[s.levels]
-	hint := "? keys  / find  a levels  u unfold"
+	// The key that changes the levels is named beside them.
+	info := "« " + levelNames[s.levels] + " (a)"
+	hint := "? keys  / find  u unfold  s state"
 	switch {
 	case s.typing:
 		info = "« find: " + s.filter + "_"
