@@ -567,9 +567,6 @@ func (s *Sidebar) key(key string) Action {
 			return Show
 		}
 	case "enter":
-		if s.Current().Area {
-			return None
-		}
 		return ShowAndFocus
 	case " ":
 		s.toggleFold()

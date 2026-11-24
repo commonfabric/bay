@@ -414,8 +414,9 @@ func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) 
 	}
 	s.Key("g")
 	s.Key("j")
-	if a := s.Key("enter"); a != None || s.Rows()[1].Folded {
-		t.Errorf("enter on an area: %v, folded %v", a, s.Rows()[1].Folded)
+	// Enter on an area shows its first item and moves to the right side.
+	if a := s.Key("enter"); a != ShowAndFocus || s.Rows()[1].Folded || !s.Rows()[1].Area || s.Shown().Area {
+		t.Errorf("enter on an area: %v, folded %v, shows %s", a, s.Rows()[1].Folded, s.Shown().Name)
 	}
 	if a := s.Key(" "); a != None || !s.Rows()[1].Folded {
 		t.Errorf("space on an area: %v, folded %v", a, s.Rows()[1].Folded)
@@ -714,9 +715,14 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 		t.Errorf("a bay row did not show its item's record: %v", f.calls)
 	}
 
+	// An area with no item to show changes nothing on the right side; with
+	// focus it only moves the keyboard there.
 	before := len(f.calls)
-	if note, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || note != "" || len(f.calls) != before {
+	if note, err := v.Show(Row{Name: "people", Area: true}, false); err != nil || note != "" || len(f.calls) != before {
 		t.Errorf("an area was shown: %v", f.calls[before:])
+	}
+	if _, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || strings.Join(f.calls[before:], "|") != "select-pane -t =docket:view.{right}" {
+		t.Errorf("enter on an empty area: %v", f.calls[before:])
 	}
 }
 

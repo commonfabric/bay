@@ -8,7 +8,7 @@ const KeysHelp = `In the list:
                   areas and the row of an item that lists its bays
   J, K            move down or up ten rows
   g, G            go to the first or last row
-  Enter           move to the right side
+  Enter           move to the right side, also from an area
   Space           fold or unfold the area under the cursor
   u               unfold every area; u again puts the folds back
   /               find by name, title or bay in the levels shown; an area

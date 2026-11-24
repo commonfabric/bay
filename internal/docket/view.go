@@ -254,7 +254,11 @@ func (v *View) viewerClient() (string, error) {
 // note says what was shown when that is not the bay window itself.
 func (v *View) Show(row Row, focus bool) (note string, err error) {
 	if row.Area {
-		return "", nil
+		// An area with no item to show leaves the right side as it is.
+		if focus {
+			_, err = v.Tmux("select-pane", "-t", viewerPane)
+		}
+		return "", err
 	}
 	if err := v.ensureViewer(); err != nil {
 		return "", err

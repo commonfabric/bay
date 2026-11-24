@@ -884,7 +884,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
-| `Enter` | Move to the right side |
+| `Enter` | Move to the right side. On an area, the right side shows the area's first item |
 | `Space` | Fold or unfold the area under the cursor |
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
 | `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
