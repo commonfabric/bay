@@ -382,7 +382,7 @@ func (s *Sidebar) toggleFold() {
 
 // Span is a run of text drawn in one style. The styles are "" for plain
 // text, "area", "desk", "bay", "dim", the work states "running", "ready"
-// and "held", "question" and "blocking".
+// and "held", "question" and "blocking", and in a bar "key".
 type Span struct {
 	Text  string
 	Style string
@@ -427,7 +427,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 		// The mark that expands the sidebar is where the mark that
 		// collapses it was: at the start of the first bar.
 		lines := make([]Line, max(height, 2))
-		lines[len(lines)-2] = Line{Spans: clipSpans([]Span{{Text: "»"}}, width), Bar: true}
+		lines[len(lines)-2] = Line{Spans: clipSpans([]Span{{"»", "key"}}, width), Bar: true}
 		lines[len(lines)-1] = Line{Bar: true}
 		return lines, -1
 	}
@@ -453,24 +453,39 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	for len(lines) < body {
 		lines = append(lines, Line{})
 	}
-	// The key that changes the levels is named beside them.
-	info := "« " + levelNames[s.levels] + " (a)"
-	hint := "? keys  / find  u unfold  s state"
+	// In the bars, the names of keys and the mark that can be clicked
+	// have the style "key". The key that changes the levels is named
+	// beside them.
+	info := []Span{{"«", "key"}, {" " + levelNames[s.levels] + " (", ""}, {"a", "key"}, {")", ""}}
+	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state")
 	switch {
 	case s.typing:
-		info = "« find: " + s.filter + "_"
-		hint = "enter keeps  esc clears"
+		info = []Span{{"«", "key"}, {" find: " + s.filter + "_", ""}}
+		hint = keyHints("enter", "keeps", "esc", "clears")
 	case s.filter != "":
-		info = "« find: " + s.filter
-		hint = "esc clears  / find again  ? keys"
+		info = []Span{{"«", "key"}, {" find: " + s.filter, ""}}
+		hint = keyHints("esc", "clears", "/", "find again", "?", "keys")
 	case s.saved != nil:
-		info += ", all unfolded"
-		hint = "u puts the folds back  ? keys"
+		info = append(info, Span{", all unfolded", ""})
+		hint = keyHints("u", "puts the folds back", "?", "keys")
 	}
-	for _, text := range []string{info, hint} {
-		lines = append(lines, Line{Spans: clipSpans([]Span{{Text: text}}, width), Bar: true})
+	for _, spans := range [][]Span{info, hint} {
+		lines = append(lines, Line{Spans: clipSpans(spans, width), Bar: true})
 	}
 	return lines, s.cursor - s.top
+}
+
+// keyHints draws a reminder of keys from pairs of a key's name and what
+// the key does.
+func keyHints(pairs ...string) []Span {
+	var spans []Span
+	for k := 0; k+1 < len(pairs); k += 2 {
+		if k > 0 {
+			spans = append(spans, Span{"  ", ""})
+		}
+		spans = append(spans, Span{pairs[k], "key"}, Span{" " + pairs[k+1], ""})
+	}
+	return spans
 }
 
 // rowSpans draws one row.

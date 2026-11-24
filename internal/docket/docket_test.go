@@ -822,6 +822,19 @@ func TestRowsAreStyledByKindAndTheLastTwoLinesAreBars(t *testing.T) {
 			t.Errorf("WorkSymbol(%q, %v) = %q %q", c.work, c.hasBay, symbol, style)
 		}
 	}
+	// In the bars, the names of keys and the mark to click are styled as
+	// keys, and what each key does is not.
+	bars := map[string]string{}
+	for _, line := range lines[10:] {
+		for _, span := range line.Spans {
+			bars[strings.TrimSpace(span.Text)] = span.Style
+		}
+	}
+	for text, want := range map[string]string{"«": "key", "a": "key", "?": "key", "/": "key", "keys": "", "find": ""} {
+		if got, ok := bars[text]; !ok || got != want {
+			t.Errorf("in the bars %q is drawn as %q (present %v), want %q", text, got, ok, want)
+		}
+	}
 	// A line too long for the pane is cut inside whichever span crosses
 	// the edge, and keeps that span's style.
 	narrow, _ := s.RenderLines(12, 12)

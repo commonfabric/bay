@@ -155,9 +155,14 @@ var styles = map[string]string{
 	"heading":  "\x1b[1m",
 }
 
-// barStyle draws the lines that describe the view: light text on a grey
-// background.
-const barStyle = "\x1b[48;5;237;38;5;250m"
+// barStyle draws the lines that describe the view: light grey text on a
+// dark grey background. barKey draws the name of a key in such a line in
+// bold white, and barText returns to the bar's own text.
+const (
+	barStyle = "\x1b[48;5;237;38;5;250m"
+	barKey   = "\x1b[1;97m"
+	barText  = "\x1b[22;38;5;250m"
+)
 
 // styled returns a line with the terminal codes for its styles.
 func styled(line docket.Line) string {
@@ -391,7 +396,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 			case k == cursor:
 				b.WriteString("\x1b[7m" + text + pad + "\x1b[0m")
 			case line.Bar:
-				b.WriteString(barStyle + text + pad + "\x1b[0m")
+				b.WriteString(barStyle)
+				for _, span := range line.Spans {
+					if span.Style == "key" {
+						b.WriteString(barKey + span.Text + barText)
+					} else {
+						b.WriteString(span.Text)
+					}
+				}
+				b.WriteString(pad + "\x1b[0m")
 			default:
 				b.WriteString(styled(line))
 			}
