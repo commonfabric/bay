@@ -883,7 +883,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `Enter` | Move to the right side |
 | `Space` | Fold or unfold the area under the cursor |
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
-| `/` | Find by name, title or bay across every level; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
+| `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
 | `a` | Show more levels: front, then front + back, then front + back + deep |
 | `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
 | `b` | Collapse the list to a narrow strip |

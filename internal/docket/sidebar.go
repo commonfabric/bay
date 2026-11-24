@@ -60,17 +60,15 @@ func (s *Sidebar) SetItems(items map[string]Item) {
 	s.rebuild()
 }
 
-// shown reports whether an item is listed. A filter lists the items whose
-// name, title or bays contain it, and every item of an area whose name or
-// title contains it; inArea says the item is in such an area.
+// shown reports whether an item is listed: it is open and at one of the
+// levels shown. A filter keeps, of those, the items whose name, title or
+// bays contain it, and every item of an area whose name or title contains
+// it; inArea says the item is in such an area.
 func (s *Sidebar) shown(item Item, inArea bool) bool {
-	if item.Status != "open" {
+	if item.Status != "open" || levelRank(item.Level) > s.levels {
 		return false
 	}
-	if s.filter != "" {
-		return inArea || s.matches(item)
-	}
-	return levelRank(item.Level) <= s.levels
+	return s.filter == "" || inArea || s.matches(item)
 }
 
 // matches reports whether the filter is in the item's name, title or bays.
@@ -101,7 +99,7 @@ const (
 )
 
 // rebuild recomputes the rows. An area is shown when an item beneath it is
-// shown. A filter searches every level and ignores folds.
+// shown. A filter searches the levels shown and ignores folds.
 func (s *Sidebar) rebuild() {
 	current := ""
 	if s.cursor < len(s.rows) {
@@ -539,10 +537,10 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state")
 	switch {
 	case s.typing:
-		info = []Span{{"«", "key"}, {" find: " + s.filter + "_", ""}}
+		info = []Span{{"«", "key"}, {" " + levelNames[s.levels] + " · find: " + s.filter + "_", ""}}
 		hint = keyHints("enter", "keeps", "esc", "clears")
 	case s.filter != "":
-		info = []Span{{"«", "key"}, {" find: " + s.filter, ""}}
+		info = append(info, Span{" · find: " + s.filter, ""})
 		hint = keyHints("esc", "clears", "/", "find again", "?", "keys")
 	case s.saved != nil:
 		info = append(info, Span{", all unfolded", ""})

@@ -258,8 +258,19 @@ func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) 
 	}
 }
 
-func TestFilterSearchesEveryLevelAndEscapeRestoresTheList(t *testing.T) {
+func TestFilterSearchesTheLevelsShownAndEscapeRestoresTheList(t *testing.T) {
 	s := NewSidebar(tree())
+	s.Key("/")
+	for _, r := range "imag" {
+		s.Key(string(r))
+	}
+	// images is not at the front level.
+	if got := names(s); got != DeskRow {
+		t.Errorf("filtered rows at the front level = %s", got)
+	}
+	s.Key("esc")
+	s.Key("a")
+	s.Key("a")
 	before := names(s)
 	s.Key("/")
 	for _, r := range "imag" {

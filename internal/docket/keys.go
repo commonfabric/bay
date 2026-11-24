@@ -11,7 +11,7 @@ const KeysHelp = `In the list:
   Enter           move to the right side
   Space           fold or unfold the area under the cursor
   u               unfold every area; u again puts the folds back
-  /               find by name, title or bay across every level; an area
+  /               find by name, title or bay in the levels shown; an area
                   that matches lists all its items. The right side stays
                   as it is while you type. Enter keeps the filter and
                   shows the cursor's row. Esc clears the filter and
