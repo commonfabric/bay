@@ -297,6 +297,34 @@ func TestAMarkBringsItsRowIntoTheListAndTwoQuotesGoBack(t *testing.T) {
 	}
 }
 
+func TestMarksOfClosedOrMissingItemsAreForgottenAndTheRestAreListed(t *testing.T) {
+	items := tree()
+	s := NewSidebar(items)
+	s.SetMarks(map[string]string{"d": DeskRow, "r": "restart", "b": "sidebar loom/b19", "x": "nothing", "o": "old"})
+	lines := MarkLines(s.Marks(), items)
+	var text []string
+	for _, line := range lines {
+		text = append(text, line.String())
+	}
+	if got := strings.Join(text, "|"); !strings.Contains(got, "'r  restart  ") || !strings.Contains(got, "'x  nothing  closed or gone") ||
+		!strings.HasPrefix(got, "  'b  sidebar loom/b19") {
+		t.Errorf("mark lines = %s", got)
+	}
+	// old is closed and nothing does not exist.
+	if !s.ForgetMarks() {
+		t.Fatal("no mark was forgotten")
+	}
+	if got := s.Marks(); len(got) != 3 || got["d"] != DeskRow || got["r"] != "restart" || got["b"] != "sidebar loom/b19" {
+		t.Errorf("marks kept = %v", got)
+	}
+	if s.ForgetMarks() {
+		t.Error("a second pass forgot a mark")
+	}
+	if got := MarkLines(nil, items); len(got) != 1 || !strings.Contains(got[0].String(), "none") {
+		t.Errorf("no marks = %v", got)
+	}
+}
+
 func TestARowSaysWhenItsBayIsGone(t *testing.T) {
 	s := NewSidebar(tree())
 	s.SetMissing(map[string]bool{"loom/b7": true, "loom/b19": true})

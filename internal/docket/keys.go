@@ -22,6 +22,7 @@ const KeysHelp = `In the list:
                   the list is brought in: its areas are unfolded, its
                   level is shown, and the filter is cleared, as needed
   ''              go back to the row the last ' left
+                  A mark is forgotten when its item is closed or deleted.
   >, <            move the item under the cursor one level away from the
                   front, or one level toward it
   a               show more levels: front, then front + back, then

@@ -72,6 +72,66 @@ func (s *Sidebar) SetMarks(marks map[string]string) {
 // Marks returns the marks: for each mark, the name of its row.
 func (s *Sidebar) Marks() map[string]string { return s.marks }
 
+// ForgetMarks drops the marks whose item is closed or no longer exists,
+// and reports whether it dropped any. It drops none when there are no
+// items at all.
+func (s *Sidebar) ForgetMarks() bool {
+	dropped := false
+	if len(s.items) == 0 {
+		return false
+	}
+	for mark, name := range s.marks {
+		if !markLives(name, s.items) {
+			delete(s.marks, mark)
+			dropped = true
+		}
+	}
+	return dropped
+}
+
+// markLives reports whether a mark's row can still be reached: it is the
+// desk, or its item is open.
+func markLives(name string, items map[string]Item) bool {
+	if name == DeskRow {
+		return true
+	}
+	itemName, _, _ := strings.Cut(name, " ")
+	item, ok := items[itemName]
+	return ok && item.Status == "open"
+}
+
+// MarkLines lists the marks, one line each: the mark as it is typed to go
+// to it, the name of its row, and its item's title.
+func MarkLines(marks map[string]string, items map[string]Item) []Line {
+	var keys []string
+	for mark := range marks {
+		keys = append(keys, mark)
+	}
+	sort.Strings(keys)
+	var lines []Line
+	for _, mark := range keys {
+		name := marks[mark]
+		itemName, _, _ := strings.Cut(name, " ")
+		title := ""
+		switch item, ok := items[itemName]; {
+		case name == DeskRow:
+		case !ok || item.Status != "open":
+			title = "closed or gone"
+		default:
+			title = item.Title
+		}
+		spans := []Span{{"  ", ""}, {"'" + mark, "key"}, {"  " + name, ""}}
+		if title != "" {
+			spans = append(spans, Span{"  " + title, "dim"})
+		}
+		lines = append(lines, Line{Spans: spans})
+	}
+	if len(lines) == 0 {
+		lines = []Line{{Spans: []Span{{"  none; m and a letter marks the row under the cursor", "dim"}}}}
+	}
+	return lines
+}
+
 // Notice returns what the last key has to tell the user, or "".
 func (s *Sidebar) Notice() string { return s.notice }
 

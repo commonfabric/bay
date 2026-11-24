@@ -209,7 +209,11 @@ func newDocketKeysCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return page(keysPage())
+			stateDir, err := docket.StateDir()
+			if err != nil {
+				return err
+			}
+			return page(keysPage(stateDir))
 		},
 	}
 }
@@ -223,9 +227,33 @@ func legendText() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// keysPage is the text of the keys popup: the keys, then the legend.
-func keysPage() []docket.Line {
-	var lines []docket.Line
+// marksFile is the file that keeps the list's marks.
+func marksFile(stateDir string) string { return filepath.Join(stateDir, "view-marks.json") }
+
+// loadMarks reads the list's marks: for each mark, the name of its row.
+func loadMarks(stateDir string) map[string]string {
+	marks := map[string]string{}
+	if data, err := os.ReadFile(marksFile(stateDir)); err == nil {
+		_ = json.Unmarshal(data, &marks)
+	}
+	return marks
+}
+
+func saveMarks(stateDir string, marks map[string]string) error {
+	data, err := json.Marshal(marks)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(marksFile(stateDir), data, 0o644)
+}
+
+// keysPage is the text of the keys popup: the marks that are set, the
+// keys, then the legend.
+func keysPage(stateDir string) []docket.Line {
+	lines := []docket.Line{{Spans: []docket.Span{{Text: "Your marks:", Style: "heading"}}}}
+	items, _ := docket.LoadItems(stateDir)
+	lines = append(lines, docket.MarkLines(loadMarks(stateDir), items)...)
+	lines = append(lines, docket.Line{})
 	for _, text := range strings.Split(docket.KeysHelp, "\n") {
 		style := ""
 		if strings.HasSuffix(text, ":") && !strings.HasPrefix(text, " ") {
@@ -358,8 +386,8 @@ func showState(item string) error {
 
 // showKeys opens a popup that lists the view's keys and the meaning of
 // the list's marks.
-func showKeys() error {
-	lines := keysPage()
+func showKeys(stateDir string) error {
+	lines := keysPage(stateDir)
 	width := 0
 	for _, line := range lines {
 		width = max(width, len([]rune(line.String())))
@@ -403,14 +431,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 	}
 	sidebar := docket.NewSidebar(items)
 	sidebar.SetMissing(missingBays(items))
-	// The marks are kept in a file so that they outlast the list.
-	marksFile := filepath.Join(stateDir, "view-marks.json")
-	if data, err := os.ReadFile(marksFile); err == nil {
-		marks := map[string]string{}
-		if json.Unmarshal(data, &marks) == nil {
-			sidebar.SetMarks(marks)
+	// The marks are kept in a file so that they outlast the list. A mark
+	// whose item is closed or gone is forgotten.
+	sidebar.SetMarks(loadMarks(stateDir))
+	forgetMarks := func() {
+		if sidebar.ForgetMarks() {
+			_ = saveMarks(stateDir, sidebar.Marks())
 		}
 	}
+	forgetMarks()
 	note := ""
 	draw := func() {
 		width, height, err := term.GetSize(fd)
@@ -459,6 +488,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 		sidebar.SetItems(items)
 		sidebar.SetMissing(missingBays(items))
+		forgetMarks()
 	}
 
 	keys := make(chan string, 64)
@@ -507,7 +537,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 			var err error
 			switch action {
 			case docket.Help:
-				err = showKeys()
+				err = showKeys(stateDir)
 			case docket.State:
 				row := sidebar.Current()
 				if row.Desk {
@@ -523,8 +553,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 			case docket.ResetWidth:
 				err = view.SetWidth(docket.SidebarWidth)
 			case docket.MarksChanged:
-				data, _ := json.Marshal(sidebar.Marks())
-				err = os.WriteFile(marksFile, data, 0o644)
+				err = saveMarks(stateDir, sidebar.Marks())
 			case docket.Deeper, docket.Nearer:
 				item, level, ok := sidebar.LevelChange(action)
 				switch {
