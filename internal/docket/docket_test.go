@@ -175,6 +175,51 @@ func TestTheCursorReturnsToTheShownRowWhenItsOwnRowLeavesTheList(t *testing.T) {
 	}
 }
 
+func TestLevelKeysNameTheItemAndItsNewLevel(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	if a := s.Key(">"); a != Deeper {
+		t.Fatalf(">: %v", a)
+	}
+	if item, _, ok := s.LevelChange(Deeper); item != "" || ok {
+		t.Errorf("on the desk: %q %v", item, ok)
+	}
+	s.Key("j")
+	if item, _, ok := s.LevelChange(Deeper); item != "" || ok {
+		t.Errorf("on an area: %q %v", item, ok)
+	}
+	s.Key("j")
+	if item, level, ok := s.LevelChange(Deeper); item != "restart" || level != "back" || !ok {
+		t.Errorf("deeper from front: %s %s %v", item, level, ok)
+	}
+	if a := s.Key("<"); a != Nearer {
+		t.Fatalf("<: %v", a)
+	}
+	if item, _, ok := s.LevelChange(Nearer); item != "restart" || ok {
+		t.Errorf("nearer from front: %s %v", item, ok)
+	}
+	// A bay's row stands for its item.
+	s.Key("G")
+	if item, level, ok := s.LevelChange(Deeper); item != "sidebar" || level != "back" || !ok {
+		t.Errorf("on a bay row: %s %s %v", item, level, ok)
+	}
+}
+
+func TestTheCursorKeepsItsPlaceWhenItsRowLeavesTheList(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("n") // restart, the third row
+	items := tree()
+	gone := items["restart"]
+	gone.Level = "back"
+	items["restart"] = gone
+	s.SetItems(items)
+	// people has no other front item, so its row leaves too, and the
+	// row now in third place is the next one.
+	if cur := s.Current(); cur.Desk || cur.Name == "restart" {
+		t.Errorf("after restart left: on %s", cur.Name)
+	}
+}
+
 func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 	s := NewSidebar(tree())
 	// Lines: the desk, people, restart, tooling, sidebar and its bays.

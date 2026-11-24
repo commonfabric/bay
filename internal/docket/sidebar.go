@@ -166,11 +166,40 @@ func (s *Sidebar) rebuild() {
 		s.cursor, s.moved = shown, false
 		return
 	}
+	// With no filter the cursor stays at its place in the list, on the
+	// row that followed the one that left.
 	s.moved = true
+	at := s.cursor
 	s.cursor = 0
 	if s.filter != "" {
 		s.moveToItem(1)
+	} else if current != "" {
+		s.cursor = max(0, min(at, len(s.rows)-1))
 	}
+}
+
+// levelOrder lists the levels from the front.
+var levelOrder = []string{"front", "back", "deep"}
+
+// LevelChange returns the item under the cursor and the level that Deeper
+// or Nearer moves it to. ok is false on the desk, on an area, and when
+// the item is already at the last level in that direction.
+func (s *Sidebar) LevelChange(action Action) (item, level string, ok bool) {
+	row := s.Current()
+	if row.Desk || row.Area {
+		return "", "", false
+	}
+	item, _, _ = strings.Cut(row.Name, " ")
+	rank := levelRank(s.items[item].Level)
+	if action == Deeper {
+		rank++
+	} else {
+		rank--
+	}
+	if rank < 0 || rank >= len(levelOrder) {
+		return item, "", false
+	}
+	return item, levelOrder[rank], true
 }
 
 // rowNamed returns the index of the row with the given name, or -1.
@@ -241,6 +270,11 @@ const (
 	Collapse
 	// Expand asks the caller to give the sidebar the width FullWidth.
 	Expand
+	// Deeper and Nearer ask the caller to move the item under the cursor
+	// one level away from the front or toward it. LevelChange names the
+	// item and its new level.
+	Deeper
+	Nearer
 	// ResetWidth asks the caller to give the sidebar the width
 	// SidebarWidth.
 	ResetWidth
@@ -354,6 +388,10 @@ func (s *Sidebar) key(key string) Action {
 		return Collapse
 	case "=":
 		return ResetWidth
+	case ">":
+		return Deeper
+	case "<":
+		return Nearer
 	case "/":
 		s.typing, s.filter = true, ""
 		s.rebuild()

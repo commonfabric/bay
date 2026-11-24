@@ -16,6 +16,8 @@ const KeysHelp = `In the list:
                   as it is while you type. Enter keeps the filter and
                   shows the cursor's row. Esc clears the filter and
                   returns the cursor to the row the right side shows
+  >, <            move the item under the cursor one level away from the
+                  front, or one level toward it
   a               show more levels: front, then front + back, then
                   front + back + deep; the line above the key
                   reminder says which

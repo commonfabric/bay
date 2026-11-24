@@ -490,6 +490,22 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = view.SetWidth(sidebar.FullWidth())
 			case docket.ResetWidth:
 				err = view.SetWidth(docket.SidebarWidth)
+			case docket.Deeper, docket.Nearer:
+				item, level, ok := sidebar.LevelChange(action)
+				switch {
+				case item == "":
+					note = "only an item has a level"
+				case !ok:
+					note = item + " is already at that end"
+				default:
+					out, runErr := exec.Command("docket", "set", item, "--level", level).CombinedOutput()
+					if runErr != nil {
+						err = fmt.Errorf("docket set %s --level %s: %s", item, level, strings.TrimSpace(string(out)))
+					} else {
+						note = item + " is now " + level
+						reload()
+					}
+				}
 			}
 			if err != nil {
 				note = err.Error()
