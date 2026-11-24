@@ -369,6 +369,14 @@ func (e *Engine) closeBayState(dockName, bayID string, force bool) (closeBayResu
 }
 
 func (e *Engine) closeBayStateWithAdditionalClosingWindows(dockName, bayID string, force bool, additionalClosingWindowIDs []string) (closeBayResult, error) {
+	result, err := e.removeBayState(dockName, bayID, force, additionalClosingWindowIDs)
+	if err == nil && e.BayClosed != nil && !manifest.IsReservedBayID(bayID) {
+		e.BayClosed(dockName, bayID)
+	}
+	return result, err
+}
+
+func (e *Engine) removeBayState(dockName, bayID string, force bool, additionalClosingWindowIDs []string) (closeBayResult, error) {
 	m, err := e.LoadManifest()
 	if err != nil {
 		return closeBayResult{}, err

@@ -220,6 +220,26 @@ func TestTheCursorKeepsItsPlaceWhenItsRowLeavesTheList(t *testing.T) {
 	}
 }
 
+func TestARowSaysWhenItsBayIsGone(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetMissing(map[string]bool{"loom/b7": true, "loom/b19": true})
+	lines, _ := s.RenderLines(60, 12)
+	var text []string
+	for _, line := range lines {
+		text = append(text, line.String())
+	}
+	all := strings.Join(text, "\n")
+	// restart has the one bay loom/b7; sidebar has bay/b8 and loom/b19.
+	for _, want := range []string{"· restart", "(bay gone)", "↳ loom/b19 (gone)", "↳ bay/b8"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("no %q in:\n%s", want, all)
+		}
+	}
+	if strings.Contains(all, "↳ bay/b8 (gone)") || strings.Count(all, "(bay gone)") != 1 {
+		t.Errorf("marked a bay that exists:\n%s", all)
+	}
+}
+
 func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 	s := NewSidebar(tree())
 	// Lines: the desk, people, restart, tooling, sidebar and its bays.

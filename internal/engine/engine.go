@@ -27,6 +27,10 @@ type Engine struct {
 	// startWorker dispatches a detached prepare-worker process. Tests
 	// override this to record calls without forking.
 	startWorker func(exe string, args []string) error
+
+	// BayClosed, when set, is called after a bay other than home has been
+	// closed and before its windows are killed.
+	BayClosed func(dockName, bayID string)
 }
 
 // New creates a new Engine.

@@ -183,6 +183,36 @@ func TestBayClose_LastNonHomeCreatesHomeShell(t *testing.T) {
 	}
 }
 
+func TestBayClose_ReportsEachClosedBayButNotHomeOrARefusedClose(t *testing.T) {
+	eng, _ := testEngine(t)
+	var closed []string
+	eng.BayClosed = func(dockName, bayID string) { closed = append(closed, dockName+"/"+bayID) }
+
+	for range 2 {
+		if _, err := eng.BayNew(BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+			t.Fatalf("BayNew: %v", err)
+		}
+	}
+	if err := eng.BayClose("labs", "b9", true); err == nil {
+		t.Fatal("closing a bay that does not exist succeeded")
+	}
+	if len(closed) != 0 {
+		t.Fatalf("after a refused close: %v", closed)
+	}
+	if err := eng.BayClose("labs", "b1", true); err != nil {
+		t.Fatalf("BayClose(b1): %v", err)
+	}
+	if _, _, err := eng.BayCloseClean("labs", true, false); err != nil {
+		t.Fatalf("BayCloseClean: %v", err)
+	}
+	if err := eng.BayClose("labs", manifest.HomeBayID, true); err != nil {
+		t.Fatalf("BayClose(home): %v", err)
+	}
+	if got := strings.Join(closed, " "); got != "labs/b1 labs/b2" {
+		t.Fatalf("closed = %q, want labs/b1 labs/b2", got)
+	}
+}
+
 func TestBayCloseBatch_LastNonHomeCreatesHomeShell(t *testing.T) {
 	eng, _ := testEngine(t)
 

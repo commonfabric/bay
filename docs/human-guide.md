@@ -846,12 +846,16 @@ bays where its work happens. `bay docket view` opens a tmux session named
   | yellow `?2` | Two questions wait for your answer; on an area, the total beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
+  | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
 
   The two shaded lines at the bottom describe the view and are not rows. The
   upper one says which levels are shown, or shows the filter. The lower one
   reminds of keys.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
+  Closing a bay with `bay close` takes the bay off the docket items that
+  name it and notes it in each item's history. `docket doctor` lists the
+  open items whose bay does not exist or has no window.
   An area shows what the first item listed in the area shows, whether or
   not the area is folded.
   When the cursor is on an area, or on an item that lists its bays, the

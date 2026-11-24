@@ -156,6 +156,25 @@ var styles = map[string]string{
 	"heading":  "\x1b[1m",
 }
 
+// missingBays returns the bays the items name, as dock/bay, that bay's
+// own list does not hold. It returns none when that list cannot be read.
+func missingBays(items map[string]docket.Item) map[string]bool {
+	missing := map[string]bool{}
+	m, err := manifest.Load(bayPaths().ManifestFile)
+	if err != nil {
+		return missing
+	}
+	for _, item := range items {
+		for _, ref := range item.BayRefs() {
+			dockName, bayID, _ := strings.Cut(ref, "/")
+			if dock := m.FindDock(dockName); dock == nil || dock.FindBayByID(bayID) == nil {
+				missing[ref] = true
+			}
+		}
+	}
+	return missing
+}
+
 // barStyle draws the lines that describe the view: light grey text on a
 // dark grey background. barKey draws the name of a key in such a line in
 // bold white, and barText returns to the bar's own text.
@@ -428,6 +447,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 			return
 		}
 		sidebar.SetItems(items)
+		sidebar.SetMissing(missingBays(items))
 	}
 
 	keys := make(chan string, 64)

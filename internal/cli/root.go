@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/engine"
@@ -58,7 +61,30 @@ func newEngine() (*engine.Engine, error) {
 	t := dockTmux{Interface: tmuxpkg.NewReal(), manifestFile: p.ManifestFile}
 	g := gitpkg.NewReal()
 
-	return engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g), nil
+	eng := engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g)
+	eng.BayClosed = tellDocketBayClosed
+	return eng, nil
+}
+
+// tellDocketBayClosed takes a closed bay off the docket items that name
+// it. It does nothing when docket is not installed. Docket's items name
+// the bays of the user's own bay state, so it also does nothing in a test
+// and when XDG_DATA_HOME points bay at other state.
+func tellDocketBayClosed(dockName, bayID string) {
+	if testing.Testing() {
+		return
+	}
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		home, err := os.UserHomeDir()
+		if err != nil || filepath.Clean(dir) != filepath.Join(home, ".local", "share") {
+			return
+		}
+	}
+	docket, err := exec.LookPath("docket")
+	if err != nil {
+		return
+	}
+	_ = exec.Command(docket, "gone", "bay", dockName+"/"+bayID).Run()
 }
 
 const bayHelpTemplate = `Bay — bay management for tmux and git worktrees.

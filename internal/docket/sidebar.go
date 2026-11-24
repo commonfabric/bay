@@ -23,6 +23,7 @@ type Row struct {
 	Blocking bool // an open question holds up all work
 	Bays     []string
 	Bay      string // set on a row that stands for one bay of an item with several
+	Gone     bool   // none of the row's bays exists
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
@@ -35,7 +36,8 @@ type Sidebar struct {
 	filter   string
 	typing   bool // the filter is being typed
 	rows     []Row
-	first    map[string]Row // for each area row, the first row beneath it that is not an area
+	missing  map[string]bool // the bays, as dock/bay, that do not exist
+	first    map[string]Row  // for each area row, the first row beneath it that is not an area
 	cursor   int
 	showing  string // the name of the row the right side was last asked to show
 	moved    bool   // the cursor's row left the list, and the cursor is on another row
@@ -51,6 +53,12 @@ func NewSidebar(items map[string]Item) *Sidebar {
 	s := &Sidebar{folded: map[string]bool{}}
 	s.SetItems(items)
 	return s
+}
+
+// SetMissing replaces the set of bays, as dock/bay, that do not exist.
+func (s *Sidebar) SetMissing(missing map[string]bool) {
+	s.missing = missing
+	s.rebuild()
 }
 
 // SetItems replaces the items. The cursor stays on the row it was on when
@@ -136,12 +144,16 @@ func (s *Sidebar) rebuild() {
 			if s.shown(item, inArea) {
 				n, b := item.OpenQuestions()
 				bays := item.BayRefs()
+				gone := len(bays) > 0
+				for _, ref := range bays {
+					gone = gone && s.missing[ref]
+				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
-					Level: item.Level, Open: n, Blocking: b, Bays: bays})
+					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone})
 				if len(bays) > 1 {
 					for _, ref := range bays {
 						out = append(out, Row{Name: item.Name + " " + ref, Title: item.Title,
-							Depth: depth + 1, Bays: []string{ref}, Bay: ref})
+							Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref]})
 					}
 				}
 				open, blocking = open+n, blocking || b
@@ -636,6 +648,8 @@ func rowSpans(r Row) []Span {
 	switch {
 	case r.Desk:
 		return []Span{{"◆ " + r.Name, "desk"}}
+	case r.Bay != "" && r.Gone:
+		return []Span{{indent + "↳ " + r.Bay + " (gone)", "dim"}}
 	case r.Bay != "":
 		return []Span{{indent + "↳ " + r.Bay, "bay"}}
 	case r.Area:
@@ -645,8 +659,11 @@ func rowSpans(r Row) []Span {
 		}
 		return append([]Span{{indent + fold + " " + r.Title, "area"}}, marks...)
 	}
-	symbol, style := WorkSymbol(r.Work, len(r.Bays) > 0)
+	symbol, style := WorkSymbol(r.Work, len(r.Bays) > 0 && !r.Gone)
 	spans := append([]Span{{indent, ""}, {symbol, style}, {" " + r.Name, ""}}, marks...)
+	if r.Gone {
+		spans = append(spans, Span{" (bay gone)", "dim"})
+	}
 	if r.Level != "front" && r.Level != "" {
 		spans = append(spans, Span{" (" + r.Level + ")", "dim"})
 	}
@@ -688,6 +705,7 @@ func Legend() []Line {
 		entry(Span{"", ""}, "on an area, the total beneath it"),
 		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
 		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
+		entry(Span{"(bay gone)", "dim"}, "the item's bay no longer exists"),
 		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),
 		entry(Span{"", ""}, "cursor is on its area or its item"),
 	}
