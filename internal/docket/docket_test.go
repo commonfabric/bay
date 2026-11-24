@@ -315,11 +315,25 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("bind-key -T docket M-? send-keys -t =docket:view.{left} F8") != 1 {
 		t.Errorf("the state key is not bound: %v", f.calls)
 	}
-	if f.ran("bind-key -T docket M-B if-shell -F -t =docket:view.{left} #{e|<|:#{pane_width},10} "+
-		"resize-pane -t '=docket:view.{left}' -x 36 "+
-		"resize-pane -t '=docket:view.{left}' -x 2 ; select-pane -t '=docket:view.{right}'") != 1 {
-		t.Errorf("the collapse key is not bound: %v", f.calls)
+	for _, want := range []string{
+		"bind-key -T docket M-B send-keys -t =docket:view.{left} F11",
+		"bind-key -T docket MouseDrag1Border resize-pane -M",
+		"bind-key -T docket DoubleClick1Border resize-pane -t =docket:view.{left} -x 36",
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not bound: %q in %v", want, f.calls)
+		}
 	}
+	// The width is set when the panes are started and not again, so a
+	// width chosen later is kept.
+	if f.ran("resize-pane -t =docket:view.{left} -x 36") != 1 {
+		t.Errorf("first setup did not set the width once: %v", f.calls)
+	}
+	defer func() {
+		if f.ran("resize-pane") != 1 {
+			t.Errorf("a later setup changed the width: %v", f.calls)
+		}
+	}()
 	if f.ran("unbind-key -a -T docket") != 1 || f.ran("unbind-key") != 1 {
 		t.Errorf("the view's key table was not emptied, or another was: %v", f.calls)
 	}
@@ -688,8 +702,27 @@ func TestCollapseAndExpandByKeyAndByClick(t *testing.T) {
 		t.Error("a full-width list reports that it is collapsed")
 	}
 	lines, cursor := s.Render(CollapsedWidth, 20)
-	if len(lines) != 20 || lines[0] != "»" || strings.TrimSpace(strings.Join(lines[1:], "")) != "" || cursor != -1 {
+	// The mark that expands is on the line where the mark that collapses was.
+	if len(lines) != 20 || lines[18] != "»" || strings.TrimSpace(strings.Join(lines[:18], "")+lines[19]) != "" || cursor != -1 {
 		t.Errorf("collapsed: %q, cursor %d", lines, cursor)
+	}
+	if a := s.Key("b"); a != Expand {
+		t.Errorf("b on a collapsed list: %v", a)
+	}
+	if a := s.Key("f11"); a != Expand {
+		t.Errorf("f11 on a collapsed list: %v", a)
+	}
+	// Expanding gives back the width the list had, not the first width.
+	if s.FullWidth() != 36 {
+		t.Errorf("FullWidth = %d", s.FullWidth())
+	}
+	s.Render(50, 20)
+	s.Render(CollapsedWidth, 20)
+	if s.FullWidth() != 50 {
+		t.Errorf("FullWidth after a wider list = %d", s.FullWidth())
+	}
+	if a := s.Key("="); a != ResetWidth {
+		t.Errorf("=: %v", a)
 	}
 	if !s.Collapsed() {
 		t.Error("a narrow list does not report that it is collapsed")

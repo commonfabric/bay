@@ -12,7 +12,7 @@ import (
 // arrived. The caller puts those bytes in front of its next read.
 //
 // A printable character is named by itself. The other names are "enter",
-// "esc", "backspace", "up", "down", "ctrl-c" and "f5" to "f10". A press of the left mouse
+// "esc", "backspace", "up", "down", "ctrl-c" and "f5" to "f11". A press of the left mouse
 // button is "click:", its line, ":" and its column, both counted from 0. The wheel is "wheelup"
 // or "wheeldown". Every other key and mouse report produces no name.
 func ParseKeys(input string) (keys []string, rest string) {
@@ -93,10 +93,10 @@ func parseEscape(input string) (name string, used int, complete bool) {
 	return "", 1 + size, true
 }
 
-// functionKey names F5 to F10, which the view's tmux keys send, from the
+// functionKey names F5 to F11, which the view's tmux keys send, from the
 // number a terminal reports for them.
 func functionKey(number string) string {
-	return map[string]string{"15": "f5", "17": "f6", "18": "f7", "19": "f8", "20": "f9", "21": "f10"}[number]
+	return map[string]string{"15": "f5", "17": "f6", "18": "f7", "19": "f8", "20": "f9", "21": "f10", "23": "f11"}[number]
 }
 
 func arrow(final byte) string {

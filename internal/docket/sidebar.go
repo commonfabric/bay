@@ -40,6 +40,7 @@ type Sidebar struct {
 	body     int  // rows the last Render had room for
 	scrolled bool // the wheel moved the rows since the last key
 	width    int  // columns the last Render had
+	full     int  // columns the last Render had when it was not collapsed
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -146,6 +147,15 @@ func (s *Sidebar) rebuild() {
 // Collapsed reports whether the last Render drew the sidebar collapsed.
 func (s *Sidebar) Collapsed() bool { return s.width > 0 && s.width < collapsedBelow }
 
+// FullWidth is the width to give the sidebar when it is expanded: the
+// width it last had while not collapsed, or SidebarWidth.
+func (s *Sidebar) FullWidth() int {
+	if s.full >= collapsedBelow {
+		return s.full
+	}
+	return SidebarWidth
+}
+
 // Rows returns the rows in display order.
 func (s *Sidebar) Rows() []Row { return s.rows }
 
@@ -170,8 +180,11 @@ const (
 	State
 	// Collapse asks the caller to shrink the sidebar to CollapsedWidth.
 	Collapse
-	// Expand asks the caller to give the sidebar its full width again.
+	// Expand asks the caller to give the sidebar the width FullWidth.
 	Expand
+	// ResetWidth asks the caller to give the sidebar the width
+	// SidebarWidth.
+	ResetWidth
 )
 
 // move steps the cursor by delta rows and reports whether it moved.
@@ -217,7 +230,7 @@ func (s *Sidebar) Key(key string) Action {
 	s.scrolled = false
 	// The view's tmux keys send function keys, which act the same whether
 	// or not a filter is being typed.
-	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s", "f9": "n", "f10": "p"}[key]
+	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s", "f9": "n", "f10": "p", "f11": "b"}[key]
 	if sent != "" {
 		key = sent
 	}
@@ -271,7 +284,12 @@ func (s *Sidebar) Key(key string) Action {
 	case "s":
 		return State
 	case "b":
+		if s.Collapsed() {
+			return Expand
+		}
 		return Collapse
+	case "=":
+		return ResetWidth
 	case "/":
 		s.typing, s.filter = true, ""
 		s.rebuild()
@@ -401,15 +419,19 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 // are shown, or shows the filter, and the other reminds of keys. The
 // second result is the index of the cursor's line, which is outside the
 // rows when the wheel has scrolled the cursor's row out of sight. A
-// sidebar narrower than collapsedBelow is drawn as a mark on the first
-// line and nothing else.
+// sidebar narrower than collapsedBelow is drawn as the two bars with a mark
+// on the first of them, and no rows.
 func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	s.width = width
 	if width < collapsedBelow {
-		lines := make([]Line, max(height, 1))
-		lines[0] = Line{Spans: clipSpans([]Span{{"»", "dim"}}, width)}
+		// The mark that expands the sidebar is where the mark that
+		// collapses it was: at the start of the first bar.
+		lines := make([]Line, max(height, 2))
+		lines[len(lines)-2] = Line{Spans: clipSpans([]Span{{Text: "»"}}, width), Bar: true}
+		lines[len(lines)-1] = Line{Bar: true}
 		return lines, -1
 	}
+	s.full = width
 	body := height - 2
 	if body < 1 {
 		body = 1

@@ -17,9 +17,12 @@ const KeysHelp = `In the list:
   s               show the item's state, questions and what it waits on;
                   q, Esc or Enter closes it
   b               collapse the list to a narrow strip
+  =               give the list its first width again
   click           go to the row; on an area, also fold or unfold it;
-                  on « at the bottom, collapse the list; on the
-                  strip, expand it
+                  on « at the bottom, collapse the list; on » in
+                  the same place, expand it
+  drag            on the line between the panes, change the list's
+                  width; a double click there gives the first width
   wheel           scroll the list; the cursor stays on its row
   ?               show this list
   q               leave the view; it keeps running

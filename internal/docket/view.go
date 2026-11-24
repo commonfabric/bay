@@ -119,7 +119,6 @@ func (v *View) Setup() error {
 	// The keys that act on the list from either pane send it function
 	// keys. They work while the list is collapsed, and do nothing while a
 	// pane of the view is zoomed.
-	narrow := fmt.Sprintf("#{e|<|:#{pane_width},%d}", collapsedBelow)
 	hidden := "#{window_zoomed_flag}"
 	list := func(key string) []string {
 		return []string{"if-shell", "-F", "-t", sidebarPane, hidden, "", "send-keys -t '" + sidebarPane + "' " + key}
@@ -135,9 +134,11 @@ func (v *View) Setup() error {
 		// Show the chosen item's state.
 		{"M-?", "send-keys", "-t", sidebarPane, "F8"},
 		// Collapse the list and move to the right side, or expand it.
-		{"M-B", "if-shell", "-F", "-t", sidebarPane, narrow,
-			fmt.Sprintf("resize-pane -t '%s' -x %d", sidebarPane, SidebarWidth),
-			fmt.Sprintf("resize-pane -t '%s' -x %d ; select-pane -t '%s'", sidebarPane, CollapsedWidth, viewerPane)},
+		{"M-B", "send-keys", "-t", sidebarPane, "F11"},
+		// Dragging the line between the panes changes the list's width,
+		// and a double click on that line gives it the first width again.
+		{"MouseDrag1Border", "resize-pane", "-M"},
+		{"DoubleClick1Border", "resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(SidebarWidth)},
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
 		// Leave the view: go back to the session the terminal came from,
 		// or detach when it came from outside tmux.
@@ -163,16 +164,16 @@ func (v *View) Setup() error {
 // Collapse shrinks the sidebar to CollapsedWidth and moves the keyboard to
 // the right pane.
 func (v *View) Collapse() error {
-	if _, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(CollapsedWidth)); err != nil {
+	if err := v.SetWidth(CollapsedWidth); err != nil {
 		return err
 	}
 	_, err := v.Tmux("select-pane", "-t", viewerPane)
 	return err
 }
 
-// Expand gives the sidebar its full width.
-func (v *View) Expand() error {
-	_, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(SidebarWidth))
+// SetWidth gives the sidebar a width in columns.
+func (v *View) SetWidth(width int) error {
+	_, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(width))
 	return err
 }
 
@@ -205,8 +206,9 @@ func (v *View) ensureViewer() error {
 			return fmt.Errorf("start the sidebar: %w", err)
 		}
 	}
-	_, err = v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(SidebarWidth))
-	return err
+	// A pane was started, so the sidebar gets its first width. A width
+	// chosen later is kept.
+	return v.SetWidth(SidebarWidth)
 }
 
 // viewerClient returns the tty of the client running in the right pane.

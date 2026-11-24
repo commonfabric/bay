@@ -883,7 +883,9 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `a` | Show more levels: front, then front + back, then front + back + deep |
 | `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
 | `b` | Collapse the list to a narrow strip |
-| Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on the collapsed strip, expand it |
+| `=` | Give the list its first width again |
+| Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on `»` in the same place, or anywhere on the collapsed strip, expand it |
+| Drag | On the line between the panes, change the list's width. Expanding a collapsed list gives it the width it had. A double click on that line gives the first width again |
 | Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
 | `?` | Show the keys |
 | `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |

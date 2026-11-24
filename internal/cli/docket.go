@@ -143,7 +143,7 @@ func newDocketSidebarCmd() *cobra.Command {
 
 // styles maps a docket.Span style to the terminal codes that draw it.
 var styles = map[string]string{
-	"area":     "\x1b[1;38;5;75m",
+	"area":     "\x1b[1;38;5;111m",
 	"desk":     "\x1b[35m",
 	"bay":      "\x1b[36m",
 	"dim":      "\x1b[2m",
@@ -468,7 +468,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 			case docket.Collapse:
 				err = view.Collapse()
 			case docket.Expand:
-				err = view.Expand()
+				err = view.SetWidth(sidebar.FullWidth())
+			case docket.ResetWidth:
+				err = view.SetWidth(docket.SidebarWidth)
 			}
 			if err != nil {
 				note = err.Error()
