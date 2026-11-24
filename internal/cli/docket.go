@@ -400,6 +400,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		return err
 	}
 	sidebar := docket.NewSidebar(items)
+	sidebar.SetMissing(missingBays(items))
 	note := ""
 	draw := func() {
 		width, height, err := term.GetSize(fd)
