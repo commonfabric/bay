@@ -263,7 +263,7 @@ func (s *Sidebar) matches(item Item) bool {
 	return strings.Contains(text, strings.ToLower(s.filter))
 }
 
-// levelRank orders the levels: front 0, back 1, deep and any other value 2.
+// levelRank orders the levels: front 0, back 1, shelved and any other value 2.
 func levelRank(level string) int {
 	switch level {
 	case "front", "":
@@ -275,7 +275,7 @@ func levelRank(level string) int {
 }
 
 // levelNames says which levels each setting of Sidebar.levels shows.
-var levelNames = []string{"front", "front + back", "front + back + deep"}
+var levelNames = []string{"front", "front + back", "front + back + shelved"}
 
 // CollapsedWidth is the width of the sidebar's pane while it is collapsed.
 // A pane narrower than collapsedBelow is drawn as collapsed.
@@ -369,7 +369,7 @@ func (s *Sidebar) rebuild() {
 }
 
 // levelOrder lists the levels from the front.
-var levelOrder = []string{"front", "back", "deep"}
+var levelOrder = []string{"front", "back", "shelved"}
 
 // LevelChange returns the item under the cursor and the level that Deeper
 // or Nearer moves it to. ok is false on the desk, on an area, and when

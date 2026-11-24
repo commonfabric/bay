@@ -26,7 +26,7 @@ const KeysHelp = `In the list:
   >, <            move the item under the cursor one level away from the
                   front, or one level toward it
   a               show more levels: front, then front + back, then
-                  front + back + deep; the line above the key
+                  front + back + shelved; the line above the key
                   reminder says which
   s               show the item's state, questions and what it waits on;
                   q, Esc or Enter closes it

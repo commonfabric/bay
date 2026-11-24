@@ -922,12 +922,12 @@ func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
 func TestLevelsCycleAndTheHeadingSaysWhichAreShown(t *testing.T) {
 	items := tree()
 	items["later"] = Item{Name: "later", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "back", Created: "1"}
-	items["someday"] = Item{Name: "someday", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "deep", Created: "2"}
+	items["someday"] = Item{Name: "someday", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "shelved", Created: "2"}
 	s := NewSidebar(items)
 	for _, c := range []struct{ heading, has, lacks string }{
 		{"« front (a)", "restart", "later someday"},
 		{"« front + back (a)", "restart later", "someday"},
-		{"« front + back + deep (a)", "restart later someday", ""},
+		{"« front + back + shelved (a)", "restart later someday", ""},
 		{"« front (a)", "restart", "later someday"},
 	} {
 		lines, _ := s.Render(40, 30)

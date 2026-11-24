@@ -891,7 +891,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
 | `m` then a letter | Mark the row under the cursor with that letter or digit. The mark is drawn at the end of the row as `'a`. On the row that has the mark, `m` and the letter take it off. Marks are kept when the view is closed. A mark is forgotten when its item is closed or deleted. The `?` screen lists the marks that are set, above its legend |
 | `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `''` goes back to the row the last jump left |
-| `a` | Show more levels: front, then front + back, then front + back + deep |
+| `a` | Show more levels: front, then front + back, then front + back + shelved |
 | `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
 | `b` | Collapse the list to a narrow strip |
 | `=` | Give the list its first width again |

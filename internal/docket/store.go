@@ -24,7 +24,7 @@ type Item struct {
 	Parent    *string    `json:"parent"`
 	Order     []string   `json:"order"`
 	Status    string     `json:"status"` // "open" or "closed"
-	Level     string     `json:"level"`  // "front", "back" or "deep"
+	Level     string     `json:"level"`  // "front", "back" or "shelved"
 	Work      string     `json:"work"`   // "running", "ready" or "held"
 	Created   string     `json:"created"`
 	Questions []Question `json:"questions"`
