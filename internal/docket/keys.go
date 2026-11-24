@@ -3,6 +3,7 @@ package docket
 // KeysHelp lists every key of the docket view.
 const KeysHelp = `In the list:
   j, k            move down or up one row; the right side shows it
+  n, p            move to the next or previous item, passing over areas
   J, K            move down or up ten rows
   g, G            go to the first or last row
   Enter           move to the right side
@@ -25,14 +26,16 @@ const KeysHelp = `In the list:
 
 From either side:
   Option-J, Option-K   move down or up one row
+  Option-N, Option-P   move to the next or previous item, passing over
+                       areas
   Option-Space         fold or unfold the area under the cursor
   Option-?             show the item's state, as s does
   Option-B             collapse or expand the list
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-J, Option-K and Option-Space work while the list is collapsed, and
-the item's name is then shown for a moment. They do nothing while a pane is
+Option-J, -K, -N, -P and Option-Space work while the list is collapsed, and
+the row's name is then shown for a moment. They do nothing while a pane is
 zoomed.
 Every other key, including the tmux prefix, goes to the window on the
 right.`

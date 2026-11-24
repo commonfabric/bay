@@ -92,9 +92,15 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 
 func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) {
 	s := NewSidebar(tree())
-	// The removed item-step keys do nothing.
-	if a := s.Key("n"); a != None || !s.Current().Desk {
-		t.Errorf("n: %v on %s", a, s.Current().Name)
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	// n and p pass over areas; f9 and f10, which tmux sends, do the same.
+	for _, c := range []struct{ key, want string }{{"n", "restart"}, {"f9", "sidebar"}, {"p", "restart"}, {"f10", DeskRow}} {
+		if a := s.Key(c.key); a != Show || s.Current().Name != c.want {
+			t.Errorf("%s: %v on %s, want %s", c.key, a, s.Current().Name, c.want)
+		}
+	}
+	if a := s.Key("p"); a != None || !s.Current().Desk {
+		t.Errorf("p at the top: %v on %s", a, s.Current().Name)
 	}
 	if a := s.Key("?"); a != Help {
 		t.Errorf("?: %v", a)
@@ -297,7 +303,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l F5", "M-h F6", "M-J F5", "M-K F6", "M-Space F7"} {
+	for _, key := range []string{"M-l F5", "M-h F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys does nothing while a pane of the view is
 		// zoomed. It works while the list is collapsed.
@@ -576,7 +582,8 @@ func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
 		{"\x1b[<0;5;7M", "click:6:4", ""},
 		{"\x1b[<0;5;7m", "", ""}, // the button's release
 		{"\x1b[<64;5;7M" + wheel, "wheelup wheeldown", ""},
-		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""}, // another button, another key, Option-j
+		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""},                // another button, another key, Option-j
+		{"\x1b[15~\x1b[20~\x1b[21~\x1b[24~", "f5 f9 f10", ""}, // F12 has no name
 		// A report cut at each point leaves no stray keys.
 		{wheel + wheel[:1], "wheeldown", wheel[:1]},
 		{wheel + wheel[:2], "wheeldown", wheel[:2]},

@@ -143,7 +143,7 @@ func newDocketSidebarCmd() *cobra.Command {
 
 // styles maps a docket.Span style to the terminal codes that draw it.
 var styles = map[string]string{
-	"area":     "\x1b[1;34m",
+	"area":     "\x1b[1;38;5;75m",
 	"desk":     "\x1b[35m",
 	"bay":      "\x1b[36m",
 	"dim":      "\x1b[2m",
@@ -495,7 +495,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 				// A collapsed list cannot show where the cursor is, so
 				// the row's name is shown for a moment.
 				if sidebar.Collapsed() {
-					_, _ = realTmux("display-message", "-d", "1500", sidebar.Current().Name)
+					row := sidebar.Current()
+					name := row.Name
+					if row.Area {
+						name = "area: " + row.Title
+					}
+					_, _ = realTmux("display-message", "-d", "1500", name)
 				}
 			}
 		case <-resized:

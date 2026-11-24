@@ -184,6 +184,18 @@ func (s *Sidebar) move(delta int) bool {
 	return true
 }
 
+// moveToItem moves the cursor to the next row in the direction of delta
+// that is not an area, and reports whether there was one.
+func (s *Sidebar) moveToItem(delta int) bool {
+	for k := s.cursor + delta; k >= 0 && k < len(s.rows); k += delta {
+		if !s.rows[k].Area {
+			s.cursor = k
+			return true
+		}
+	}
+	return false
+}
+
 // JumpRows is how many rows J and K move the cursor.
 const JumpRows = 10
 
@@ -205,7 +217,7 @@ func (s *Sidebar) Key(key string) Action {
 	s.scrolled = false
 	// The view's tmux keys send function keys, which act the same whether
 	// or not a filter is being typed.
-	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s"}[key]
+	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s", "f9": "n", "f10": "p"}[key]
 	if sent != "" {
 		key = sent
 	}
@@ -219,6 +231,10 @@ func (s *Sidebar) Key(key string) Action {
 		}
 	case "k", "up":
 		if s.move(-1) {
+			return Show
+		}
+	case "n", "p":
+		if s.moveToItem(map[string]int{"n": 1, "p": -1}[key]) {
 			return Show
 		}
 	case "J", "K":

@@ -129,6 +129,8 @@ func (v *View) Setup() error {
 		append([]string{"M-h"}, list("F6")...),
 		append([]string{"M-J"}, list("F5")...),
 		append([]string{"M-K"}, list("F6")...),
+		append([]string{"M-N"}, list("F9")...),
+		append([]string{"M-P"}, list("F10")...),
 		append([]string{"M-Space"}, list("F7")...),
 		// Show the chosen item's state.
 		{"M-?", "send-keys", "-t", sidebarPane, "F8"},

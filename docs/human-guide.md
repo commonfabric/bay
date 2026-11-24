@@ -837,7 +837,7 @@ bays where its work happens. `bay docket view` opens a tmux session named
 
   | Mark | Meaning |
   |------|---------|
-  | `▾` / `▸` in bold blue | An area, unfolded / folded |
+  | `▾` / `▸` in bold light blue | An area, unfolded / folded |
   | green `●` | The item's agent is working |
   | yellow `○` | The item's agent is waiting for its next instruction |
   | red `◌` | The item's work is held until something else happens |
@@ -873,6 +873,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
+| `n` / `p` | Move to the next / previous item, passing over areas |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side |
@@ -892,6 +893,7 @@ Keys from either side of the `docket` session:
 | Key | Action |
 |-----|--------|
 | `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
+| `Option+N` / `Option+P` | Move to the next / previous item, passing over areas |
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
