@@ -637,8 +637,37 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 			t.Errorf("a later setup changed the width: %v", f.calls)
 		}
 	}()
-	if f.ran("unbind-key -a -T docket") != 1 || f.ran("unbind-key") != 1 {
-		t.Errorf("the view's key table was not emptied, or another was: %v", f.calls)
+	emptied := 0
+	for _, c := range f.calls {
+		if c == "unbind-key -a -T docket" {
+			emptied++
+		}
+	}
+	// The other two are the bookmark tables, each emptied by the command
+	// that fills it.
+	if emptied != 1 || f.ran("unbind-key") != 3 {
+		t.Errorf("the view's key tables were not emptied once each")
+	}
+	for _, want := range []string{
+		"bind-key -T docket M-' switch-client -T docket-mark-go",
+		"bind-key -T docket M-M switch-client -T docket-mark-set",
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("bookmark key not bound as %q", want)
+		}
+	}
+	for _, want := range []string{
+		"bind-key -T docket-mark-go a send-keys -t =docket:view.{left} F12 ' a ;",
+		"; bind-key -T docket-mark-go ' send-keys -t =docket:view.{left} F12 ' '",
+		"; bind-key -T docket-mark-set 9 send-keys -t =docket:view.{left} F12 m 9",
+	} {
+		found := false
+		for _, c := range f.calls {
+			found = found || strings.Contains(c, want)
+		}
+		if !found {
+			t.Errorf("bookmark table lacks %q", want)
+		}
 	}
 	leaveBound := false
 	defer func() {
@@ -653,8 +682,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 		if c == "bind-key -T docket M-D if-shell -F #{client_last_session} switch-client -l detach-client" {
 			leaveBound = true
 		}
-		if strings.HasPrefix(c, "bind-key") && !strings.HasPrefix(c, "bind-key -T docket ") {
-			t.Errorf("a key was bound outside the docket table: %s", c)
+		if strings.HasPrefix(c, "bind-key") && !strings.HasPrefix(c, "bind-key -T docket ") &&
+			!strings.HasPrefix(c, "bind-key -T docket-mark-") {
+			t.Errorf("a key was bound outside the docket tables: %s", c)
 		}
 		if strings.HasPrefix(c, "set-option") && !strings.Contains(c, "-t =docket") {
 			t.Errorf("an option was set outside the docket sessions: %s", c)
@@ -904,8 +934,8 @@ func TestParseKeysNamesKeysAndKeepsAnUnfinishedKeyForTheNextRead(t *testing.T) {
 		{"\x1b[<0;5;7M", "click:6:4", ""},
 		{"\x1b[<0;5;7m", "", ""}, // the button's release
 		{"\x1b[<64;5;7M" + wheel, "wheelup wheeldown", ""},
-		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""},                // another button, another key, Option-j
-		{"\x1b[15~\x1b[20~\x1b[21~\x1b[24~", "f5 f9 f10", ""}, // F12 has no name
+		{"\x1b[<2;5;7M\x1b[1;5C\x1bj", "", ""},                           // another button, another key, Option-j
+		{"\x1b[15~\x1b[20~\x1b[21~\x1b[24~\x1b[2~", "f5 f9 f10 f12", ""}, // Insert has no name
 		// A report cut at each point leaves no stray keys.
 		{wheel + wheel[:1], "wheeldown", wheel[:1]},
 		{wheel + wheel[:2], "wheeldown", wheel[:2]},
@@ -1207,5 +1237,39 @@ func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
 	}
 	if f.ran("resize-pane -t =docket:view.{left} -x 52") != 1 || f.ran("resize-pane -t =docket:view.{left} -x 36") != 0 {
 		t.Errorf("sidebar not given the saved width: %v", f.calls)
+	}
+}
+
+func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("n")
+	if a := s.Key("n"); a != Show {
+		t.Fatalf("n: %v", a)
+	}
+	shown := s.Current().Name
+	// A filter is being typed; while it is, the cursor's row is not shown.
+	for _, key := range []string{"/", "p", "e"} {
+		s.Key(key)
+	}
+	// Option-M a: F12, m, a. The mark goes on the row the right side shows.
+	for _, key := range []string{"f12", "m"} {
+		if a := s.Key(key); a != None {
+			t.Fatalf("%s: %v", key, a)
+		}
+	}
+	if a := s.Key("a"); a != MarksChanged || s.Marks()["a"] != shown {
+		t.Fatalf("Option-M a: %v, marks %v, shown %s", a, s.Marks(), shown)
+	}
+	// Option-' a: F12, ', a.
+	s.Key("f12")
+	s.Key("'")
+	if a := s.Key("a"); a != Show || s.Current().Name != shown {
+		t.Fatalf("Option-' a: %v on %s", a, s.Current().Name)
+	}
+	// Without F12, a quote typed into a filter is filter text.
+	s.Key("/")
+	s.Key("'")
+	if a := s.Key("a"); a == Show || s.pending != "" {
+		t.Errorf("a quote in a filter named a mark: %v", a)
 	}
 }

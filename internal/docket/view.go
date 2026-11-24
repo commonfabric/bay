@@ -137,6 +137,10 @@ func (v *View) Setup() error {
 		{"M-?", "send-keys", "-t", sidebarPane, "F8"},
 		// Collapse the list and move to the right side, or expand it.
 		{"M-B", "send-keys", "-t", sidebarPane, "F11"},
+		// Bookmarks: the next key is read in a table of its own, which
+		// sends the list F12, the list's key and the mark.
+		{"M-'", "switch-client", "-T", markGoTable, "\\;", "display-message", "go to a mark: press its letter, or ' to go back"},
+		{"M-M", "switch-client", "-T", markSetTable, "\\;", "display-message", "mark the shown row: press a letter"},
 		// Dragging the line between the panes changes the list's width,
 		// and a double click on that line gives it the first width again.
 		{"MouseDrag1Border", "resize-pane", "-M"},
@@ -158,6 +162,43 @@ func (v *View) Setup() error {
 	for _, b := range binds {
 		if _, err := v.Tmux(append([]string{"bind-key", "-T", KeyTable}, b...)...); err != nil {
 			return fmt.Errorf("bind %s: %w", b[0], err)
+		}
+	}
+	return v.bindMarks()
+}
+
+// The key tables that read the mark after Option-' and Option-M.
+const (
+	markGoTable  = "docket-mark-go"
+	markSetTable = "docket-mark-set"
+)
+
+// markKeys are the keys that can name a mark.
+const markKeys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// bindMarks empties and fills the two bookmark tables. Each table is filled
+// by one tmux command. Emptying it is a command of its own: tmux drops
+// keys bound in the same command that empties their table. A key that is
+// not bound in the table ends the wait and does nothing.
+func (v *View) bindMarks() error {
+	for _, t := range []struct{ table, key string }{{markGoTable, "'"}, {markSetTable, "m"}} {
+		if _, err := v.Tmux("unbind-key", "-q", "-a", "-T", t.table); err != nil {
+			return fmt.Errorf("clear the keys of %s: %w", t.table, err)
+		}
+		keys := markKeys
+		if t.key == "'" {
+			// ' after Option-' returns to the row the last jump left.
+			keys += "'"
+		}
+		var args []string
+		for _, k := range keys {
+			if args != nil {
+				args = append(args, ";")
+			}
+			args = append(args, "bind-key", "-T", t.table, string(k), "send-keys", "-t", sidebarPane, "F12", t.key, string(k))
+		}
+		if _, err := v.Tmux(args...); err != nil {
+			return fmt.Errorf("bind the keys of %s: %w", t.table, err)
 		}
 	}
 	return nil

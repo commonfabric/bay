@@ -49,10 +49,13 @@ From either side:
   Option-Space         fold or unfold the area under the cursor
   Option-?             show the item's state, as s does
   Option-B             collapse or expand the list
+  Option-', a letter   go to a mark; Option-' then ' goes back
+  Option-M, a letter   mark the row the right side shows
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-J, -K, -N, -P and Option-Space work while the list is collapsed or
-the right side is zoomed, and the row's name is then shown for a moment.
+Option-J, -K, -N, -P, Option-Space and the mark keys work while the list
+is collapsed or the right side is zoomed, and the row's name is then shown
+for a moment.
 Every other key, including the tmux prefix, goes to the window on the
 right.`

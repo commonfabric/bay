@@ -910,11 +910,13 @@ Keys from either side of the `docket` session:
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
+| `Option+'` and a letter | Go to a mark, as `'` does; `Option+'` then `'` returns to the row the last jump left |
+| `Option+M` and a letter | Mark the row the right side shows, as `m` does; the same mark again takes it off |
 | `Option+d` | Move between the list and the right side |
 | `Option+D` | Leave the view, as `q` does |
 
-The keys that move the cursor or fold from either side work while the list
-is collapsed and while a pane of the view is zoomed. When the list cannot be
+The keys that move the cursor, fold, or use marks from either side work
+while the list is collapsed and while a pane of the view is zoomed. When the list cannot be
 seen, the row's name is shown for a moment at the bottom of the terminal.
 
 Every other key goes to the window on the right, including the tmux prefix

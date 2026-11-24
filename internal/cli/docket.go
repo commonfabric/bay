@@ -635,6 +635,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 			if action != docket.Show && action != docket.ShowAndFocus {
 				action = docket.None
+				// A note the list cannot show, such as the answer to a
+				// bookmark key pressed on the right side, is shown for a
+				// moment at the bottom of the terminal.
+				if note != "" && (sidebar.Collapsed() || view.ListHidden()) {
+					_, _ = realTmux("display-message", "-d", "1500", note)
+				}
 			}
 			// While more keys are waiting, only the cursor moves. The row
 			// is shown once the keys stop, so a held key does not show

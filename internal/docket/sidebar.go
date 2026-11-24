@@ -39,7 +39,8 @@ type Sidebar struct {
 	typing   bool // the filter is being typed
 	rows     []Row
 	marks    map[string]string // for each mark, a letter or digit, the name of its row
-	pending  string            // "m" or "'" when the next key names a mark; else ""
+	pending  string            // "m", "M" (from the right side) or "'" when the next key names a mark; else ""
+	command  bool              // F12 came last: the next key is a command even while a filter is typed
 	back     string            // the row the cursor left on the last jump to a mark
 	notice   string            // what the last key has to tell the user
 	missing  map[string]bool   // the bays, as dock/bay, that do not exist
@@ -152,9 +153,13 @@ func (s *Sidebar) mark(pending, key string) Action {
 		return s.jump("''", s.back)
 	case !markKey(key):
 		return None
-	case pending == "m":
+	case pending == "m" || pending == "M":
+		name := s.Current().Name
+		if pending == "M" && s.showing != "" {
+			name = s.showing
+		}
 		// Setting a mark on the row that has it takes the mark off.
-		if name := s.Current().Name; s.marks[key] == name {
+		if s.marks[key] == name {
 			delete(s.marks, key)
 			s.notice = "'" + key + " removed"
 		} else {
@@ -519,11 +524,24 @@ func (s *Sidebar) key(key string) Action {
 	}
 	s.scrolled = false
 	// The view's tmux keys send function keys, which act the same whether
-	// or not a filter is being typed.
+	// or not a filter is being typed. F12 makes the key after it act so:
+	// the bookmark keys send F12, then m or ', then the mark.
+	if key == "f12" {
+		s.command = true
+		return None
+	}
 	sent := map[string]string{"f5": "j", "f6": "k", "f7": " ", "f8": "s", "f9": "n", "f10": "p", "f11": "b"}[key]
 	if sent != "" {
 		key = sent
+	} else if s.command {
+		sent = key
+		if key == "m" {
+			// Option-M on the right side marks the row shown there.
+			s.command, s.pending = false, "M"
+			return None
+		}
 	}
+	s.command = false
 	s.notice = ""
 	if pending := s.pending; pending != "" {
 		s.pending = ""
