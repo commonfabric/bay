@@ -247,13 +247,10 @@ func saveMarks(stateDir string, marks map[string]string) error {
 	return os.WriteFile(marksFile(stateDir), data, 0o644)
 }
 
-// keysPage is the text of the keys popup: the marks that are set, the
-// keys, then the legend.
+// keysPage is the text of the keys popup: the keys, the marks that are
+// set, then the legend.
 func keysPage(stateDir string) []docket.Line {
-	lines := []docket.Line{{Spans: []docket.Span{{Text: "Your marks:", Style: "heading"}}}}
-	items, _ := docket.LoadItems(stateDir)
-	lines = append(lines, docket.MarkLines(loadMarks(stateDir), items)...)
-	lines = append(lines, docket.Line{})
+	var lines []docket.Line
 	for _, text := range strings.Split(docket.KeysHelp, "\n") {
 		style := ""
 		if strings.HasSuffix(text, ":") && !strings.HasPrefix(text, " ") {
@@ -261,6 +258,9 @@ func keysPage(stateDir string) []docket.Line {
 		}
 		lines = append(lines, docket.Line{Spans: []docket.Span{{Text: text, Style: style}}})
 	}
+	items, _ := docket.LoadItems(stateDir)
+	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Your bookmarks:", Style: "heading"}}})
+	lines = append(lines, docket.MarkLines(loadMarks(stateDir), items)...)
 	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Marks and colors:", Style: "heading"}}})
 	return append(lines, docket.Legend()...)
 }
