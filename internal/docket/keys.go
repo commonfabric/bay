@@ -2,8 +2,10 @@ package docket
 
 // KeysHelp lists every key of the docket view.
 const KeysHelp = `In the list:
-  j, k            move down or up one row; the right side shows it
-  n, p            move to the next or previous item, passing over areas
+  j, k            move down or up one row; the right side shows it, and
+                  for an area shows the first item in the area
+  n, p            move to the next or previous item or bay, passing over
+                  areas and the row of an item that lists its bays
   J, K            move down or up ten rows
   g, G            go to the first or last row
   Enter           move to the right side
@@ -29,8 +31,8 @@ const KeysHelp = `In the list:
 
 From either side:
   Option-J, Option-K   move down or up one row
-  Option-N, Option-P   move to the next or previous item, passing over
-                       areas
+  Option-N, Option-P   move to the next or previous item or bay, as n
+                       and p do
   Option-Space         fold or unfold the area under the cursor
   Option-?             show the item's state, as s does
   Option-B             collapse or expand the list

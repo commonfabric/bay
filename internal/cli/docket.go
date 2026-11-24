@@ -152,6 +152,7 @@ var styles = map[string]string{
 	"held":     "\x1b[31m",
 	"question": "\x1b[1;33m",
 	"blocking": "\x1b[1;31m",
+	"shown":    shownStyle,
 	"heading":  "\x1b[1m",
 }
 
@@ -160,8 +161,11 @@ var styles = map[string]string{
 // bold white, and barText returns to the bar's own text.
 const (
 	barStyle = "\x1b[48;5;237;38;5;250m"
-	barKey   = "\x1b[1;97m"
-	barText  = "\x1b[22;38;5;250m"
+	// shownStyle draws the row the right side shows while the cursor is
+	// on another row: white text on a grey background.
+	shownStyle = "\x1b[48;5;240;38;5;255m"
+	barKey     = "\x1b[1;97m"
+	barText    = "\x1b[22;38;5;250m"
 )
 
 // styled returns a line with the terminal codes for its styles.
@@ -395,6 +399,8 @@ func runSidebar(view *docket.View, stateDir string) error {
 			switch {
 			case k == cursor:
 				b.WriteString("\x1b[7m" + text + pad + "\x1b[0m")
+			case line.Shown:
+				b.WriteString(shownStyle + text + pad + "\x1b[0m")
 			case line.Bar:
 				b.WriteString(barStyle)
 				for _, span := range line.Spans {
@@ -502,7 +508,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 			if action == docket.Show || action == docket.ShowAndFocus {
 				owed = false
-				shown, err := view.Show(sidebar.Current(), action == docket.ShowAndFocus)
+				shown, err := view.Show(sidebar.Shown(), action == docket.ShowAndFocus)
 				note = shown
 				if err != nil {
 					note = err.Error()

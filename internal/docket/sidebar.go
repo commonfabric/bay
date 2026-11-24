@@ -35,6 +35,7 @@ type Sidebar struct {
 	filter   string
 	typing   bool // the filter is being typed
 	rows     []Row
+	first    map[string]Row // for each area row, the first row beneath it that is not an area
 	cursor   int
 	top      int  // first row drawn
 	body     int  // rows the last Render had room for
@@ -97,6 +98,7 @@ func (s *Sidebar) rebuild() {
 		current = s.rows[s.cursor].Name
 	}
 	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true}}
+	s.first = map[string]Row{}
 	var walk func(parent string, depth int) (rows []Row, open int, blocking bool)
 	walk = func(parent string, depth int) ([]Row, int, bool) {
 		var out []Row
@@ -106,6 +108,12 @@ func (s *Sidebar) rebuild() {
 			if item.Kind == "area" {
 				if len(below) == 0 {
 					continue
+				}
+				for _, r := range below {
+					if !r.Area {
+						s.first[item.Name] = r
+						break
+					}
 				}
 				folded := s.folded[item.Name] && s.filter == ""
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
@@ -162,6 +170,18 @@ func (s *Sidebar) Rows() []Row { return s.rows }
 // Current returns the row under the cursor.
 func (s *Sidebar) Current() Row { return s.rows[s.cursor] }
 
+// Shown returns the row whose window the right side shows for the row
+// under the cursor. For an area that is the first row beneath it that is
+// not an area, whether or not the area is folded. For any other row it
+// is the row under the cursor.
+func (s *Sidebar) Shown() Row {
+	row := s.rows[s.cursor]
+	if first, ok := s.first[row.Name]; ok && row.Area {
+		return first
+	}
+	return row
+}
+
 // Action is what the caller must do after a key.
 type Action int
 
@@ -198,10 +218,13 @@ func (s *Sidebar) move(delta int) bool {
 }
 
 // moveToItem moves the cursor to the next row in the direction of delta
-// that is not an area, and reports whether there was one.
+// that is neither an area nor an item followed by a row for each of its
+// bays, and reports whether there was one. Such an item's row shows the
+// same window as the row of its first bay.
 func (s *Sidebar) moveToItem(delta int) bool {
 	for k := s.cursor + delta; k >= 0 && k < len(s.rows); k += delta {
-		if !s.rows[k].Area {
+		r := s.rows[k]
+		if !r.Area && (r.Bay != "" || len(r.Bays) < 2) {
 			s.cursor = k
 			return true
 		}
@@ -393,6 +416,7 @@ type Span struct {
 type Line struct {
 	Spans []Span
 	Bar   bool
+	Shown bool // the row the right side shows, when the cursor is on another row
 }
 
 // String returns the line's text without its styles.
@@ -447,8 +471,9 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	}
 	s.top = max(0, min(s.top, len(s.rows)-body))
 	var lines []Line
+	shown := s.shownRow()
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
-		lines = append(lines, Line{Spans: clipSpans(rowSpans(s.rows[k]), width)})
+		lines = append(lines, Line{Spans: clipSpans(rowSpans(s.rows[k]), width), Shown: k == shown && k != s.cursor})
 	}
 	for len(lines) < body {
 		lines = append(lines, Line{})
@@ -486,6 +511,23 @@ func keyHints(pairs ...string) []Span {
 		spans = append(spans, Span{pairs[k], "key"}, Span{" " + pairs[k+1], ""})
 	}
 	return spans
+}
+
+// shownRow is the index of the row whose window the right side shows, or
+// -1 when that row is not in the list, as under a folded area. For an
+// item followed by a row for each of its bays it is the first bay's row.
+func (s *Sidebar) shownRow() int {
+	target := s.Shown()
+	for k, r := range s.rows {
+		if r.Name != target.Name {
+			continue
+		}
+		if r.Bay == "" && len(r.Bays) > 1 && k+1 < len(s.rows) && s.rows[k+1].Bay != "" {
+			return k + 1
+		}
+		return k
+	}
+	return -1
 }
 
 // rowSpans draws one row.
@@ -553,6 +595,8 @@ func Legend() []Line {
 		entry(Span{"", ""}, "on an area, the total beneath it"),
 		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
 		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
+		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),
+		entry(Span{"", ""}, "cursor is on its area or its item"),
 	}
 }
 

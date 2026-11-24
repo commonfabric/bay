@@ -90,11 +90,71 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 	}
 }
 
+func TestAnAreaShowsTheFirstItemBeneathItFoldedOrNot(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	if got := s.Shown(); !got.Desk {
+		t.Errorf("on the desk: shown %+v", got)
+	}
+	s.Key("j")
+	if cur, got := s.Current(), s.Shown(); cur.Name != "people" || got.Name != "restart" || got.Area {
+		t.Errorf("on %s: shown %s", cur.Name, got.Name)
+	}
+	s.Key(" ")
+	if cur, got := s.Current(), s.Shown(); !cur.Folded || got.Name != "restart" {
+		t.Errorf("folded %v: shown %s", cur.Folded, got.Name)
+	}
+	s.Key("j")
+	if cur, got := s.Current(), s.Shown(); cur.Name != "tooling" || got.Name != "sidebar" || len(got.Bays) != 2 {
+		t.Errorf("on %s: shown %s %v", cur.Name, got.Name, got.Bays)
+	}
+	s.Key("j")
+	if cur, got := s.Current(), s.Shown(); got.Name != cur.Name || cur.Area {
+		t.Errorf("on %s: shown %s", cur.Name, got.Name)
+	}
+}
+
+func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
+	s := NewSidebar(tree())
+	// Lines: the desk, people, restart, tooling, sidebar and its bays.
+	marked := func() string {
+		lines, _ := s.RenderLines(40, 12)
+		var out []string
+		for k, line := range lines {
+			if line.Shown {
+				out = append(out, fmt.Sprint(k))
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	for _, c := range []struct{ key, want string }{
+		{"", ""},   // the desk shows itself
+		{"j", "2"}, // people shows restart
+		{"j", ""},  // restart shows itself
+		{"j", "5"}, // tooling shows the first bay of sidebar
+		{"j", "5"}, // sidebar shows its first bay
+		{"j", ""},  // the first bay shows itself
+		{"g", ""},  //
+		{"j", "2"}, //
+		{" ", ""},  // people folded: restart is not in the list
+	} {
+		if c.key != "" {
+			s.Key(c.key)
+		}
+		if got := marked(); got != c.want {
+			t.Errorf("after %q on %s: marked lines %q, want %q", c.key, s.Current().Name, got, c.want)
+		}
+	}
+}
+
 func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) {
 	s := NewSidebar(tree())
 	// Rows: the desk, people, restart, tooling, sidebar and its bays.
 	// n and p pass over areas; f9 and f10, which tmux sends, do the same.
-	for _, c := range []struct{ key, want string }{{"n", "restart"}, {"f9", "sidebar"}, {"p", "restart"}, {"f10", DeskRow}} {
+	// They also pass over the row of an item that has a row for each of
+	// its bays, so each press shows a different window.
+	for _, c := range []struct{ key, want string }{{"n", "restart"}, {"f9", "sidebar bay/b8"},
+		{"n", "sidebar loom/b19"}, {"p", "sidebar bay/b8"}, {"p", "restart"}, {"f10", DeskRow}} {
 		if a := s.Key(c.key); a != Show || s.Current().Name != c.want {
 			t.Errorf("%s: %v on %s, want %s", c.key, a, s.Current().Name, c.want)
 		}

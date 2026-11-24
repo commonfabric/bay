@@ -852,6 +852,10 @@ bays where its work happens. `bay docket view` opens a tmux session named
   reminds of keys.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
+  An area shows what the first item listed in the area shows, whether or
+  not the area is folded.
+  When the cursor is on an area, or on an item that lists its bays, the
+  row that the right side shows is shaded grey.
   The first line of the list is the desk, docket's agent session for asking
   about the whole tree.
 
@@ -873,7 +877,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
-| `n` / `p` | Move to the next / previous item, passing over areas |
+| `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side |
@@ -895,7 +899,7 @@ Keys from either side of the `docket` session:
 | Key | Action |
 |-----|--------|
 | `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
-| `Option+N` / `Option+P` | Move to the next / previous item, passing over areas |
+| `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
