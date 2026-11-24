@@ -392,7 +392,23 @@ func showKeys(stateDir string) error {
 	for _, line := range lines {
 		width = max(width, len([]rune(line.String())))
 	}
-	return popup("docket view keys", fmt.Sprint(width+4), fmt.Sprint(len(lines)+2), "keys")
+	// The popup is as large as its text, and no larger than the terminal
+	// allows. Text that does not fit is scrolled.
+	maxWidth, maxHeight := 0, 0
+	if out, err := realTmux("display-message", "-p", "#{client_width} #{client_height}"); err == nil {
+		_, _ = fmt.Sscan(out, &maxWidth, &maxHeight)
+	}
+	return popup("docket view keys", fmt.Sprint(fitPopup(width+4, maxWidth)), fmt.Sprint(fitPopup(len(lines)+2, maxHeight)), "keys")
+}
+
+// fitPopup returns the size to give a popup that wants want cells along
+// one side of a terminal with room cells: want, or two fewer than room
+// when want is larger. With room unknown, 0, it returns want.
+func fitPopup(want, room int) int {
+	if room > 2 && want > room-2 {
+		return room - 2
+	}
+	return want
 }
 
 // readKeys sends the name of each key and mouse press read from the
