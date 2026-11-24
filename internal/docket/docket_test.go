@@ -220,6 +220,83 @@ func TestTheCursorKeepsItsPlaceWhenItsRowLeavesTheList(t *testing.T) {
 	}
 }
 
+func TestMarksAreSetDrawnAndTakenOff(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	s.Key("n")
+	if a := s.Key("m"); a != None {
+		t.Fatalf("m: %v", a)
+	}
+	if a := s.Key("a"); a != MarksChanged || s.Marks()["a"] != "restart" {
+		t.Fatalf("m a: %v, marks %v", a, s.Marks())
+	}
+	// The key after m names a mark and does nothing else: a, alone,
+	// would change the levels.
+	if got := names(s); strings.Contains(got, "images") {
+		t.Errorf("m a changed the levels: %s", got)
+	}
+	s.Key("m")
+	s.Key("7")
+	lines, _ := s.RenderLines(14, 12)
+	if got := lines[2].String(); !strings.HasSuffix(got, " '7'a") || len([]rune(got)) > 14 {
+		t.Errorf("marked row = %q", got)
+	}
+	if last := lines[2].Spans[len(lines[2].Spans)-1]; last.Style != "key" {
+		t.Errorf("mark style = %q", last.Style)
+	}
+	s.Key("m")
+	if a := s.Key("esc"); a != None || len(s.Marks()) != 2 {
+		t.Errorf("m esc: %v, marks %v", a, s.Marks())
+	}
+	s.Key("m")
+	if a := s.Key("a"); a != MarksChanged || len(s.Marks()) != 1 {
+		t.Errorf("m a on its own row: %v, marks %v", a, s.Marks())
+	}
+}
+
+func TestAMarkBringsItsRowIntoTheListAndTwoQuotesGoBack(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetMarks(map[string]string{"i": "images", "r": "restart", "b": "sidebar loom/b19", "x": "nothing"})
+	// images is not at the front level, so the levels widen to show it.
+	s.Key("'")
+	if a := s.Key("i"); a != Show || s.Current().Name != "images" || s.Notice() == "" {
+		t.Fatalf("'i: %v on %s, notice %q", a, s.Current().Name, s.Notice())
+	}
+	// A filter that hides restart is cleared.
+	for _, key := range []string{"/", "i", "m", "a", "g", "enter"} {
+		s.Key(key)
+	}
+	s.Key("'")
+	if a := s.Key("r"); a != Show || s.Current().Name != "restart" || s.Notice() != "filter cleared" {
+		t.Fatalf("'r: %v on %s, notice %q", a, s.Current().Name, s.Notice())
+	}
+	// A folded area above the row is unfolded.
+	s.Key("k")
+	s.Key(" ")
+	if !s.Current().Folded {
+		t.Fatalf("people is not folded")
+	}
+	s.Key("'")
+	if a := s.Key("r"); a != Show || s.Current().Name != "restart" {
+		t.Fatalf("'r under a fold: %v on %s", a, s.Current().Name)
+	}
+	s.Key("'")
+	if a := s.Key("b"); a != Show || s.Current().Name != "sidebar loom/b19" {
+		t.Fatalf("'b: %v on %s", a, s.Current().Name)
+	}
+	s.Key("'")
+	if a := s.Key("'"); a != Show || s.Current().Name != "restart" {
+		t.Fatalf("'': %v on %s", a, s.Current().Name)
+	}
+	// A mark that is not set, and one whose item is gone, move nothing.
+	for _, key := range []string{"z", "x"} {
+		s.Key("'")
+		if a := s.Key(key); a != None || s.Current().Name != "restart" || s.Notice() == "" {
+			t.Errorf("'%s: %v on %s, notice %q", key, a, s.Current().Name, s.Notice())
+		}
+	}
+}
+
 func TestARowSaysWhenItsBayIsGone(t *testing.T) {
 	s := NewSidebar(tree())
 	s.SetMissing(map[string]bool{"loom/b7": true, "loom/b19": true})

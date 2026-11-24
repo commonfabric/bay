@@ -2,7 +2,9 @@ package docket
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"unicode"
 )
 
 // DeskRow is the name of the row for the desk, the agent session attached
@@ -36,8 +38,12 @@ type Sidebar struct {
 	filter   string
 	typing   bool // the filter is being typed
 	rows     []Row
-	missing  map[string]bool // the bays, as dock/bay, that do not exist
-	first    map[string]Row  // for each area row, the first row beneath it that is not an area
+	marks    map[string]string // for each mark, a letter or digit, the name of its row
+	pending  string            // "m" or "'" when the next key names a mark; else ""
+	back     string            // the row the cursor left on the last jump to a mark
+	notice   string            // what the last key has to tell the user
+	missing  map[string]bool   // the bays, as dock/bay, that do not exist
+	first    map[string]Row    // for each area row, the first row beneath it that is not an area
 	cursor   int
 	showing  string // the name of the row the right side was last asked to show
 	moved    bool   // the cursor's row left the list, and the cursor is on another row
@@ -50,9 +56,121 @@ type Sidebar struct {
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
 func NewSidebar(items map[string]Item) *Sidebar {
-	s := &Sidebar{folded: map[string]bool{}}
+	s := &Sidebar{folded: map[string]bool{}, marks: map[string]string{}}
 	s.SetItems(items)
 	return s
+}
+
+// SetMarks replaces the marks: for each mark, the name of its row.
+func (s *Sidebar) SetMarks(marks map[string]string) {
+	s.marks = map[string]string{}
+	for mark, name := range marks {
+		s.marks[mark] = name
+	}
+}
+
+// Marks returns the marks: for each mark, the name of its row.
+func (s *Sidebar) Marks() map[string]string { return s.marks }
+
+// Notice returns what the last key has to tell the user, or "".
+func (s *Sidebar) Notice() string { return s.notice }
+
+// markKey reports whether a key can name a mark: one letter or digit.
+func markKey(key string) bool {
+	r := []rune(key)
+	return len(r) == 1 && (unicode.IsLetter(r[0]) || unicode.IsDigit(r[0]))
+}
+
+// mark applies the key that follows m or '.
+func (s *Sidebar) mark(pending, key string) Action {
+	switch {
+	case pending == "'" && key == "'":
+		if s.back == "" {
+			s.notice = "no earlier row to return to"
+			return None
+		}
+		return s.jump("''", s.back)
+	case !markKey(key):
+		return None
+	case pending == "m":
+		// Setting a mark on the row that has it takes the mark off.
+		if name := s.Current().Name; s.marks[key] == name {
+			delete(s.marks, key)
+			s.notice = "'" + key + " removed"
+		} else {
+			s.marks[key] = name
+			s.notice = "'" + key + " is " + name
+		}
+		return MarksChanged
+	}
+	name, ok := s.marks[key]
+	if !ok {
+		s.notice = "no mark '" + key
+		return None
+	}
+	return s.jump("'"+key, name)
+}
+
+// jump moves the cursor to the row with the given name. When the row is
+// not in the list it changes as little as brings the row in: it unfolds
+// the areas above the row, then shows the row's level, then clears the
+// filter, then shows every level. A bay's row that no longer exists
+// stands for its item.
+func (s *Sidebar) jump(label, name string) Action {
+	from := s.Current().Name
+	if name == DeskRow {
+		s.cursor, s.back = 0, from
+		return Show
+	}
+	itemName, _, _ := strings.Cut(name, " ")
+	item, ok := s.items[itemName]
+	if !ok || item.Status != "open" {
+		s.notice = label + ": " + itemName + " is closed or gone"
+		return None
+	}
+	find := func() int {
+		if k := s.rowNamed(name); k >= 0 {
+			return k
+		}
+		return s.rowNamed(itemName)
+	}
+	steps := []func(){
+		func() {},
+		func() {
+			for at := item; at.Parent != nil; at = s.items[*at.Parent] {
+				delete(s.folded, *at.Parent)
+			}
+			delete(s.folded, itemName)
+		},
+		func() {
+			if rank := levelRank(item.Level); item.Kind != "area" && rank > s.levels {
+				s.levels = rank
+				s.notice = "now showing " + levelNames[s.levels]
+			}
+		},
+		func() {
+			if s.filter != "" {
+				s.filter, s.typing = "", false
+				s.notice = "filter cleared"
+			}
+		},
+		func() {
+			if s.levels != len(levelNames)-1 {
+				s.levels = len(levelNames) - 1
+				s.notice = "now showing " + levelNames[s.levels]
+			}
+		},
+	}
+	for _, step := range steps {
+		step()
+		s.rebuild()
+		if k := find(); k >= 0 {
+			s.cursor, s.back = k, from
+			return Show
+		}
+	}
+	s.notice = label + ": " + itemName + " has nothing to show"
+	return None
 }
 
 // SetMissing replaces the set of bays, as dock/bay, that do not exist.
@@ -282,6 +400,8 @@ const (
 	Collapse
 	// Expand asks the caller to give the sidebar the width FullWidth.
 	Expand
+	// MarksChanged asks the caller to save the marks.
+	MarksChanged
 	// Deeper and Nearer ask the caller to move the item under the cursor
 	// one level away from the front or toward it. LevelChange names the
 	// item and its new level.
@@ -344,6 +464,13 @@ func (s *Sidebar) key(key string) Action {
 	if sent != "" {
 		key = sent
 	}
+	s.notice = ""
+	if pending := s.pending; pending != "" {
+		s.pending = ""
+		if sent == "" {
+			return s.mark(pending, key)
+		}
+	}
 	if s.typing && sent == "" {
 		return s.typeFilter(key)
 	}
@@ -400,6 +527,8 @@ func (s *Sidebar) key(key string) Action {
 		return Collapse
 	case "=":
 		return ResetWidth
+	case "m", "'":
+		s.pending = key
 	case ">":
 		return Deeper
 	case "<":
@@ -575,7 +704,13 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	var lines []Line
 	shown := s.shownRow()
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
-		lines = append(lines, Line{Spans: clipSpans(rowSpans(s.rows[k]), width), Shown: k == shown && k != s.cursor})
+		// A row's marks are drawn at its end, and the rest of the row is
+		// shortened to leave room for them.
+		spans, marks := rowSpans(s.rows[k]), s.marksOf(s.rows[k].Name)
+		if marks != "" {
+			spans = append(clipSpans(spans, width-len([]rune(marks))-1), Span{" " + marks, "key"})
+		}
+		lines = append(lines, Line{Spans: clipSpans(spans, width), Shown: k == shown && k != s.cursor})
 	}
 	for len(lines) < body {
 		lines = append(lines, Line{})
@@ -586,6 +721,12 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	info := []Span{{"«", "key"}, {" " + levelNames[s.levels] + " (", ""}, {"a", "key"}, {")", ""}}
 	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state")
 	switch {
+	case s.pending == "m":
+		info = []Span{{"«", "key"}, {" mark this row: press a letter", ""}}
+		hint = keyHints("esc", "cancels")
+	case s.pending == "'":
+		info = []Span{{"«", "key"}, {" go to a mark: press its letter", ""}}
+		hint = keyHints("'", "goes back", "esc", "cancels")
 	case s.typing:
 		info = []Span{{"«", "key"}, {" " + levelNames[s.levels] + " · find: " + s.filter + "_", ""}}
 		hint = keyHints("enter", "keeps", "esc", "clears")
@@ -633,6 +774,19 @@ func (s *Sidebar) shownRow() int {
 		return k
 	}
 	return -1
+}
+
+// marksOf returns the marks on the row with the given name, each written
+// as it is typed to go to it, such as "'a'q".
+func (s *Sidebar) marksOf(name string) string {
+	var marks []string
+	for mark, row := range s.marks {
+		if row == name {
+			marks = append(marks, "'"+mark)
+		}
+	}
+	sort.Strings(marks)
+	return strings.Join(marks, "")
 }
 
 // rowSpans draws one row.
@@ -706,6 +860,7 @@ func Legend() []Line {
 		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
 		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
 		entry(Span{"(bay gone)", "dim"}, "the item's bay no longer exists"),
+		entry(Span{"'a", "key"}, "a mark on the row; type 'a to go to it"),
 		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),
 		entry(Span{"", ""}, "cursor is on its area or its item"),
 	}

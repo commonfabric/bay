@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -152,6 +153,7 @@ var styles = map[string]string{
 	"held":     "\x1b[31m",
 	"question": "\x1b[1;33m",
 	"blocking": "\x1b[1;31m",
+	"key":      barKey,
 	"shown":    shownStyle,
 	"heading":  "\x1b[1m",
 }
@@ -401,6 +403,14 @@ func runSidebar(view *docket.View, stateDir string) error {
 	}
 	sidebar := docket.NewSidebar(items)
 	sidebar.SetMissing(missingBays(items))
+	// The marks are kept in a file so that they outlast the list.
+	marksFile := filepath.Join(stateDir, "view-marks.json")
+	if data, err := os.ReadFile(marksFile); err == nil {
+		marks := map[string]string{}
+		if json.Unmarshal(data, &marks) == nil {
+			sidebar.SetMarks(marks)
+		}
+	}
 	note := ""
 	draw := func() {
 		width, height, err := term.GetSize(fd)
@@ -482,6 +492,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 			} else {
 				action = sidebar.Key(key)
 			}
+			note = sidebar.Notice()
 			if action == docket.Quit {
 				// Leave the view without closing it: return the terminal
 				// to the tmux session it came from, or detach it when it
@@ -511,6 +522,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = view.SetWidth(sidebar.FullWidth())
 			case docket.ResetWidth:
 				err = view.SetWidth(docket.SidebarWidth)
+			case docket.MarksChanged:
+				data, _ := json.Marshal(sidebar.Marks())
+				err = os.WriteFile(marksFile, data, 0o644)
 			case docket.Deeper, docket.Nearer:
 				item, level, ok := sidebar.LevelChange(action)
 				switch {

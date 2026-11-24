@@ -16,6 +16,12 @@ const KeysHelp = `In the list:
                   as it is while you type. Enter keeps the filter and
                   shows the cursor's row. Esc clears the filter and
                   returns the cursor to the row the right side shows
+  m, then a letter   mark the row under the cursor with that letter or
+                  digit; on the row that has the mark, take it off
+  ', then a letter   go to the row with that mark. A row that is not in
+                  the list is brought in: its areas are unfolded, its
+                  level is shown, and the filter is cleared, as needed
+  ''              go back to the row the last ' left
   >, <            move the item under the cursor one level away from the
                   front, or one level toward it
   a               show more levels: front, then front + back, then
