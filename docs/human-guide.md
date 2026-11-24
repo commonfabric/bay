@@ -832,10 +832,24 @@ docket is a separate tool that keeps a tree of work items. Each item names the
 bays where its work happens. `bay docket view` opens a tmux session named
 `docket` with one window:
 
-- The left side lists the items, grouped under their areas. Each line shows
-  the item's name, its count of open questions (`?2`, with `!` when one
-  holds up all work), and its work state: `●` running, `○` ready, `◌` held,
-  `·` no bay.
+- The left side lists the items, grouped under their areas. The marks and
+  colors of a row:
+
+  | Mark | Meaning |
+  |------|---------|
+  | `▾` / `▸` in bold blue | An area, unfolded / folded |
+  | green `●` | The item's agent is working |
+  | yellow `○` | The item's agent is waiting for its next instruction |
+  | red `◌` | The item's work is held until something else happens |
+  | dim `·` | The item has no bay |
+  | cyan `↳ dock/bay` | One bay of an item that has several |
+  | yellow `?2` | Two questions wait for your answer; on an area, the total beneath it |
+  | red `!` | One of those questions holds up all work |
+  | dim `(back)` | The item's level, when it is not front |
+
+  The two shaded lines at the bottom describe the view and are not rows. The
+  upper one says which levels are shown, or shows the filter. The lower one
+  reminds of keys.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
   The first line of the list is the desk, docket's agent session for asking
@@ -853,8 +867,8 @@ Bay's keys and commands work on the right side as they do in the dock. Bay
 finds the dock from the window, so a command run in a bay window acts on
 that window's dock whichever session shows it.
 
-The first line of the list says which levels are shown. Press `?` in the
-list for a popup of every key. Keys in the list:
+Press `?` in the list for a popup of every key and of the marks above; `q`,
+`Esc` or `Enter` closes it. Keys in the list:
 
 | Key | Action |
 |-----|--------|
@@ -866,9 +880,9 @@ list for a popup of every key. Keys in the list:
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
 | `/` | Find by name, title or bay across every level; `Enter` keeps the filter, `Esc` clears it |
 | `a` | Show more levels: front, then front + back, then front + back + deep |
-| `s` | Show the item's state, open questions and what it waits on, in a popup; `q` closes it |
+| `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
 | `b` | Collapse the list to a narrow strip |
-| Click | Go to the row; on an area, also fold or unfold it; on `«` collapse the list; on the collapsed strip, expand it |
+| Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on the collapsed strip, expand it |
 | Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
 | `?` | Show the keys |
 | `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
@@ -884,9 +898,9 @@ Keys from either side of the `docket` session:
 | `Option+d` | Move between the list and the right side |
 | `Option+D` | Leave the view, as `q` does |
 
-The keys that move the cursor or fold from either side do nothing while the
-list is collapsed or a pane of the view is zoomed, because the list is then
-out of sight.
+The keys that move the cursor or fold from either side work while the list
+is collapsed; the row's name is then shown for a moment at the bottom of the
+terminal. They do nothing while a pane of the view is zoomed.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being

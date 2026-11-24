@@ -117,10 +117,10 @@ func (v *View) Setup() error {
 	//
 	//
 	// The keys that act on the list from either pane send it function
-	// keys. They do nothing while the list is out of sight: a pane of the
-	// view is zoomed, or the list is collapsed.
+	// keys. They work while the list is collapsed, and do nothing while a
+	// pane of the view is zoomed.
 	narrow := fmt.Sprintf("#{e|<|:#{pane_width},%d}", collapsedBelow)
-	hidden := "#{||:#{window_zoomed_flag}," + narrow + "}"
+	hidden := "#{window_zoomed_flag}"
 	list := func(key string) []string {
 		return []string{"if-shell", "-F", "-t", sidebarPane, hidden, "", "send-keys -t '" + sidebarPane + "' " + key}
 	}

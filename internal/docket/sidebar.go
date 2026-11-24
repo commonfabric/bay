@@ -143,6 +143,9 @@ func (s *Sidebar) rebuild() {
 	}
 }
 
+// Collapsed reports whether the last Render drew the sidebar collapsed.
+func (s *Sidebar) Collapsed() bool { return s.width > 0 && s.width < collapsedBelow }
+
 // Rows returns the rows in display order.
 func (s *Sidebar) Rows() []Row { return s.rows }
 
@@ -310,19 +313,18 @@ func (s *Sidebar) toggleUnfoldAll() {
 // Click applies a mouse press at the given line and column of the last
 // Render, both counted from 0. On a row it moves the cursor there, and on
 // an area it also folds or unfolds it. On the mark at the start of the
-// first line it collapses the sidebar, and anywhere on a collapsed sidebar
+// first bar it collapses the sidebar, and anywhere on a collapsed sidebar
 // it expands it. Elsewhere it does nothing.
 func (s *Sidebar) Click(line, column int) Action {
 	if s.width < collapsedBelow {
 		return Expand
 	}
-	if line == 0 {
+	if line == s.body {
 		if column < 2 {
 			return Collapse
 		}
 		return None
 	}
-	line-- // the first line is the heading
 	k := s.top + line
 	if line < 0 || line >= s.body || k >= len(s.rows) {
 		return None
@@ -344,17 +346,52 @@ func (s *Sidebar) toggleFold() {
 	s.rebuild()
 }
 
-// Render draws the sidebar as height lines of at most width columns. The
-// first line is a heading that says which levels are shown. The last line
-// is the filter or a key reminder. The second result is the index of the
-// cursor's line, which is outside the lines when the wheel has scrolled
-// the cursor's row out of sight. A sidebar narrower than collapsedBelow is
-// drawn as a mark on the first line and nothing else.
+// Span is a run of text drawn in one style. The styles are "" for plain
+// text, "area", "desk", "bay", "dim", the work states "running", "ready"
+// and "held", "question" and "blocking".
+type Span struct {
+	Text  string
+	Style string
+}
+
+// Line is one line of the sidebar. Bar marks the lines at the bottom that
+// describe the view and are not rows.
+type Line struct {
+	Spans []Span
+	Bar   bool
+}
+
+// String returns the line's text without its styles.
+func (l Line) String() string {
+	var b strings.Builder
+	for _, span := range l.Spans {
+		b.WriteString(span.Text)
+	}
+	return b.String()
+}
+
+// Render draws the sidebar as plain text. See RenderLines.
 func (s *Sidebar) Render(width, height int) ([]string, int) {
+	lines, cursor := s.RenderLines(width, height)
+	text := make([]string, len(lines))
+	for k, line := range lines {
+		text[k] = line.String()
+	}
+	return text, cursor
+}
+
+// RenderLines draws the sidebar as height lines of at most width columns.
+// The rows come first. The last two lines are bars: one says which levels
+// are shown, or shows the filter, and the other reminds of keys. The
+// second result is the index of the cursor's line, which is outside the
+// rows when the wheel has scrolled the cursor's row out of sight. A
+// sidebar narrower than collapsedBelow is drawn as a mark on the first
+// line and nothing else.
+func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	s.width = width
 	if width < collapsedBelow {
-		lines := make([]string, max(height, 1))
-		lines[0] = clip("»", width)
+		lines := make([]Line, max(height, 1))
+		lines[0] = Line{Spans: clipSpans([]Span{{"»", "dim"}}, width)}
 		return lines, -1
 	}
 	body := height - 2
@@ -371,69 +408,119 @@ func (s *Sidebar) Render(width, height int) ([]string, int) {
 		}
 	}
 	s.top = max(0, min(s.top, len(s.rows)-body))
-	head := "« " + levelNames[s.levels]
-	if s.filter != "" || s.typing {
-		head = "« every level, found by name"
-	} else if s.saved != nil {
-		head += ", all unfolded"
-	}
-	lines := []string{clip(head, width)}
+	var lines []Line
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
-		lines = append(lines, clip(rowText(s.rows[k]), width))
+		lines = append(lines, Line{Spans: clipSpans(rowSpans(s.rows[k]), width)})
 	}
-	for len(lines) < body+1 {
-		lines = append(lines, "")
+	for len(lines) < body {
+		lines = append(lines, Line{})
 	}
-	foot := "? keys  / find  a levels  u unfold"
-	if s.typing {
-		foot = "/" + s.filter + "_"
-	} else if s.filter != "" {
-		foot = "/" + s.filter + "  (esc clears)"
-	} else if s.saved != nil {
-		foot = "u puts the folds back  ? keys"
+	info := "« " + levelNames[s.levels]
+	hint := "? keys  / find  a levels  u unfold"
+	switch {
+	case s.typing:
+		info = "« find: " + s.filter + "_"
+		hint = "enter keeps  esc clears"
+	case s.filter != "":
+		info = "« find: " + s.filter
+		hint = "esc clears  / find again  ? keys"
+	case s.saved != nil:
+		info += ", all unfolded"
+		hint = "u puts the folds back  ? keys"
 	}
-	return append(lines, clip(foot, width)), s.cursor - s.top + 1
+	for _, text := range []string{info, hint} {
+		lines = append(lines, Line{Spans: clipSpans([]Span{{Text: text}}, width), Bar: true})
+	}
+	return lines, s.cursor - s.top
 }
 
-func rowText(r Row) string {
+// rowSpans draws one row.
+func rowSpans(r Row) []Span {
 	indent := strings.Repeat("  ", r.Depth)
-	marks := ""
+	var marks []Span
 	if r.Open > 0 {
-		marks = fmt.Sprintf(" ?%d", r.Open)
+		marks = append(marks, Span{fmt.Sprintf(" ?%d", r.Open), "question"})
 		if r.Blocking {
-			marks += "!"
+			marks = append(marks, Span{"!", "blocking"})
 		}
 	}
 	switch {
 	case r.Desk:
-		return "◆ " + r.Name
+		return []Span{{"◆ " + r.Name, "desk"}}
 	case r.Bay != "":
-		return indent + "↳ " + r.Bay
+		return []Span{{indent + "↳ " + r.Bay, "bay"}}
 	case r.Area:
 		fold := "▾"
 		if r.Folded {
 			fold = "▸"
 		}
-		return fmt.Sprintf("%s%s %s%s", indent, fold, r.Title, marks)
+		return append([]Span{{indent + fold + " " + r.Title, "area"}}, marks...)
 	}
-	state := map[string]string{"running": "●", "ready": "○", "held": "◌"}[r.Work]
-	if state == "" {
-		state = " "
-	}
-	if len(r.Bays) == 0 {
-		state = "·"
-	}
-	level := ""
+	symbol, style := WorkSymbol(r.Work, len(r.Bays) > 0)
+	spans := append([]Span{{indent, ""}, {symbol, style}, {" " + r.Name, ""}}, marks...)
 	if r.Level != "front" && r.Level != "" {
-		level = " (" + r.Level + ")"
+		spans = append(spans, Span{" (" + r.Level + ")", "dim"})
 	}
-	return fmt.Sprintf("%s%s %s%s%s", indent, state, r.Name, marks, level)
+	return spans
 }
 
-func clip(text string, width int) string {
-	r := []rune(text)
-	if width > 0 && len(r) > width {
-		return string(r[:width-1]) + "…"
+// WorkSymbol returns the mark drawn before an item and its style: one for
+// each work state, and a dot for an item that has no bay.
+func WorkSymbol(work string, hasBay bool) (symbol, style string) {
+	if !hasBay {
+		return "·", "dim"
 	}
-	return text
+	switch work {
+	case "running":
+		return "●", "running"
+	case "ready":
+		return "○", "ready"
+	case "held":
+		return "◌", "held"
+	}
+	return " ", ""
+}
+
+// Legend explains the marks and styles of the rows, one line each.
+func Legend() []Line {
+	entry := func(mark Span, meaning string) Line {
+		pad := strings.Repeat(" ", max(1, 16-len([]rune(mark.Text))))
+		return Line{Spans: []Span{{"  ", ""}, mark, {pad + meaning, ""}}}
+	}
+	return []Line{
+		entry(Span{"▾ area", "area"}, "an area; ▸ when it is folded"),
+		entry(Span{"● item", "running"}, "its agent is working"),
+		entry(Span{"○ item", "ready"}, "its agent is waiting for its next instruction"),
+		entry(Span{"◌ item", "held"}, "its work is held until something else happens"),
+		entry(Span{"· item", "dim"}, "it has no bay"),
+		entry(Span{"↳ dock/bay", "bay"}, "one bay of an item that has several"),
+		entry(Span{"◆ the desk", "desk"}, "the agent session for the whole tree"),
+		entry(Span{"?2", "question"}, "two questions wait for your answer;"),
+		entry(Span{"", ""}, "on an area, the total beneath it"),
+		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
+		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
+	}
+}
+
+// clipSpans shortens a line to width columns, ending it with "…".
+func clipSpans(spans []Span, width int) []Span {
+	total := 0
+	for _, span := range spans {
+		total += len([]rune(span.Text))
+	}
+	if width <= 0 || total <= width {
+		return spans
+	}
+	var out []Span
+	room := width - 1
+	for _, span := range spans {
+		r := []rune(span.Text)
+		if len(r) >= room {
+			out = append(out, Span{string(r[:room]) + "…", span.Style})
+			return out
+		}
+		out = append(out, span)
+		room -= len(r)
+	}
+	return out
 }
