@@ -631,6 +631,12 @@ func (s *Sidebar) typeFilter(key string) Action {
 		// Keeping the filter shows the row the cursor is on.
 		s.typing = false
 		s.rebuild()
+		if s.filter != "" && len(s.rows) == 1 {
+			// Only the desk row is left, so no item matches and nothing
+			// is shown.
+			s.notice = "nothing matches " + s.filter
+			return None
+		}
 		return Show
 	case "esc":
 		// Leaving the filter returns the cursor to the row the right

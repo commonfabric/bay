@@ -25,7 +25,9 @@ func newDocketCmd() *cobra.Command {
 		Long: `Show docket's work items in a list beside the bay window of the chosen item.
 
 docket is a separate tool that keeps a tree of work items. These commands
-read its files and do not change them.`,
+read its files. The view changes an item's level, by running
+'docket set', when > or < is pressed in the list. It keeps its marks and
+the list's width in files of its own in docket's folder.`,
 	}
 	cmd.AddCommand(newDocketViewCmd(), newDocketSidebarCmd(), newDocketKeysCmd(), newDocketStateCmd())
 	return cmd
@@ -443,6 +445,35 @@ func fitPopup(want, room int) int {
 
 // readKeys sends the name of each key and mouse press read from the
 // terminal, as docket.ParseKeys names them.
+// listWidth follows the width of the list's pane, to keep the width the
+// list is given and not one that a change in the terminal's size gives it.
+type listWidth struct {
+	drawn  int // the list's width when it was last drawn
+	window int // the width of the view's window at that time
+	saved  int // the width saved for the next start
+}
+
+// changed is called when the list is drawn at a new width. window is the
+// width of the view's window, and passing is true while the list is
+// collapsed or a pane is zoomed. It returns a width to give the list back,
+// or 0, and whether to save the new width.
+func (w *listWidth) changed(width, window int, passing bool) (restore int, save bool) {
+	w.drawn = width
+	resized := window != w.window
+	w.window = window
+	switch {
+	case passing:
+		return 0, false
+	case resized && w.saved >= docket.CollapsedBelow:
+		if width != w.saved {
+			return w.saved, false
+		}
+		return 0, false
+	}
+	w.saved = width
+	return 0, true
+}
+
 func readKeys(keys chan<- string) {
 	buf := make([]byte, 256)
 	pending := ""
@@ -486,13 +517,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 	}
 	forgetMarks()
-	// The list starts at the width it had when it was last used. Each
-	// width it is given later is saved, except a collapsed one and one a
-	// zoomed pane gives it.
-	if view.Width > 0 {
+	// The list starts at the width it had when it was last used. A width
+	// the list is later given is saved, except a collapsed one and one a
+	// zoomed pane gives it. When the terminal changes size, tmux changes
+	// the list's width too; the saved width is then given back to it.
+	view.ListPane = os.Getenv("TMUX_PANE")
+	if view.Width >= docket.CollapsedBelow {
 		_ = view.SetWidth(view.Width)
 	}
-	considered := view.Width
+	widths := listWidth{drawn: view.Width, saved: view.Width, window: view.WindowWidth()}
 	note := ""
 	draw := func() {
 		width, height, err := term.GetSize(fd)
@@ -500,9 +533,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 			width, height = docket.SidebarWidth, 40
 		}
 		lines, cursor := sidebar.RenderLines(width, height)
-		if err == nil && width != considered && !sidebar.Collapsed() {
-			considered = width
-			if !view.Zoomed() {
+		if err == nil && width != widths.drawn {
+			restore, save := widths.changed(width, view.WindowWidth(), sidebar.Collapsed() || view.Zoomed())
+			if restore > 0 {
+				_ = view.SetWidth(restore)
+			}
+			if save {
 				_ = saveWidth(stateDir, width)
 			}
 		}

@@ -156,6 +156,19 @@ func TestAFilterLeavesTheRightSideAloneUntilItIsKeptOrLeft(t *testing.T) {
 	}
 }
 
+func TestEnterOnAFilterThatMatchesNothingShowsNothing(t *testing.T) {
+	s := NewSidebar(tree())
+	for _, key := range []string{"/", "z", "z", "z"} {
+		s.Key(key)
+	}
+	if a := s.Key("enter"); a != None {
+		t.Errorf("enter: %v on %s", a, s.Current().Name)
+	}
+	if n := s.Notice(); n != "nothing matches zzz" {
+		t.Errorf("notice = %q", n)
+	}
+}
+
 func TestTheCursorReturnsToTheShownRowWhenItsOwnRowLeavesTheList(t *testing.T) {
 	s := NewSidebar(tree())
 	s.Key("n") // restart, under people
@@ -531,7 +544,8 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 		}
 		return out, nil
 	case "list-panes":
-		started := []string{"\"bay docket sidebar\"", "\"env -u TMUX tmux attach-session -t '=docket-aux'\""}
+		// The sidebar's pane may have been started by another copy of bay.
+		started := []string{"%1\t\"/other/bay docket sidebar\"", "%2\t\"env -u TMUX tmux -S \"${TMUX%%,*}\" attach-session -t '=docket-aux'\""}
 		if f.noList {
 			return started[1] + "\n", nil
 		}
@@ -548,6 +562,9 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 			f.noList, f.panes = false, 2
 		} else {
 			f.panes++
+		}
+		if args[len(args)-1] == "bay docket sidebar" {
+			return "%3\n", nil
 		}
 	case "link-window":
 		f.aux = append(f.aux, args[3])
@@ -603,6 +620,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("new-session") != 2 || f.ran("split-window") != 1 {
 		t.Fatalf("first setup: %v", f.calls)
 	}
+	if f.ran("set-option -w -t =docket-aux:record remain-on-exit on") != 1 {
+		t.Errorf("the record window is not kept when its pager quits: %v", f.calls)
+	}
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
@@ -610,18 +630,18 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
-		want := "bind-key -T docket " + k + " send-keys -t =docket:view.{left} " + sent
+		want := "bind-key -T docket " + k + " send-keys -t %1 " + sent
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
 	}
-	if f.ran("bind-key -T docket M-? send-keys -t =docket:view.{left} F8") != 1 {
+	if f.ran("bind-key -T docket M-? send-keys -t %1 F8") != 1 {
 		t.Errorf("the state key is not bound: %v", f.calls)
 	}
 	for _, want := range []string{
-		"bind-key -T docket M-B send-keys -t =docket:view.{left} F11",
+		"bind-key -T docket M-B send-keys -t %1 F11",
 		"bind-key -T docket MouseDrag1Border resize-pane -M",
-		"bind-key -T docket DoubleClick1Border resize-pane -t =docket:view.{left} -x 36",
+		"bind-key -T docket DoubleClick1Border resize-pane -t %1 -x 36",
 	} {
 		if f.ran(want) != 1 {
 			t.Errorf("not bound: %q in %v", want, f.calls)
@@ -629,7 +649,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}
 	// The width is set when the panes are started and not again, so a
 	// width chosen later is kept.
-	if f.ran("resize-pane -t =docket:view.{left} -x 36") != 1 {
+	if f.ran("resize-pane -t %1 -x 36") != 1 {
 		t.Errorf("first setup did not set the width once: %v", f.calls)
 	}
 	defer func() {
@@ -657,9 +677,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"bind-key -T docket-mark-go a send-keys -t =docket:view.{left} F12 ' a ;",
-		"; bind-key -T docket-mark-go ' send-keys -t =docket:view.{left} F12 ' '",
-		"; bind-key -T docket-mark-set 9 send-keys -t =docket:view.{left} F12 m 9",
+		"bind-key -T docket-mark-go a send-keys -t %1 F12 ' a ;",
+		"; bind-key -T docket-mark-go ' send-keys -t %1 F12 ' '",
+		"; bind-key -T docket-mark-set 9 send-keys -t %1 F12 m 9",
 	} {
 		found := false
 		for _, c := range f.calls {
@@ -800,7 +820,11 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if f.ran("split-window -h -b -f -d -t =docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
+	if f.ran("split-window -h -b -f -d -P -F #{pane_id} -t =docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
+		t.Errorf("calls: %v", f.calls)
+	}
+	// The keys name the new pane.
+	if f.ran("bind-key -T docket M-J send-keys -t %3 F5") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
@@ -1235,7 +1259,7 @@ func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
 	if err := v.Setup(); err != nil {
 		t.Fatal(err)
 	}
-	if f.ran("resize-pane -t =docket:view.{left} -x 52") != 1 || f.ran("resize-pane -t =docket:view.{left} -x 36") != 0 {
+	if f.ran("resize-pane -t %1 -x 52") != 1 || f.ran("resize-pane -t %1 -x 36") != 0 {
 		t.Errorf("sidebar not given the saved width: %v", f.calls)
 	}
 }

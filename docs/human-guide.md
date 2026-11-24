@@ -925,7 +925,11 @@ shown. The `docket` session has its own key table and no prefix; no other
 session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default
-`~/.local/share/docket`) and bay's manifest. It writes neither.
+`~/.local/share/docket`) and bay's manifest. It changes docket's items in
+one case: `>` and `<` change the level of the item under the cursor by
+running `docket set`. It keeps the marks and the list's width in
+`view-marks.json` and `view-width.json` in docket's folder. It writes
+nothing else, and nothing of bay's.
 
 ### Infrastructure
 

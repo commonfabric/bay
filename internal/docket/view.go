@@ -2,6 +2,7 @@ package docket
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,10 @@ const (
 	viewTarget    = "=" + ViewSession + ":" + ViewWindow
 	auxTarget     = "=" + AuxSession + ":"
 	recordWelcome = "printf 'Choose an item in the list on the left.\\n'; exec cat"
+	// The ends of the commands that start the sidebar and the client in
+	// the right pane.
+	sidebarSuffix = " docket sidebar"
+	clientAttach  = "attach-session -t '=" + AuxSession + "'"
 )
 
 // Tmux runs one tmux command and returns its standard output.
@@ -56,6 +61,17 @@ type View struct {
 	// Width is the width a newly started sidebar is given: the width saved
 	// from the last time the list was used. 0 means SidebarWidth.
 	Width int
+	// ListPane is the id of the list's own pane, such as "%3", when the
+	// list itself runs the View. The other commands find the list's pane.
+	ListPane string
+}
+
+// listTarget returns the tmux target of the list's pane.
+func (v *View) listTarget() string {
+	if v.ListPane != "" {
+		return v.ListPane
+	}
+	return sidebarPane
 }
 
 // windowID returns the id of a window, and "" when it does not exist.
@@ -101,12 +117,18 @@ func (v *View) Setup() error {
 			return fmt.Errorf("hide the record window's status line: %w", err)
 		}
 	}
+	// The record window stays when the record's pager is quit, so the
+	// next item's record can be shown in it.
+	if _, err := v.Tmux("set-option", "-w", "-t", recordTarget, "remain-on-exit", "on"); err != nil {
+		return fmt.Errorf("keep the record window: %w", err)
+	}
 	if !v.has(viewTarget) {
 		if _, err := v.Tmux("new-session", "-d", "-s", ViewSession, "-n", ViewWindow, v.SidebarCommand); err != nil {
 			return fmt.Errorf("start the sidebar: %w", err)
 		}
 	}
-	if err := v.ensureViewer(); err != nil {
+	pane, err := v.ensureViewer()
+	if err != nil {
 		return err
 	}
 	for _, opt := range [][2]string{{"key-table", KeyTable}, {"prefix", "None"}, {"prefix2", "None"}, {"status", "off"}} {
@@ -121,9 +143,10 @@ func (v *View) Setup() error {
 	//
 	// The keys that act on the list from either pane send it function
 	// keys. They work while the list is collapsed and while a pane of the
-	// view is zoomed.
+	// view is zoomed. They name the list's pane by its id, so they do
+	// nothing once the list has exited.
 	list := func(key string) []string {
-		return []string{"send-keys", "-t", sidebarPane, key}
+		return []string{"send-keys", "-t", pane, key}
 	}
 	binds := [][]string{
 		append([]string{"M-l"}, list("F5")...),
@@ -134,9 +157,9 @@ func (v *View) Setup() error {
 		append([]string{"M-P"}, list("F10")...),
 		append([]string{"M-Space"}, list("F7")...),
 		// Show the chosen item's state.
-		{"M-?", "send-keys", "-t", sidebarPane, "F8"},
+		append([]string{"M-?"}, list("F8")...),
 		// Collapse the list and move to the right side, or expand it.
-		{"M-B", "send-keys", "-t", sidebarPane, "F11"},
+		append([]string{"M-B"}, list("F11")...),
 		// Bookmarks: the next key is read in a table of its own, which
 		// sends the list F12, the list's key and the mark.
 		{"M-'", "switch-client", "-T", markGoTable, "\\;", "display-message", "go to a mark: press its letter, or ' to go back"},
@@ -144,8 +167,8 @@ func (v *View) Setup() error {
 		// Dragging the line between the panes changes the list's width,
 		// and a double click on that line gives it the first width again.
 		{"MouseDrag1Border", "resize-pane", "-M"},
-		{"DoubleClick1Border", "resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(SidebarWidth)},
-		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + sidebarPane + "'"},
+		{"DoubleClick1Border", "resize-pane", "-t", pane, "-x", fmt.Sprint(SidebarWidth)},
+		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + pane + "'"},
 		// Leave the view: go back to the session the terminal came from,
 		// or detach when it came from outside tmux.
 		{"M-D", "if-shell", "-F", "#{client_last_session}", "switch-client -l", "detach-client"},
@@ -164,7 +187,7 @@ func (v *View) Setup() error {
 			return fmt.Errorf("bind %s: %w", b[0], err)
 		}
 	}
-	return v.bindMarks()
+	return v.bindMarks(pane)
 }
 
 // The key tables that read the mark after Option-' and Option-M.
@@ -180,7 +203,7 @@ const markKeys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 // by one tmux command. Emptying it is a command of its own: tmux drops
 // keys bound in the same command that empties their table. A key that is
 // not bound in the table ends the wait and does nothing.
-func (v *View) bindMarks() error {
+func (v *View) bindMarks(pane string) error {
 	for _, t := range []struct{ table, key string }{{markGoTable, "'"}, {markSetTable, "m"}} {
 		if _, err := v.Tmux("unbind-key", "-q", "-a", "-T", t.table); err != nil {
 			return fmt.Errorf("clear the keys of %s: %w", t.table, err)
@@ -195,7 +218,7 @@ func (v *View) bindMarks() error {
 			if args != nil {
 				args = append(args, ";")
 			}
-			args = append(args, "bind-key", "-T", t.table, string(k), "send-keys", "-t", sidebarPane, "F12", t.key, string(k))
+			args = append(args, "bind-key", "-T", t.table, string(k), "send-keys", "-t", pane, "F12", t.key, string(k))
 		}
 		if _, err := v.Tmux(args...); err != nil {
 			return fmt.Errorf("bind the keys of %s: %w", t.table, err)
@@ -207,14 +230,25 @@ func (v *View) bindMarks() error {
 // ListHidden reports whether the right pane is zoomed, which hides the
 // list.
 func (v *View) ListHidden() bool {
-	out, err := v.Tmux("display-message", "-p", "-t", sidebarPane, "#{window_zoomed_flag}#{pane_active}")
+	out, err := v.Tmux("display-message", "-p", "-t", v.listTarget(), "#{window_zoomed_flag}#{pane_active}")
 	return err == nil && strings.TrimSpace(out) == "10"
 }
 
 // Zoomed reports whether a pane of the view's window is zoomed.
 func (v *View) Zoomed() bool {
-	out, err := v.Tmux("display-message", "-p", "-t", sidebarPane, "#{window_zoomed_flag}")
+	out, err := v.Tmux("display-message", "-p", "-t", v.listTarget(), "#{window_zoomed_flag}")
 	return err == nil && strings.TrimSpace(out) == "1"
+}
+
+// WindowWidth returns the width of the view's window, which follows the
+// terminal attached to it, and 0 when tmux cannot say.
+func (v *View) WindowWidth() int {
+	out, err := v.Tmux("display-message", "-p", "-t", v.listTarget(), "#{window_width}")
+	if err != nil {
+		return 0
+	}
+	width, _ := strconv.Atoi(strings.TrimSpace(out))
+	return width
 }
 
 // Collapse shrinks the sidebar to CollapsedWidth and moves the keyboard to
@@ -229,45 +263,56 @@ func (v *View) Collapse() error {
 
 // SetWidth gives the sidebar a width in columns.
 func (v *View) SetWidth(width int) error {
-	_, err := v.Tmux("resize-pane", "-t", sidebarPane, "-x", fmt.Sprint(width))
+	_, err := v.Tmux("resize-pane", "-t", v.listTarget(), "-x", fmt.Sprint(width))
 	return err
 }
 
 // ensureViewer starts whichever of the view window's two panes is
-// missing: the sidebar on the left, or the client on the right. A pane is
-// recognized by the command it was started with.
-func (v *View) ensureViewer() error {
-	out, err := v.Tmux("list-panes", "-t", viewTarget, "-F", "#{pane_start_command}")
+// missing: the sidebar on the left, or the client on the right, and
+// returns the id of the sidebar's pane. A pane is recognized by the end of
+// the command it was started with, so a sidebar started by another copy of
+// bay is recognized too.
+func (v *View) ensureViewer() (string, error) {
+	out, err := v.Tmux("list-panes", "-t", viewTarget, "-F", "#{pane_id}\t#{pane_start_command}")
 	if err != nil {
-		return fmt.Errorf("list the view's panes: %w", err)
+		return "", fmt.Errorf("list the view's panes: %w", err)
 	}
-	client := "env -u TMUX " + v.TmuxCommand + " attach-session -t '=" + AuxSession + "'"
-	sidebar, viewer := false, false
+	// The client attaches to the tmux server the view runs on, which is
+	// named by the first field of TMUX in the pane.
+	client := "env -u TMUX " + v.TmuxCommand + " -S \"${TMUX%%,*}\" " + clientAttach
+	sidebar, viewer := "", false
 	for _, line := range strings.Split(out, "\n") {
+		id, command, _ := strings.Cut(strings.TrimSpace(line), "\t")
 		// tmux prints the command inside double quotes.
-		command := strings.Trim(strings.TrimSpace(line), "\"")
-		sidebar = sidebar || command == v.SidebarCommand
-		viewer = viewer || command == client
+		command = strings.Trim(command, "\"")
+		if sidebar == "" && strings.HasSuffix(command, sidebarSuffix) {
+			sidebar = id
+		}
+		viewer = viewer || strings.HasSuffix(command, clientAttach)
 	}
-	if sidebar && viewer {
-		return nil
+	if sidebar != "" && viewer {
+		return sidebar, nil
 	}
 	if !viewer {
 		if _, err := v.Tmux("split-window", "-h", "-d", "-t", viewTarget, client); err != nil {
-			return fmt.Errorf("start the right pane: %w", err)
+			return "", fmt.Errorf("start the right pane: %w", err)
 		}
 	}
-	if !sidebar {
-		if _, err := v.Tmux("split-window", "-h", "-b", "-f", "-d", "-t", viewTarget, v.SidebarCommand); err != nil {
-			return fmt.Errorf("start the sidebar: %w", err)
+	if sidebar == "" {
+		id, err := v.Tmux("split-window", "-h", "-b", "-f", "-d", "-P", "-F", "#{pane_id}", "-t", viewTarget, v.SidebarCommand)
+		if err != nil {
+			return "", fmt.Errorf("start the sidebar: %w", err)
 		}
+		sidebar = strings.TrimSpace(id)
 	}
 	// A pane was started, so the sidebar gets the saved width. A width
 	// chosen later is kept.
+	width := SidebarWidth
 	if v.Width >= CollapsedBelow {
-		return v.SetWidth(v.Width)
+		width = v.Width
 	}
-	return v.SetWidth(SidebarWidth)
+	_, err = v.Tmux("resize-pane", "-t", sidebar, "-x", fmt.Sprint(width))
+	return sidebar, err
 }
 
 // viewerClient returns the tty of the client running in the right pane.
@@ -301,7 +346,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 		}
 		return "", err
 	}
-	if err := v.ensureViewer(); err != nil {
+	if _, err := v.ensureViewer(); err != nil {
 		return "", err
 	}
 	client, err := v.viewerClient()
@@ -333,7 +378,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 		window = record
 	}
 	if window == "" {
-		return "", fmt.Errorf("the record window is gone; run 'bay docket view' again")
+		return "", fmt.Errorf("the record window was closed; run 'bay docket view' again")
 	}
 	held, err := v.auxWindows()
 	if err != nil {

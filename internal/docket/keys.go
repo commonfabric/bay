@@ -33,8 +33,8 @@ const KeysHelp = `In the list:
   b               collapse the list to a narrow strip
   =               give the list its first width again
   click           go to the row; on an area, also fold or unfold it;
-                  on « at the bottom, collapse the list; on » in
-                  the same place, expand it
+                  on « at the bottom, collapse the list. A click
+                  anywhere on the collapsed list expands it
   drag            on the line between the panes, change the list's
                   width; a double click there gives the first width.
                   The width is kept for the next start of the view
@@ -44,6 +44,7 @@ const KeysHelp = `In the list:
 
 From either side:
   Option-J, Option-K   move down or up one row
+  Option-l, Option-h   the same as Option-J and Option-K
   Option-N, Option-P   move to the next or previous item or bay, as n
                        and p do
   Option-Space         fold or unfold the area under the cursor

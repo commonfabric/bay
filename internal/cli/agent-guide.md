@@ -793,7 +793,9 @@ Open the tmux session named `docket`: a list of the work items kept by the
 separate `docket` tool on the left, and on the right the bay window of the
 item chosen in the list. It is a view for the person at the terminal. An
 agent has no reason to run it, and must not type into the windows it shows.
-It reads docket's files and bay's manifest and writes neither.
+It reads docket's files and bay's manifest. It changes an item's level
+when the person presses `>` or `<`, and keeps its marks and the list's
+width in files of its own in docket's folder.
 
 ### Surface commands
 

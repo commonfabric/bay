@@ -28,3 +28,24 @@ func TestSavedWidthIsReadBackAndACollapsedOneIsIgnored(t *testing.T) {
 		t.Errorf("saved a collapsed width: got %d, want 0", got)
 	}
 }
+
+func TestTheListKeepsItsWidthWhenTheTerminalChangesSize(t *testing.T) {
+	// The view starts detached at 80 columns with the saved width 40.
+	w := listWidth{drawn: 40, saved: 40, window: 80}
+	// Attaching a terminal 200 columns wide makes tmux widen the list.
+	if restore, save := w.changed(98, 200, false); restore != 40 || save {
+		t.Errorf("attach: restore %d, save %v", restore, save)
+	}
+	// The list is given back its width, which is not saved again.
+	if restore, save := w.changed(40, 200, false); restore != 0 || !save || w.saved != 40 {
+		t.Errorf("after attach: restore %d, save %v, saved %d", restore, save, w.saved)
+	}
+	// Dragging the border is a width the person chose.
+	if restore, save := w.changed(50, 200, false); restore != 0 || !save || w.saved != 50 {
+		t.Errorf("drag: restore %d, save %v, saved %d", restore, save, w.saved)
+	}
+	// A zoomed pane or a collapsed list changes nothing.
+	if restore, save := w.changed(200, 200, true); restore != 0 || save || w.saved != 50 {
+		t.Errorf("zoom: restore %d, save %v, saved %d", restore, save, w.saved)
+	}
+}
