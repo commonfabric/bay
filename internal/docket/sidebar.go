@@ -41,6 +41,7 @@ type Sidebar struct {
 	marks    map[string]string // for each mark, a letter or digit, the name of its row
 	pending  string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
 	closing  string            // the item x asks to close; else ""
+	bayClose BayClose          // the bay x or X asks to close; its Ref is "" when none
 	dropping bool              // the reason for dropping closing is being typed
 	reason   string            // the reason typed so far
 	outcome  string            // "finished" or "dropped", once chosen
@@ -311,6 +312,12 @@ func (s *Sidebar) rebuild() {
 			below, belowOpen, belowBlocking := walk(item.Name, depth+1, inArea)
 			if item.Kind == "area" {
 				if len(below) == 0 {
+					// An area with no open items under it is listed, so
+					// that it can be closed.
+					if s.hasOpenChild(item.Name) || !s.shown(item, inArea) {
+						continue
+					}
+					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true})
 					continue
 				}
 				for _, r := range below {
@@ -481,7 +488,18 @@ const (
 	ResetWidth
 	// CloseItem asks the caller to close an item. CloseRequest names it.
 	CloseItem
+	// CloseBay asks the caller to close a bay, or to take a bay that no
+	// longer exists off its item. BayCloseRequest says which.
+	CloseBay
 )
+
+// BayClose is a bay that x or X asks to close.
+type BayClose struct {
+	Item  string // the item that lists the bay
+	Ref   string // the bay, as dock/bay
+	Gone  bool   // the bay no longer exists: take it off the item
+	Force bool   // close it even with uncommitted changes
+}
 
 // move steps the cursor by delta rows and reports whether it moved.
 func (s *Sidebar) move(delta int) bool {
@@ -565,8 +583,8 @@ func (s *Sidebar) key(key string) Action {
 		// A key sent from the right side gives up the close.
 		s.dropping, s.closing = false, ""
 	}
-	if s.closing != "" && s.pending == "" {
-		s.closing = ""
+	if s.pending == "" {
+		s.closing, s.bayClose = "", BayClose{}
 	}
 	if s.typing && sent == "" {
 		return s.typeFilter(key)
@@ -624,7 +642,9 @@ func (s *Sidebar) key(key string) Action {
 	case "m", "'":
 		s.pending = key
 	case "x":
-		s.startClose()
+		s.startClose(false)
+	case "X":
+		s.startClose(true)
 	case ">":
 		return Deeper
 	case "<":
@@ -649,13 +669,22 @@ func (s *Sidebar) key(key string) Action {
 // cannot. An item or area with open items under it is not closed, nor an
 // item that lists more than one bay: the list shows those as rows under
 // it.
-func (s *Sidebar) startClose() {
+func (s *Sidebar) startClose(force bool) {
 	row := s.Current()
 	if row.Desk {
 		s.notice = "the desk cannot be closed"
 		return
 	}
 	name, _, _ := strings.Cut(row.Name, " ")
+	if row.Bay != "" {
+		s.bayClose = BayClose{Item: name, Ref: row.Bay, Gone: row.Gone, Force: force && !row.Gone}
+		s.pending = "x"
+		return
+	}
+	if force {
+		s.notice = "X closes a bay; on a bay's row"
+		return
+	}
 	item, ok := s.items[name]
 	if !ok {
 		return
@@ -676,9 +705,26 @@ func (s *Sidebar) startClose() {
 	}
 }
 
+// hasOpenChild reports whether an open item is directly under name.
+func (s *Sidebar) hasOpenChild(name string) bool {
+	for _, kid := range Children(s.items, name) {
+		if kid.Status == "open" {
+			return true
+		}
+	}
+	return false
+}
+
 // chooseOutcome applies the key after x: f closes the item as finished, d
 // asks for the reason it is dropped, and any other key gives up.
 func (s *Sidebar) chooseOutcome(key string) Action {
+	if s.bayClose.Ref != "" {
+		if key == "y" {
+			return CloseBay
+		}
+		s.bayClose = BayClose{}
+		return None
+	}
 	switch key {
 	case "f":
 		s.outcome = "finished"
@@ -722,6 +768,13 @@ func (s *Sidebar) CloseRequest() (item, outcome, reason string) {
 	item, outcome, reason = s.closing, s.outcome, strings.TrimSpace(s.reason)
 	s.closing, s.outcome, s.reason = "", "", ""
 	return item, outcome, reason
+}
+
+// BayCloseRequest returns the bay that CloseBay asks to close.
+func (s *Sidebar) BayCloseRequest() BayClose {
+	b := s.bayClose
+	s.bayClose = BayClose{}
+	return b
 }
 
 // typeFilter applies one key while the filter is being typed.
@@ -908,6 +961,15 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	case s.pending == "'":
 		info = []Span{{"«", "key"}, {" go to a mark: press its letter", ""}}
 		hint = keyHints("'", "goes back", "esc", "cancels")
+	case s.pending == "x" && s.bayClose.Gone:
+		info = []Span{{"«", "key"}, {" take " + s.bayClose.Ref + " off " + s.bayClose.Item + "?", ""}}
+		hint = keyHints("y", "takes it off", "esc", "cancels")
+	case s.pending == "x" && s.bayClose.Force:
+		info = []Span{{"«", "key"}, {" close " + s.bayClose.Ref + ", losing uncommitted changes?", ""}}
+		hint = keyHints("y", "closes it", "esc", "cancels")
+	case s.pending == "x" && s.bayClose.Ref != "":
+		info = []Span{{"«", "key"}, {" close bay " + s.bayClose.Ref + "?", ""}}
+		hint = keyHints("y", "closes it", "esc", "cancels")
 	case s.pending == "x":
 		info = []Span{{"«", "key"}, {" close " + s.closing + "?", ""}}
 		hint = keyHints("f", "finished", "d", "dropped", "esc", "cancels")

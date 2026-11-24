@@ -446,6 +446,40 @@ func fitPopup(want, room int) int {
 
 // readKeys sends the name of each key and mouse press read from the
 // terminal, as docket.ParseKeys names them.
+// closeBay closes a bay with 'bay close', which refuses a bay with
+// uncommitted changes unless it is forced. A bay that no longer exists is
+// taken off its item instead.
+func closeBay(b docket.BayClose) (note string, err error) {
+	if b.Gone {
+		out, err := exec.Command("docket", "site", b.Item, "bay", b.Ref, "--remove").CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("docket site --remove: %s", strings.TrimSpace(string(out)))
+		}
+		return b.Ref + " is off " + b.Item, nil
+	}
+	dock, bayID, ok := strings.Cut(b.Ref, "/")
+	if !ok {
+		return "", fmt.Errorf("%s does not name a dock and a bay", b.Ref)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	args := []string{"close", bayID, "--dock", dock}
+	if b.Force {
+		args = append(args, "--force")
+	}
+	out, err := exec.Command(self, args...).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if !b.Force {
+			msg += "; X closes it anyway"
+		}
+		return "", fmt.Errorf("bay close %s: %s", b.Ref, msg)
+	}
+	return b.Ref + " is closed", nil
+}
+
 // listWidth follows the width of the list's pane, to keep the width the
 // list is given and not one that a change in the terminal's size gives it.
 type listWidth struct {
@@ -663,6 +697,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 					note = item + " is closed as " + outcome
 					reload()
 				}
+			case docket.CloseBay:
+				note, err = closeBay(sidebar.BayCloseRequest())
+				reload()
 			case docket.Deeper, docket.Nearer:
 				item, level, ok := sidebar.LevelChange(action)
 				switch {

@@ -28,7 +28,13 @@ const KeysHelp = `In the list:
   x               close the item or area under the cursor: then f for
                   finished, or d and a reason for dropped. Not done
                   while open items are under it, or while it lists
-                  more than one bay
+                  more than one bay. On a bay's row, close the bay
+                  (y confirms); a bay with uncommitted changes is
+                  refused. A bay that no longer exists is taken off
+                  its item. An area with no open items is listed so
+                  that it can be closed
+  X               on a bay's row, close the bay even with
+                  uncommitted changes, which are lost (y confirms)
   a               show more levels: front, then front + back, then
                   front + back + shelved; the line above the key
                   reminder says which

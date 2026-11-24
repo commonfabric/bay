@@ -1348,3 +1348,69 @@ func TestXClosesAnItemOnlyWithNothingListedUnderIt(t *testing.T) {
 		t.Errorf("desk: %q", s.Notice())
 	}
 }
+
+func TestXAndShiftXCloseTheBayOnABayRow(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetMissing(map[string]bool{"loom/b19": true})
+	press := func(keys ...string) (a Action) {
+		for _, k := range keys {
+			a = s.Key(k)
+		}
+		return a
+	}
+	at := func(name string) {
+		t.Helper()
+		for press("j"); s.Current().Name != name; press("j") {
+			if s.Current().Name == s.Rows()[len(s.Rows())-1].Name {
+				t.Fatalf("no row %s in %s", name, names(s))
+			}
+		}
+	}
+	at("sidebar")
+	if press("X"); s.Notice() != "X closes a bay; on a bay's row" {
+		t.Errorf("X on an item: %q", s.Notice())
+	}
+	at("sidebar bay/b8")
+	if a := press("x", "y"); a != CloseBay {
+		t.Fatalf("x y: %v", a)
+	}
+	if b := s.BayCloseRequest(); b != (BayClose{Item: "sidebar", Ref: "bay/b8"}) {
+		t.Errorf("x: %+v", b)
+	}
+	if a := press("X", "y"); a != CloseBay {
+		t.Fatalf("X y: %v", a)
+	}
+	if b := s.BayCloseRequest(); b != (BayClose{Item: "sidebar", Ref: "bay/b8", Force: true}) {
+		t.Errorf("X: %+v", b)
+	}
+	if a := press("x", "n"); a != None || s.BayCloseRequest().Ref != "" {
+		t.Errorf("x n: %v", a)
+	}
+	// A bay that no longer exists is taken off its item, never forced.
+	at("sidebar loom/b19")
+	press("X", "y")
+	if b := s.BayCloseRequest(); b != (BayClose{Item: "sidebar", Ref: "loom/b19", Gone: true}) {
+		t.Errorf("gone: %+v", b)
+	}
+}
+
+func TestAnAreaWithNoOpenItemsIsListedSoItCanBeClosed(t *testing.T) {
+	items := tree()
+	items["empty"] = Item{Name: "empty", Title: "Nothing left", Kind: "area", Status: "open", Level: "front"}
+	items["backonly"] = Item{Name: "backonly", Title: "Only back items", Kind: "area", Status: "open", Level: "front"}
+	items["later"] = Item{Name: "later", Title: "Later", Kind: "goal", Parent: ptr("backonly"), Status: "open", Level: "back"}
+	s := NewSidebar(items)
+	got := names(s)
+	if !strings.Contains(got, "empty") || strings.Contains(got, "backonly") {
+		t.Errorf("rows = %s", got)
+	}
+	for s.Current().Name != "empty" {
+		s.Key("j")
+	}
+	if a := s.Key("x"); a != None || s.Notice() != "" {
+		t.Errorf("x: %v %q", a, s.Notice())
+	}
+	if a := s.Key("f"); a != CloseItem {
+		t.Errorf("f: %v", a)
+	}
+}
