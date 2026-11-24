@@ -251,8 +251,14 @@ func (r *Real) FindWindowByName(session string, name string) (string, error) {
 	return "", fmt.Errorf("window %q not found in session %q", name, session)
 }
 
-func (r *Real) SelectWindow(windowID string) error {
-	return runSilent("select-window", "-t", windowID)
+// sessionWindow returns a tmux target for a window in one session. A bare
+// window id resolves to whichever session holding the window was used last.
+func sessionWindow(session, window string) string {
+	return exactSession(session) + ":" + window
+}
+
+func (r *Real) SelectWindow(session, windowID string) error {
+	return runSilent("select-window", "-t", sessionWindow(session, windowID))
 }
 
 // --- Panes ---
@@ -522,12 +528,12 @@ func (r *Real) FindDockEditorWindow(session string) (string, bool) {
 }
 
 // MoveWindow moves a window to a specific index.
-func (r *Real) MoveWindow(windowID string, targetIndex int) error {
-	return runSilent("move-window", "-s", windowID, "-t", fmt.Sprintf("%d", targetIndex))
+func (r *Real) MoveWindow(session, windowID string, targetIndex int) error {
+	return runSilent("move-window", "-s", sessionWindow(session, windowID), "-t", sessionWindow(session, strconv.Itoa(targetIndex)))
 }
 
-func (r *Real) MoveWindowAfter(windowID string, afterWindowID string) error {
-	return runSilent("move-window", "-a", "-s", windowID, "-t", afterWindowID)
+func (r *Real) MoveWindowAfter(session, windowID, afterWindowID string) error {
+	return runSilent("move-window", "-a", "-s", sessionWindow(session, windowID), "-t", sessionWindow(session, afterWindowID))
 }
 
 // DisplayPopup opens a tmux popup running the given command.

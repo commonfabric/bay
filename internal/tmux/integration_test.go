@@ -455,3 +455,35 @@ func TestIntegration_ListPanesReportsDeadPane(t *testing.T) {
 		t.Fatalf("live root pane reported dead: %+v", panes[rootPaneID])
 	}
 }
+
+// TestIntegration_WindowTargetsNameTheSession checks that SelectWindow and
+// MoveWindowAfter act in the named session when the window is also linked
+// into another session that was used more recently.
+func TestIntegration_WindowTargetsNameTheSession(t *testing.T) {
+	s := startTmux(t)
+	s.newDetachedSession("dock")
+	first := s.firstWindowID("dock")
+	s.mustCmd("new-window", "-d", "-t", "=dock:")
+	s.newDetachedSession("aux")
+	s.mustCmd("link-window", "-s", "=dock:"+first, "-t", "=aux:")
+	r := s.realImplementation(t)
+
+	added := s.mustCmd("new-window", "-d", "-t", "=dock:", "-P", "-F", "#{window_id}")
+	if err := r.MoveWindowAfter("dock", added, first); err != nil {
+		t.Fatalf("MoveWindowAfter: %v", err)
+	}
+	dockWindows := strings.Split(s.mustCmd("list-windows", "-t", "=dock", "-F", "#{window_id}"), "\n")
+	if len(dockWindows) != 3 || dockWindows[1] != added {
+		t.Errorf("dock windows = %v, want %s second", dockWindows, added)
+	}
+	if aux := s.mustCmd("list-windows", "-t", "=aux", "-F", "#{window_id}"); strings.Contains(aux, added) {
+		t.Errorf("aux windows = %q, want no %s", aux, added)
+	}
+
+	if err := r.SelectWindow("dock", first); err != nil {
+		t.Fatalf("SelectWindow: %v", err)
+	}
+	if got := s.mustCmd("display-message", "-t", "=dock:", "-p", "#{window_id}"); got != first {
+		t.Errorf("dock's current window = %s, want %s", got, first)
+	}
+}

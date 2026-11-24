@@ -518,8 +518,8 @@ func (m *Mock) FindWindowByName(session string, name string) (string, error) {
 	return "", fmt.Errorf("window %q not found in session %q", name, session)
 }
 
-func (m *Mock) SelectWindow(windowID string) error {
-	m.record("SelectWindow", windowID)
+func (m *Mock) SelectWindow(session, windowID string) error {
+	m.record("SelectWindow", windowID, session)
 	if _, ok := m.windows[windowID]; !ok {
 		return fmt.Errorf("window %q not found", windowID)
 	}
@@ -750,13 +750,13 @@ func (m *Mock) FindDockEditorWindow(session string) (string, bool) {
 	return "", false
 }
 
-func (m *Mock) MoveWindow(windowID string, targetIndex int) error {
-	m.record("MoveWindow", windowID, fmt.Sprintf("%d", targetIndex))
+func (m *Mock) MoveWindow(session, windowID string, targetIndex int) error {
+	m.record("MoveWindow", windowID, fmt.Sprintf("%d", targetIndex), session)
 	return nil
 }
 
-func (m *Mock) MoveWindowAfter(windowID string, afterWindowID string) error {
-	m.record("MoveWindowAfter", windowID, afterWindowID)
+func (m *Mock) MoveWindowAfter(session, windowID, afterWindowID string) error {
+	m.record("MoveWindowAfter", windowID, afterWindowID, session)
 	return nil
 }
 

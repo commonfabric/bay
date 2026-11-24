@@ -24,6 +24,7 @@ Outside tmux: recovers all docks.`,
 
 			// Save current window so we can restore focus after recovery
 			currentWinID, _ := eng.Tmux.CurrentWindowID()
+			currentSession, _ := eng.Tmux.CurrentSession()
 
 			// Inside a dock: recover just that dock
 			if session, sessionErr := eng.Tmux.CurrentSession(); sessionErr == nil {
@@ -38,7 +39,7 @@ Outside tmux: recovers all docks.`,
 					}
 					printRecoveryWarnings(result.Warnings)
 					if currentWinID != "" {
-						_ = eng.Tmux.SelectWindow(currentWinID)
+						_ = eng.Tmux.SelectWindow(session, currentWinID)
 					}
 					startMonitor()
 					return err
@@ -68,8 +69,8 @@ Outside tmux: recovers all docks.`,
 			}
 
 			// Restore focus if we were in tmux
-			if currentWinID != "" {
-				_ = eng.Tmux.SelectWindow(currentWinID)
+			if currentWinID != "" && currentSession != "" {
+				_ = eng.Tmux.SelectWindow(currentSession, currentWinID)
 			}
 
 			startMonitor()

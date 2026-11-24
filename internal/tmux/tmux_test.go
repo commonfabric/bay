@@ -322,7 +322,7 @@ func TestSelectWindow(t *testing.T) {
 	m := NewMock()
 	m.NewSession("work")
 	id, _ := m.NewWindow("work", "editor", "/home")
-	if err := m.SelectWindow(id); err != nil {
+	if err := m.SelectWindow("work", id); err != nil {
 		t.Fatalf("SelectWindow: %v", err)
 	}
 	// Verify the call was recorded.
@@ -332,6 +332,9 @@ func TestSelectWindow(t *testing.T) {
 	last := m.Calls[len(m.Calls)-1]
 	if last.Method != "SelectWindow" {
 		t.Errorf("expected last call to be SelectWindow, got %q", last.Method)
+	}
+	if len(last.Args) != 2 || last.Args[0] != id || last.Args[1] != "work" {
+		t.Errorf("SelectWindow args = %v, want [%s work]", last.Args, id)
 	}
 }
 

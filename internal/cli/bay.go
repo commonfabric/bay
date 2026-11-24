@@ -1225,7 +1225,7 @@ func bayGo(eng *engine.Engine, args []string, waiting, nextWaiting bool) error {
 		if entry == nil {
 			return nil
 		}
-		if err := eng.Tmux.SelectWindow(entry.TmuxWindowID); err != nil {
+		if err := eng.Tmux.SelectWindow(currentSession, entry.TmuxWindowID); err != nil {
 			return err
 		}
 		return nil
@@ -1268,7 +1268,7 @@ func bayGo(eng *engine.Engine, args []string, waiting, nextWaiting bool) error {
 		if entries[0].TmuxWindowID == currentWinID {
 			return nil // already here
 		}
-		return eng.Tmux.SelectWindow(entries[0].TmuxWindowID)
+		return eng.Tmux.SelectWindow(currentSession, entries[0].TmuxWindowID)
 	default:
 		return pickBay(eng, entries)
 	}
@@ -1320,7 +1320,7 @@ func bayCycle(eng *engine.Engine, forward bool) error {
 		}
 	}
 
-	return eng.Tmux.SelectWindow(dockEntries[next].TmuxWindowID)
+	return eng.Tmux.SelectWindow(currentSession, dockEntries[next].TmuxWindowID)
 }
 
 // pickBay shows the built-in picker for bay selection.
@@ -1332,7 +1332,7 @@ func pickBay(eng *engine.Engine, entries []nav.Entry) error {
 	if err != nil || selected < 0 {
 		return nil
 	}
-	return eng.Tmux.SelectWindow(entries[selected].TmuxWindowID)
+	return eng.Tmux.SelectWindow(entries[selected].DockName, entries[selected].TmuxWindowID)
 }
 
 func formatBayItems(entries []nav.Entry, currentWinID string) ([]picker.Item, int) {

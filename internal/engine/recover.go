@@ -160,7 +160,7 @@ func (e *Engine) recoverDockSurfaces(dock *manifest.Dock, outcome *recoverOutcom
 			continue
 		}
 		_ = e.Tmux.SetWindowOption(winID, "@bay-dock-editor", "1")
-		_ = e.Tmux.MoveWindow(winID, 0)
+		_ = e.Tmux.MoveWindow(dock.Name, winID, 0)
 
 		panes, _ := e.Tmux.ListPanes(winID)
 		if len(panes) > 0 {
@@ -192,7 +192,7 @@ func (e *Engine) restoreFocusedWindow(dock *manifest.Dock) {
 	for _, s := range bestBay.Surfaces {
 		if s.Tmux != nil && s.Tmux.WindowID != "" {
 			if bestBay.LastFocused > 0 && s.ID == bestBay.LastFocused {
-				_ = e.Tmux.SelectWindow(s.Tmux.WindowID)
+				_ = e.Tmux.SelectWindow(dock.Name, s.Tmux.WindowID)
 				if s.Tmux.PaneID != "" {
 					_ = e.Tmux.SelectPane(s.Tmux.PaneID)
 				}
@@ -203,7 +203,7 @@ func (e *Engine) restoreFocusedWindow(dock *manifest.Dock) {
 	// Fallback: select the first surface's window.
 	for _, s := range bestBay.Surfaces {
 		if s.Tmux != nil && s.Tmux.WindowID != "" {
-			_ = e.Tmux.SelectWindow(s.Tmux.WindowID)
+			_ = e.Tmux.SelectWindow(dock.Name, s.Tmux.WindowID)
 			return
 		}
 	}

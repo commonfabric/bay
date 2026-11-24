@@ -748,7 +748,7 @@ func TestSurfaceAdd_HomeMaterializesBay(t *testing.T) {
 	sawMoveZero := false
 	sawNewWindowCWD := false
 	for _, call := range mockTmux.Calls {
-		if call.Method == "MoveWindow" && len(call.Args) == 2 && call.Args[1] == "0" {
+		if call.Method == "MoveWindow" && len(call.Args) == 3 && call.Args[1] == "0" {
 			sawMoveZero = true
 		}
 		if call.Method == "NewWindow" && len(call.Args) >= 3 && call.Args[2] == dock.Path {
@@ -791,7 +791,7 @@ func TestHome_FocusesExistingSurface(t *testing.T) {
 	}
 	sawSelect := false
 	for _, call := range mockTmux.Calls {
-		if call.Method == "SelectWindow" && len(call.Args) == 1 && call.Args[0] == winID {
+		if call.Method == "SelectWindow" && len(call.Args) == 2 && call.Args[0] == winID && call.Args[1] == "labs" {
 			sawSelect = true
 		}
 	}

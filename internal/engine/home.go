@@ -314,7 +314,7 @@ func (e *Engine) Home(dockName string) error {
 		return err
 	}
 	if home := dock.FindBayByID(manifest.HomeBayID); home != nil && len(home.Surfaces) > 0 {
-		if e.focusHomeSurface(home) {
+		if e.focusHomeSurface(dockName, home) {
 			return nil
 		}
 		if err := e.removeHomeBayRecords(dockName); err != nil {
@@ -347,28 +347,28 @@ func (e *Engine) removeHomeBayRecords(dockName string) error {
 	})
 }
 
-func (e *Engine) focusHomeSurface(home *manifest.Bay) bool {
+func (e *Engine) focusHomeSurface(dockName string, home *manifest.Bay) bool {
 	if home == nil {
 		return false
 	}
 	if home.LastFocused != 0 {
-		if s := home.FindSurfaceByID(home.LastFocused); e.selectSurface(s) {
+		if s := home.FindSurfaceByID(home.LastFocused); e.selectSurface(dockName, s) {
 			return true
 		}
 	}
 	for i := len(home.Surfaces) - 1; i >= 0; i-- {
-		if e.selectSurface(&home.Surfaces[i]) {
+		if e.selectSurface(dockName, &home.Surfaces[i]) {
 			return true
 		}
 	}
 	return false
 }
 
-func (e *Engine) selectSurface(s *manifest.Surface) bool {
+func (e *Engine) selectSurface(dockName string, s *manifest.Surface) bool {
 	if s == nil || s.Tmux == nil || s.Tmux.WindowID == "" {
 		return false
 	}
-	if err := e.Tmux.SelectWindow(s.Tmux.WindowID); err != nil {
+	if err := e.Tmux.SelectWindow(dockName, s.Tmux.WindowID); err != nil {
 		return false
 	}
 	if s.Tmux.PaneID != "" {

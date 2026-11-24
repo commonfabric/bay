@@ -250,7 +250,7 @@ func (e *Engine) SurfaceAdd(opts SurfaceAddOptions) error {
 		}
 		e.cleanPlaceholders(dockName)
 		if bay.Type == manifest.BayTypeHome && len(bay.Surfaces) == 0 {
-			_ = e.Tmux.MoveWindow(winID, 0)
+			_ = e.Tmux.MoveWindow(dockName, winID, 0)
 		} else {
 			e.positionNewWindow(dockName, winID, bayID, nil)
 		}

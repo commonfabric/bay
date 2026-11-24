@@ -25,7 +25,9 @@ type Interface interface {
 	ListWindows(session string) ([]Window, error)
 	WindowExists(windowID string) (bool, error)
 	FindWindowByName(session string, name string) (string, error) // returns window ID
-	SelectWindow(windowID string) error
+	// SelectWindow, MoveWindow and MoveWindowAfter name the session as well as
+	// the window, because a window can be linked into more than one session.
+	SelectWindow(session, windowID string) error
 
 	// Panes
 	SelectPane(paneID string) error
@@ -58,8 +60,8 @@ type Interface interface {
 	// @bay-waiting from the generic regex monitor.
 	WaitingOrBellWindowIDs(session string) (map[string]bool, error)
 
-	MoveWindow(windowID string, targetIndex int) error
-	MoveWindowAfter(windowID string, afterWindowID string) error
+	MoveWindow(session, windowID string, targetIndex int) error
+	MoveWindowAfter(session, windowID, afterWindowID string) error
 	FindDockEditorWindow(session string) (string, bool) // returns window ID if @bay-dock-editor=1 exists
 
 	// Client display. durationMs=0 uses tmux's display-time default.

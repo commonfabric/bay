@@ -1883,7 +1883,7 @@ func (e *Engine) positionNewWindow(dockName, windowID, bayID string, m *manifest
 	}
 
 	if afterID != "" && afterID != windowID {
-		_ = e.Tmux.MoveWindowAfter(windowID, afterID)
+		_ = e.Tmux.MoveWindowAfter(dockName, windowID, afterID)
 	}
 }
 
