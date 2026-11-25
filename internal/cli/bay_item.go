@@ -2,31 +2,100 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"os"
 
+	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/manifest"
 	"github.com/spf13/cobra"
 )
 
-// resolveItemTarget resolves the optional bay argument of `bay item` and
-// `bay role` and rejects the home pseudo-bay.
-func resolveItemTarget(target, dockFlag string) (dock, bayID string, err error) {
-	eng, err := newEngine()
+// splitItemArgs separates the optional bay argument from the optional item
+// name or role. A single argument that looks like a bay ID (such as b3)
+// is the bay, and the command reads; any other single argument is the
+// name to set on the current bay. To set a name that looks like a bay ID,
+// pass the bay too: `bay item self b3`.
+func splitItemArgs(args []string) (target, name string, haveName bool) {
+	switch len(args) {
+	case 0:
+		return "self", "", false
+	case 1:
+		if manifest.IsBayID(args[0]) {
+			return args[0], "", false
+		}
+		return "self", args[0], true
+	default:
+		return args[0], args[1], true
+	}
+}
+
+type itemFlags struct {
+	dock, role         string
+	roleSet, clr, repl bool
+}
+
+// runItem backs `bay item`.
+func runItem(eng *engine.Engine, out io.Writer, args []string, f itemFlags) error {
+	target, name, haveName := splitItemArgs(args)
+	dock, bayID, err := resolveBayArg(eng, target, f.dock)
 	if err != nil {
-		return "", "", err
+		return err
 	}
-	dock, bayID, err = resolveBayArg(eng, target, dockFlag)
+	switch {
+	case f.clr:
+		if haveName || f.roleSet {
+			return fmt.Errorf("--clear takes no name or --role")
+		}
+		return eng.BayClearItem(dock, bayID)
+	case haveName:
+		var rolePtr *string
+		if f.roleSet {
+			rolePtr = &f.role
+		}
+		return eng.BaySetItem(dock, bayID, name, rolePtr, f.repl)
+	default:
+		if f.roleSet || f.repl {
+			return fmt.Errorf("--role and --replace need an item name")
+		}
+		item, _, err := eng.BayItem(dock, bayID)
+		if err != nil {
+			return err
+		}
+		if item != "" {
+			fmt.Fprintln(out, item)
+		}
+		return nil
+	}
+}
+
+// runRole backs `bay role`.
+func runRole(eng *engine.Engine, out io.Writer, args []string, dockFlag string, clr bool) error {
+	target, role, haveRole := splitItemArgs(args)
+	dock, bayID, err := resolveBayArg(eng, target, dockFlag)
 	if err != nil {
-		return "", "", err
+		return err
 	}
-	if manifest.IsReservedBayID(bayID) {
-		return "", "", fmt.Errorf("home is reserved; items are not supported on the home pseudo-bay")
+	switch {
+	case clr:
+		if haveRole {
+			return fmt.Errorf("--clear takes no role")
+		}
+		return eng.BaySetRole(dock, bayID, "")
+	case haveRole:
+		return eng.BaySetRole(dock, bayID, role)
 	}
-	return dock, bayID, nil
+	_, r, err := eng.BayItem(dock, bayID)
+	if err != nil {
+		return err
+	}
+	if r != "" {
+		fmt.Fprintln(out, r)
+	}
+	return nil
 }
 
 func newBayItemCmd() *cobra.Command {
-	var dockFlag, role string
-	var clear, replace bool
+	var f itemFlags
 
 	cmd := &cobra.Command{
 		Use:   "item [id] [<name>]",
@@ -46,75 +115,25 @@ Another bay of the item needs a role (--role).
   bay item --clear               remove the item and role`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target, name, haveName, err := splitItemArgs(args)
-			if err != nil {
-				return err
-			}
-			dock, bayID, err := resolveItemTarget(target, dockFlag)
-			if err != nil {
-				return err
-			}
 			eng, err := newEngine()
 			if err != nil {
 				return err
 			}
-			switch {
-			case clear:
-				if haveName || cmd.Flags().Changed("role") {
-					return fmt.Errorf("--clear takes no name or --role")
-				}
-				return eng.BayClearItem(dock, bayID)
-			case haveName:
-				var rolePtr *string
-				if cmd.Flags().Changed("role") {
-					rolePtr = &role
-				}
-				return eng.BaySetItem(dock, bayID, name, rolePtr, replace)
-			default:
-				if cmd.Flags().Changed("role") || replace {
-					return fmt.Errorf("--role and --replace need an item name")
-				}
-				item, _, err := eng.BayItem(dock, bayID)
-				if err != nil {
-					return err
-				}
-				if item != "" {
-					fmt.Println(item)
-				}
-				return nil
-			}
+			f.roleSet = cmd.Flags().Changed("role")
+			return runItem(eng, os.Stdout, args, f)
 		},
 	}
 
-	cmd.Flags().StringVar(&dockFlag, "dock", "", "dock name (disambiguates a bare bay ID)")
-	cmd.Flags().StringVar(&role, "role", "", "role of the bay within the item (empty = primary)")
-	cmd.Flags().BoolVar(&clear, "clear", false, "remove the item and role")
-	cmd.Flags().BoolVar(&replace, "replace", false, "allow changing an item the bay already has")
+	cmd.Flags().StringVar(&f.dock, "dock", "", "dock name (disambiguates a bare bay ID)")
+	cmd.Flags().StringVar(&f.role, "role", "", "role of the bay within the item (empty = primary)")
+	cmd.Flags().BoolVar(&f.clr, "clear", false, "remove the item and role")
+	cmd.Flags().BoolVar(&f.repl, "replace", false, "allow changing an item the bay already has")
 	return cmd
-}
-
-// splitItemArgs separates the optional bay argument from the optional item
-// name or role. A single argument that looks like a bay ID (such as b3)
-// is the bay, and the command reads; any other single argument is the
-// name to set on the current bay. To set a name that looks like a bay ID,
-// pass the bay too: `bay item self b3`.
-func splitItemArgs(args []string) (target, name string, haveName bool, err error) {
-	switch len(args) {
-	case 0:
-		return "self", "", false, nil
-	case 1:
-		if manifest.IsBayID(args[0]) {
-			return args[0], "", false, nil
-		}
-		return "self", args[0], true, nil
-	default:
-		return args[0], args[1], true, nil
-	}
 }
 
 func newBayRoleCmd() *cobra.Command {
 	var dockFlag string
-	var clear bool
+	var clr bool
 
 	cmd := &cobra.Command{
 		Use:   "role [id] [<role>]",
@@ -130,39 +149,15 @@ first (see bay item).
   bay role --clear          make the bay the item's primary bay`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target, role, haveRole, err := splitItemArgs(args)
-			if err != nil {
-				return err
-			}
-			dock, bayID, err := resolveItemTarget(target, dockFlag)
-			if err != nil {
-				return err
-			}
 			eng, err := newEngine()
 			if err != nil {
 				return err
 			}
-			if clear {
-				if haveRole {
-					return fmt.Errorf("--clear takes no role")
-				}
-				return eng.BaySetRole(dock, bayID, "")
-			}
-			if haveRole {
-				return eng.BaySetRole(dock, bayID, role)
-			}
-			_, r, err := eng.BayItem(dock, bayID)
-			if err != nil {
-				return err
-			}
-			if r != "" {
-				fmt.Println(r)
-			}
-			return nil
+			return runRole(eng, os.Stdout, args, dockFlag, clr)
 		},
 	}
 
 	cmd.Flags().StringVar(&dockFlag, "dock", "", "dock name (disambiguates a bare bay ID)")
-	cmd.Flags().BoolVar(&clear, "clear", false, "remove the role, making the bay the item's primary bay")
+	cmd.Flags().BoolVar(&clr, "clear", false, "remove the role, making the bay the item's primary bay")
 	return cmd
 }

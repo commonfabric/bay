@@ -8,6 +8,8 @@ import (
 	"github.com/commonfabric/bay/internal/manifest"
 )
 
+var errHomeItem = fmt.Errorf("home is reserved; items are not supported on the home pseudo-bay")
+
 // validItemRe is the rule for item names and roles: lower-case letters,
 // digits and hyphens, starting with a letter or digit. It is the rule
 // docket applies to item names. Bay does not check that docket has an
@@ -80,7 +82,7 @@ func (e *Engine) BayItem(dockName, bayID string) (item, role string, err error) 
 // given.
 func (e *Engine) BaySetItem(dockName, bayID, item string, role *string, replace bool) error {
 	if manifest.IsReservedBayID(bayID) {
-		return fmt.Errorf("home is reserved; items are not supported on the home pseudo-bay")
+		return errHomeItem
 	}
 	if item == "" {
 		return fmt.Errorf("item name is empty; use --clear to remove the item")
@@ -119,6 +121,9 @@ func (e *Engine) BaySetItem(dockName, bayID, item string, role *string, replace 
 
 // BayClearItem removes a bay's item and role.
 func (e *Engine) BayClearItem(dockName, bayID string) error {
+	if manifest.IsReservedBayID(bayID) {
+		return errHomeItem
+	}
 	return e.withManifest(func(m *manifest.Manifest) error {
 		dock := m.FindDock(dockName)
 		if dock == nil {
@@ -138,6 +143,9 @@ func (e *Engine) BayClearItem(dockName, bayID string) error {
 // BaySetRole sets a bay's role; an empty role makes it the item's primary
 // bay. The bay must have an item.
 func (e *Engine) BaySetRole(dockName, bayID, role string) error {
+	if manifest.IsReservedBayID(bayID) {
+		return errHomeItem
+	}
 	return e.withManifest(func(m *manifest.Manifest) error {
 		dock := m.FindDock(dockName)
 		if dock == nil {

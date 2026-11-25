@@ -640,7 +640,8 @@ argument that looks like a bay ID (`b3`) is read as the bay; to set a name
 that looks like one, name the bay too (`bay item self b3`).
 
 `bay show --json` has `item` and `role` (empty when unset). `bay ls --json`
-and `bay tree --json` include them only when set.
+and `bay tree --json` include them only when set (`--rows` output uses
+`bay_item` and `bay_role`).
 
 ```
 bay item                                  # print current bay's item
