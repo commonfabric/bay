@@ -32,8 +32,9 @@ const KeysHelp = `In the list:
                   more than one bay. On a bay's row, close the bay
                   (y confirms); a bay with uncommitted changes is
                   refused. A bay that no longer exists is taken off
-                  its item. An area with no open items is listed so
-                  that it can be closed
+                  its item. An open area is listed at its level
+                  whatever is beneath it; one with no open items is
+                  marked empty and can be closed
   X               on a bay's row, close the bay even with
                   uncommitted changes, which are lost (y confirms)
   a               show more levels: front, then front + back, then
