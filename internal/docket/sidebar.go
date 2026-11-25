@@ -925,8 +925,11 @@ func (s *Sidebar) click(line, column int) Action {
 	if line < 0 || line >= s.body || k >= len(s.rows) {
 		return None
 	}
+	// A click on an area folds or unfolds it only when the cursor was
+	// already there; any other click only moves the cursor.
+	wasThere := s.cursor == k
 	s.cursor = k
-	if s.rows[k].Area {
+	if wasThere && s.rows[k].Area {
 		s.toggleFold()
 	}
 	return Show

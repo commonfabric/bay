@@ -965,8 +965,14 @@ func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
 	if a := s.Click(2, 5); a != Show || s.Current().Name != "restart" {
 		t.Errorf("click on an item: %v on %s", a, s.Current().Name)
 	}
+	if a := s.Click(1, 5); a != Show || s.Current().Name != "people" || s.Current().Folded {
+		t.Errorf("first click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+	}
 	if a := s.Click(1, 5); a != Show || s.Current().Name != "people" || !s.Current().Folded {
-		t.Errorf("click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+		t.Errorf("second click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+	}
+	if a := s.Click(1, 5); a != Show || s.Current().Folded {
+		t.Errorf("third click on an area: %v folded %v", a, s.Current().Folded)
 	}
 	at := s.Current().Name
 	for _, line := range []int{-1, len(s.Rows()), 19, 40} {

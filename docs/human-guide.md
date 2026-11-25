@@ -913,7 +913,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `B` | Show a row for every bay of every item and area, where `x` closes the bay. `B` again lists bays only for items with more than one |
 | `b` | Collapse the list to a narrow strip |
 | `=` | Give the list its first width again |
-| Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on `»` in the same place, or anywhere on the collapsed strip, expand it |
+| Click | Go to the row; a click on an area row the cursor is already on folds or unfolds it; on `«` in the shaded line, collapse the list; on `»` in the same place, or anywhere on the collapsed strip, expand it |
 | Drag | On the line between the panes, change the list's width. Expanding a collapsed list gives it the width it had. A double click on that line gives the first width again. The width is saved, and the list starts at it the next time the view starts |
 | Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
 | `?` | Show the keys |
