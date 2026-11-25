@@ -510,3 +510,37 @@ func TestIntegration_KillSessionKillsWindowsLinkedElsewhere(t *testing.T) {
 		t.Errorf("dock session still exists: %s", out)
 	}
 }
+
+// TestMain lets the test binary play a process inside a tmux window:
+// with BAY_TEST_KILL_SESSION set, it kills that session from inside it.
+func TestMain(m *testing.M) {
+	if name := os.Getenv("BAY_TEST_KILL_SESSION"); name != "" {
+		_ = NewReal().KillSession(name)
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// TestIntegration_KillSessionFromInsideKillsEveryWindow runs KillSession
+// in the session's first window. Killing that window ends the process, so
+// it must be killed last, or the windows after it keep running.
+func TestIntegration_KillSessionFromInsideKillsEveryWindow(t *testing.T) {
+	s := startTmux(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.newDetachedSession("keep")
+	s.mustCmd("new-session", "-d", "-s", "dock", "-e", "BAY_TEST_KILL_SESSION=dock", "sleep 3; exec "+exe)
+	s.mustCmd("new-window", "-d", "-t", "=dock:", "sleep 60")
+	s.mustCmd("new-window", "-d", "-t", "=dock:", "sleep 60")
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := s.tmuxCmd("has-session", "-t", "=dock"); err != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the session survived: %s", s.mustCmd("list-windows", "-a", "-F", "#{session_name}:#{window_index} #{pane_current_command}"))
+}

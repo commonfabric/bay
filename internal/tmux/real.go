@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -59,10 +60,18 @@ func (r *Real) NewSession(name string) error {
 }
 
 // KillSession kills a session and its windows. A window of the session
-// that is also linked into another session is killed there too.
+// that is also linked into another session is killed there too. When
+// the calling process runs in one of the windows, that window is killed
+// last, because killing it ends the process.
 func (r *Real) KillSession(name string) error {
 	if out, err := run("list-windows", "-t", exactSession(name), "-F", "#{window_id}"); err == nil {
-		for _, id := range strings.Fields(out) {
+		ids := strings.Fields(out)
+		if own := ownWindowID(); own != "" {
+			if k := slices.Index(ids, own); k >= 0 {
+				ids = append(append(ids[:k:k], ids[k+1:]...), own)
+			}
+		}
+		for _, id := range ids {
 			_ = runSilent("kill-window", "-t", sessionWindow(name, id))
 		}
 	}
@@ -71,6 +80,20 @@ func (r *Real) KillSession(name string) error {
 		return nil
 	}
 	return runSilent("kill-session", "-t", exactSession(name))
+}
+
+// ownWindowID returns the id of the window whose pane runs this process,
+// or "" when the process does not run in a tmux pane.
+func ownWindowID() string {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" || os.Getenv("TMUX") == "" {
+		return ""
+	}
+	out, err := run("display-message", "-t", pane, "-p", "#{window_id}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 func (r *Real) RenameSession(oldName string, newName string) error {
