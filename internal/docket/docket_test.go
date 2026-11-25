@@ -627,7 +627,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-l F5", "M-h F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
+	for _, key := range []string{"M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
@@ -635,6 +635,10 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
 		}
+	}
+	if f.ran("bind-key -T docket M-h select-pane -t %1") != 1 ||
+		f.ran("bind-key -T docket M-l select-pane -t =docket:view.{right}") != 1 {
+		t.Errorf("Option-h and Option-l do not choose the list and the right side: %v", f.calls)
 	}
 	if f.ran("bind-key -T docket M-? send-keys -t %1 F8") != 1 {
 		t.Errorf("the state key is not bound: %v", f.calls)

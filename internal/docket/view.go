@@ -149,8 +149,6 @@ func (v *View) Setup() error {
 		return []string{"send-keys", "-t", pane, key}
 	}
 	binds := [][]string{
-		append([]string{"M-l"}, list("F5")...),
-		append([]string{"M-h"}, list("F6")...),
 		append([]string{"M-J"}, list("F5")...),
 		append([]string{"M-K"}, list("F6")...),
 		append([]string{"M-N"}, list("F9")...),
@@ -168,6 +166,10 @@ func (v *View) Setup() error {
 		// and a double click on that line gives it the first width again.
 		{"MouseDrag1Border", "resize-pane", "-M"},
 		{"DoubleClick1Border", "resize-pane", "-t", pane, "-x", fmt.Sprint(SidebarWidth)},
+		// Option-h and Option-l move the keyboard to the list on the
+		// left and to the right side.
+		{"M-h", "select-pane", "-t", pane},
+		{"M-l", "select-pane", "-t", viewerPane},
 		{"M-d", "if-shell", "-F", "#{pane_at_left}", "select-pane -t '" + viewerPane + "'", "select-pane -t '" + pane + "'"},
 		// Leave the view: go back to the session the terminal came from,
 		// or detach when it came from outside tmux.

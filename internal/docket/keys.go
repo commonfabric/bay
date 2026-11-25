@@ -54,7 +54,6 @@ const KeysHelp = `In the list:
 
 From either side:
   Option-J, Option-K   move down or up one row
-  Option-l, Option-h   the same as Option-J and Option-K
   Option-N, Option-P   move to the next or previous item or bay, as n
                        and p do
   Option-Space         fold or unfold the area under the cursor
@@ -62,6 +61,7 @@ From either side:
   Option-B             collapse or expand the list
   Option-', a letter   go to a mark; Option-' then ' goes back
   Option-M, a letter   mark the row the right side shows
+  Option-h, Option-l   move to the list, or to the right side
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
