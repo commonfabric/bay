@@ -422,6 +422,17 @@ func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 	}
 }
 
+func TestTheKeyReminderShowsEveryHintAtTheDefaultWidth(t *testing.T) {
+	s := NewSidebar(tree())
+	lines, _ := s.RenderLines(SidebarWidth, 30)
+	last := lines[len(lines)-1].String()
+	for _, want := range []string{"? keys", "/ find", "s state", "q questions"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("no %q in the key reminder %q", want, last)
+		}
+	}
+}
+
 func TestQAsksForTheQuestionsToBeShownOrHiddenAndNoLongerLeavesTheView(t *testing.T) {
 	s := NewSidebar(tree())
 	s.Key("n")

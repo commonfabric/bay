@@ -999,7 +999,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	// have the style "key". The key that changes the levels is named
 	// beside them.
 	info := []Span{{"«", "key"}, {" " + levelNames[s.levels] + " (", ""}, {"a", "key"}, {")", ""}}
-	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state", "q", "questions")
+	hint := keyHints("?", "keys", "/", "find", "s", "state", "q", "questions")
 	switch {
 	case s.pending == "m":
 		info = []Span{{"«", "key"}, {" mark this row: press a letter", ""}}
