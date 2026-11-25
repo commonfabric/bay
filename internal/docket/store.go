@@ -107,6 +107,9 @@ func LoadItems(stateDir string) (map[string]Item, error) {
 		}
 		path := filepath.Join(stateDir, "items", e.Name(), "item.json")
 		data, err := os.ReadFile(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // docket does not count a folder without item.json as an item
+		}
 		if err != nil {
 			return nil, err
 		}

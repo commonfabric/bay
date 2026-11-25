@@ -56,9 +56,13 @@ func TestLoadItemsReadsEveryItemAndAnEmptyStateHasNone(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(path, "item.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	items, err = LoadItems(dir)
-	if err != nil {
+	// A folder without item.json is not an item, as in docket.
+	if err := os.MkdirAll(filepath.Join(dir, "items", "stray"), 0o755); err != nil {
 		t.Fatal(err)
+	}
+	items, err = LoadItems(dir)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items = %v, %v", items, err)
 	}
 	item := items["restart"]
 	if n, blocking := item.OpenQuestions(); n != 1 || !blocking {
