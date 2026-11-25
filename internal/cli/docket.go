@@ -719,8 +719,8 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 			if key == "ctrl-c" {
 				// The view's tmux keys send keys to this pane, so the list
-				// keeps running; q leaves the view.
-				note = "the list keeps running; q leaves the view"
+				// keeps running.
+				note = "the list keeps running; ? shows how to leave the view"
 				draw()
 				continue
 			}
