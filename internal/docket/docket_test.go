@@ -518,12 +518,22 @@ type fakeTmux struct {
 	clients string          // ttys list-clients prints
 	aux     []string        // ids of the linked windows in the aux session
 	stuck   map[string]bool // ids unlink-window refuses to remove
+	bell    map[string]bool // "=session:window" targets whose tab has the bell flag
 }
 
 func (f *fakeTmux) run(args ...string) (string, error) {
 	f.calls = append(f.calls, strings.Join(args, " "))
 	switch args[0] {
 	case "display-message":
+		switch args[len(args)-1] {
+		case "#{window_bell_flag}":
+			if f.bell[args[3]] {
+				return "1\n", nil
+			}
+			return "0\n", nil
+		case "#{window_id}":
+			return "@3\n", nil
+		}
 		return "/dev/ttys9\n", nil
 	case "list-windows":
 		if args[1] == "-t" {
@@ -778,6 +788,48 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	}
 	if _, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || strings.Join(f.calls[before:], "|") != "select-pane -t =docket:view.{right}" {
 		t.Errorf("enter on an empty area: %v", f.calls[before:])
+	}
+}
+
+func TestShowClearsTheWaitingMarkAndTheDocksBellFlag(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, "@9": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n",
+		bell: map[string]bool{"=loom:@9": true}}
+	v := newFakeView(f)
+
+	// No bell on the tab: only the waiting mark is cleared, and the dock's
+	// current window is not touched.
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("set-window-option -t =loom:@7 @bay-waiting 0") != 1 || f.ran("select-window") != 0 {
+		t.Errorf("calls: %v", f.calls)
+	}
+
+	// A bell on the tab: the window is selected in its dock, then the
+	// dock's current window is selected again.
+	before := len(f.calls)
+	if _, err := v.Show(Row{Name: "other", Bays: []string{"loom/b9"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	var selects []string
+	for _, c := range f.calls[before:] {
+		if strings.HasPrefix(c, "select-window") {
+			selects = append(selects, c)
+		}
+	}
+	if strings.Join(selects, "|") != "select-window -t =loom:@9|select-window -t =loom:@3" {
+		t.Errorf("selects: %v", selects)
+	}
+
+	// The desk and the record are not bay windows and are left alone.
+	before = len(f.calls)
+	if _, err := v.Show(Row{Name: "gone", Bays: []string{"loom/b1"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.calls[before:] {
+		if strings.HasPrefix(c, "set-window-option") {
+			t.Errorf("the record was marked seen: %v", c)
+		}
 	}
 }
 

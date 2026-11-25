@@ -342,6 +342,29 @@ func (v *View) viewerClient() (string, error) {
 // row's bay window, or the item's record when it has no bay window. With
 // focus set it also moves the keyboard to the right pane. The returned
 // note says what was shown when that is not the bay window itself.
+// markSeen clears what selecting a window in its dock clears: bay's
+// waiting mark, and the bell flag on the dock's tab. tmux clears a tab's
+// bell flag only when the tab is selected, so when the flag is set the
+// window is selected in the dock's session and the window that was
+// current there is selected again. The dock's previous window, used by
+// tmux's last-window, becomes this window. The monitor sets the waiting
+// mark again while the agent's prompt is still on screen.
+func (v *View) markSeen(dock, window string) {
+	target := "=" + dock + ":" + window
+	_, _ = v.Tmux("set-window-option", "-t", target, "@bay-waiting", "0")
+	bell, err := v.Tmux("display-message", "-p", "-t", target, "#{window_bell_flag}")
+	if err != nil || strings.TrimSpace(bell) != "1" {
+		return
+	}
+	current, err := v.Tmux("display-message", "-p", "-t", "="+dock+":", "#{window_id}")
+	if err != nil || strings.TrimSpace(current) == "" {
+		return
+	}
+	if _, err := v.Tmux("select-window", "-t", target); err == nil {
+		_, _ = v.Tmux("select-window", "-t", "="+dock+":"+strings.TrimSpace(current))
+	}
+}
+
 func (v *View) Show(row Row, focus bool) (note string, err error) {
 	if row.Area {
 		// An area with no item to show leaves the right side as it is.
@@ -357,7 +380,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	if err != nil {
 		return "", err
 	}
-	window := ""
+	window, dock := "", ""
 	switch {
 	case row.Desk:
 		if !v.has(deskTarget) {
@@ -369,6 +392,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	case len(row.Bays) > 0:
 		if id, ok := v.BayWindow(row.Bays[0]); ok && v.has(id) {
 			window = id
+			dock, _, _ = strings.Cut(row.Bays[0], "/")
 		} else {
 			note = row.Bays[0] + " has no window; showing the record"
 		}
@@ -399,6 +423,9 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	}
 	if _, err := v.Tmux("switch-client", "-c", client, "-t", auxTarget+window); err != nil {
 		return "", fmt.Errorf("show %s: %w", window, err)
+	}
+	if dock != "" {
+		v.markSeen(dock, window)
 	}
 	// Remove the window shown before. unlink-window refuses to remove a
 	// window from the only session that holds it, so a window whose own
