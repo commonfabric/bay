@@ -269,11 +269,19 @@ func (e *Engine) DockRename(oldName, newName string) error {
 }
 
 // DockClose closes all bays in a dock and kills the tmux session.
-//
-// All manifest mutations (per bay + the dock itself) happen before
-// any tmux kill, so the user-visible state is correct even if bay is
-// invoked from inside a pane in this dock and dies during KillSession.
 func (e *Engine) DockClose(name string, force bool) error {
+	if err := e.DockCloseState(name, force); err != nil {
+		return err
+	}
+	e.DockCloseFinish(name)
+	return nil
+}
+
+// DockCloseState closes all bays in a dock and removes the dock from
+// the manifest, without killing any tmux window. DockCloseFinish does
+// the kills. A caller running inside one of the dock's windows runs
+// DockCloseFinish in a process that killing the window does not stop.
+func (e *Engine) DockCloseState(name string, force bool) error {
 	m, _ := e.LoadManifest()
 	var dock *manifest.Dock
 	if m != nil {
@@ -294,8 +302,8 @@ func (e *Engine) DockClose(name string, force bool) error {
 	}
 
 	// Manifest pass: archive + remove each bay. On the success
-	// path we discard the returned window IDs because KillSession at
-	// the end takes out every pane in the session in one shot. On a
+	// path we discard the returned window IDs because DockCloseFinish
+	// kills every window in the session. On a
 	// non-force failure mid-loop we use them to kill just the windows
 	// for bays that *were* removed from the manifest, so we don't
 	// leave orphaned tmux windows with no manifest reference.
@@ -334,10 +342,13 @@ func (e *Engine) DockClose(name string, force bool) error {
 
 	_ = os.RemoveAll(filepath.Join(filepath.Dir(e.manifestPath), "logs", name))
 
-	// All manifest state is persisted. Now kill the tmux session.
-	// KillSession errors are non-fatal — the session may already be dead.
-	_ = e.Tmux.KillSession(name)
 	return nil
+}
+
+// DockCloseFinish kills the dock's tmux session and its windows. Errors
+// are ignored: the session may already be gone.
+func (e *Engine) DockCloseFinish(name string) {
+	_ = e.Tmux.KillSession(name)
 }
 
 // List returns all docks and bays with runtime status.

@@ -2,11 +2,14 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/commonfabric/bay/internal/config"
+	"github.com/commonfabric/bay/internal/detach"
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +29,7 @@ func newDockCmd() *cobra.Command {
 		newDockTreeCmd(),
 		newDockRenameCmd(),
 		newDockCloseCmd(),
+		newDockCloseFinishCmd(),
 		newDockRecoverCmd(),
 		newDockSyncCmd(),
 	)
@@ -372,13 +376,70 @@ func newDockCloseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return eng.DockClose(args[0], force)
+			if err := eng.DockCloseState(args[0], force); err != nil {
+				return err
+			}
+			return finishDockClose(eng, args[0])
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "force close even if bays are dirty")
 
 	return cmd
+}
+
+// newDockCloseFinishCmd kills a closed dock's windows. bay dock close
+// runs it in a process of its own, so that the kills finish when bay
+// dock close runs in one of the windows being killed.
+func newDockCloseFinishCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "close-finish <name>",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eng, err := newEngine()
+			if err != nil {
+				return err
+			}
+			eng.DockCloseFinish(args[0])
+			return nil
+		},
+	}
+}
+
+// finishDockClose runs bay dock close-finish in a new session and waits
+// for it. When it cannot be started, the kills run in this process.
+// The helper's output goes to a temporary file and is copied to
+// standard error once the helper exits.
+func finishDockClose(eng *engine.Engine, name string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		eng.DockCloseFinish(name)
+		return nil
+	}
+	out, err := os.CreateTemp("", "bay-dock-close-*.log")
+	if err != nil {
+		eng.DockCloseFinish(name)
+		return nil
+	}
+	defer os.Remove(out.Name())
+	defer out.Close()
+
+	helper := exec.Command(exe, "dock", "close-finish", name)
+	helper.Stdout = out
+	helper.Stderr = out
+	if err := detach.Start(helper); err != nil {
+		eng.DockCloseFinish(name)
+		return nil
+	}
+	waitErr := helper.Wait()
+	if _, err := out.Seek(0, io.SeekStart); err == nil {
+		_, _ = io.Copy(os.Stderr, out)
+	}
+	if waitErr != nil {
+		return fmt.Errorf("killing the windows of dock %q: %w", name, waitErr)
+	}
+	return nil
 }
 
 func newDockRecoverCmd() *cobra.Command {
