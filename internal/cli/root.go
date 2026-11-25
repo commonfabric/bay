@@ -62,15 +62,15 @@ func newEngine() (*engine.Engine, error) {
 	g := gitpkg.NewReal()
 
 	eng := engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g)
-	eng.BayClosed = tellDocketBayClosed
+	eng.BaysClosed = tellDocketBaysClosed
 	return eng, nil
 }
 
-// tellDocketBayClosed takes a closed bay off the docket items that name
-// it. It does nothing when docket is not installed. Docket's items name
+// tellDocketBaysClosed takes closed bays off the docket items that name
+// them, in one docket command. It does nothing when docket is not installed. Docket's items name
 // the bays of the user's own bay state, so it also does nothing in a test
 // and when XDG_DATA_HOME points bay at other state.
-func tellDocketBayClosed(dockName, bayID string) {
+func tellDocketBaysClosed(refs []string) {
 	if testing.Testing() {
 		return
 	}
@@ -84,7 +84,7 @@ func tellDocketBayClosed(dockName, bayID string) {
 	if err != nil {
 		return
 	}
-	_ = exec.Command(docket, "gone", "bay", dockName+"/"+bayID).Run()
+	_ = exec.Command(docket, append([]string{"gone", "bay"}, refs...)...).Run()
 }
 
 const bayHelpTemplate = `Bay — bay management for tmux and git worktrees.

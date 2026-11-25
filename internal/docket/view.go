@@ -33,6 +33,9 @@ const (
 	// the right pane.
 	sidebarSuffix = " docket sidebar"
 	clientAttach  = "attach-session -t '=" + AuxSession + "'"
+	// The end of that command when the session was named docket-aux. A
+	// client started so follows the session when it is renamed.
+	oldClientAttach = "attach-session -t '=docket-aux'"
 )
 
 // Tmux runs one tmux command and returns its standard output.
@@ -427,7 +430,7 @@ func (v *View) ensureViewer() (string, error) {
 		if sidebar == "" && strings.HasSuffix(command, sidebarSuffix) {
 			sidebar = id
 		}
-		viewer = viewer || strings.HasSuffix(command, clientAttach)
+		viewer = viewer || strings.HasSuffix(command, clientAttach) || strings.HasSuffix(command, oldClientAttach)
 	}
 	if sidebar != "" && viewer {
 		return sidebar, nil

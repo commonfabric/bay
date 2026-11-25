@@ -28,9 +28,43 @@ type Engine struct {
 	// override this to record calls without forking.
 	startWorker func(exe string, args []string) error
 
-	// BayClosed, when set, is called after a bay other than home has been
-	// closed and before its windows are killed.
-	BayClosed func(dockName, bayID string)
+	// BaysClosed, when set, is called with the bays other than home that
+	// have been closed, as dock/bay, before their windows are killed. A
+	// command that closes several bays calls it once for all of them.
+	BaysClosed func(refs []string)
+
+	// closedBatch holds closed bays for BaysClosed while a command that
+	// closes several bays runs; see batchClosed.
+	closedBatch *[]string
+}
+
+// reportClosed passes a closed bay to BaysClosed, or holds it while a
+// batch is open.
+func (e *Engine) reportClosed(ref string) {
+	if e.closedBatch != nil {
+		*e.closedBatch = append(*e.closedBatch, ref)
+		return
+	}
+	if e.BaysClosed != nil {
+		e.BaysClosed([]string{ref})
+	}
+}
+
+// batchClosed holds the bays closed from now on. The function it returns
+// passes them to BaysClosed in one call. Within a batch already open it
+// does nothing.
+func (e *Engine) batchClosed() (flush func()) {
+	if e.closedBatch != nil {
+		return func() {}
+	}
+	var refs []string
+	e.closedBatch = &refs
+	return func() {
+		e.closedBatch = nil
+		if len(refs) > 0 && e.BaysClosed != nil {
+			e.BaysClosed(refs)
+		}
+	}
 }
 
 // New creates a new Engine.

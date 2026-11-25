@@ -186,7 +186,8 @@ func TestBayClose_LastNonHomeCreatesHomeShell(t *testing.T) {
 func TestBayClose_ReportsEachClosedBayButNotHomeOrARefusedClose(t *testing.T) {
 	eng, _ := testEngine(t)
 	var closed []string
-	eng.BayClosed = func(dockName, bayID string) { closed = append(closed, dockName+"/"+bayID) }
+	var calls int
+	eng.BaysClosed = func(refs []string) { closed, calls = append(closed, refs...), calls+1 }
 
 	for range 2 {
 		if _, err := eng.BayNew(BayNewOptions{Dock: "labs", Shell: true}); err != nil {
@@ -1534,4 +1535,21 @@ func mustEngineHome(t *testing.T, eng *Engine) *manifest.Bay {
 		t.Fatal("missing labs dock")
 	}
 	return dock.FindBayByID(manifest.HomeBayID)
+}
+
+func TestDockClose_ReportsAllItsClosedBaysInOneCall(t *testing.T) {
+	eng, _ := testEngine(t)
+	var calls [][]string
+	eng.BaysClosed = func(refs []string) { calls = append(calls, refs) }
+	for range 3 {
+		if _, err := eng.BayNew(BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+			t.Fatalf("BayNew: %v", err)
+		}
+	}
+	if err := eng.DockClose("labs", true); err != nil {
+		t.Fatalf("DockClose: %v", err)
+	}
+	if len(calls) != 1 || strings.Join(calls[0], " ") != "labs/b1 labs/b2 labs/b3" {
+		t.Fatalf("calls = %v, want one call with labs/b1 labs/b2 labs/b3", calls)
+	}
 }

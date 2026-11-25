@@ -523,6 +523,7 @@ type fakeTmux struct {
 	aux     []string        // ids of the linked windows in the aux session
 	stuck   map[string]bool // ids unlink-window refuses to remove
 	bell    map[string]bool // "=session:window" targets whose tab has the bell flag
+	oldAux  bool            // the right pane's client was started for the session's old name
 }
 
 func (f *fakeTmux) run(args ...string) (string, error) {
@@ -561,12 +562,22 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 	case "list-panes":
 		// The sidebar's pane may have been started by another copy of bay.
 		started := []string{"%1\t\"/other/bay docket sidebar\"", "%2\t\"env -u TMUX tmux -S \"${TMUX%%,*}\" attach-session -t '=_docket-aux'\""}
+		if f.oldAux {
+			started[1] = "%2\t\"env -u TMUX tmux -S \"${TMUX%%,*}\" attach-session -t '=docket-aux'\""
+		}
 		if f.noList {
 			return started[1] + "\n", nil
 		}
 		return strings.Join(started[:f.panes], "\n") + "\n", nil
 	case "list-clients":
 		return f.clients, nil
+	case "rename-session":
+		for target := range f.exists {
+			if rest, ok := strings.CutPrefix(target, args[2]+":"); ok {
+				delete(f.exists, target)
+				f.exists["="+args[3]+":"+rest] = true
+			}
+		}
 	case "new-session":
 		f.exists["="+args[3]+":"+args[5]] = true
 		if args[3] == ViewSession {
@@ -1696,5 +1707,15 @@ func TestTheRightPanesClientNamesTheSocketWithoutAShellVariable(t *testing.T) {
 	}
 	if f.ran("split-window -h -d -t =_docket:view env -u TMUX tmux -S '/dev/ttys9' attach-session -t '=_docket-aux'") != 1 {
 		t.Errorf("calls: %v", f.calls)
+	}
+}
+
+func TestSetupKeepsARightPaneStartedForTheOldSessionName(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"=docket:view": true, "=docket-aux:record": true}, panes: 2, oldAux: true, clients: "/dev/ttys9\n"}
+	if err := newFakeView(f).Setup(); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("split-window") != 0 {
+		t.Errorf("a pane was started: %v", f.calls)
 	}
 }

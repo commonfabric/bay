@@ -308,10 +308,12 @@ func (e *Engine) DockCloseState(name string, force bool) error {
 	// for bays that *were* removed from the manifest, so we don't
 	// leave orphaned tmux windows with no manifest reference.
 	var killedWindowIDs []string
+	flush := e.batchClosed()
 	for _, bayID := range bayIDs {
 		result, err := e.closeBayState(name, bayID, force)
 		if err != nil {
 			if !force {
+				flush()
 				// Sync tmux state with the manifest mutations we already
 				// did before bailing out — otherwise the bays we
 				// closed earlier in the loop would have orphan windows.
@@ -324,6 +326,7 @@ func (e *Engine) DockCloseState(name string, force bool) error {
 		}
 		killedWindowIDs = append(killedWindowIDs, result.windowIDs...)
 	}
+	flush()
 
 	// Remove dock from manifest.
 	if err := e.withManifest(func(m *manifest.Manifest) error {
