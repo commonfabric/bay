@@ -35,12 +35,23 @@ the list's width in files of its own in docket's folder.`,
 }
 
 func realTmux(args ...string) (string, error) {
-	out, err := exec.Command("tmux", args...).CombinedOutput()
+	var stderr strings.Builder
+	cmd := exec.Command("tmux", args...)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("tmux %s: %s", args[0], strings.TrimSpace(string(out)))
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("tmux %s: %s", args[0], msg)
 	}
 	return string(out), nil
 }
+
+// tmuxText returns text that tmux's display-message shows as it is: tmux
+// reads "#" there as the start of a format.
+func tmuxText(text string) string { return strings.ReplaceAll(text, "#", "##") }
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
@@ -703,8 +714,15 @@ func runSidebar(view *docket.View, stateDir string) error {
 	for {
 		select {
 		case key, ok := <-keys:
-			if !ok || key == "ctrl-c" {
+			if !ok {
 				return nil
+			}
+			if key == "ctrl-c" {
+				// The view's tmux keys send keys to this pane, so the list
+				// keeps running; q leaves the view.
+				note = "the list keeps running; q leaves the view"
+				draw()
+				continue
 			}
 			note = ""
 			var action docket.Action
@@ -790,7 +808,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 				// bookmark key pressed on the right side, is shown for a
 				// moment at the bottom of the terminal.
 				if note != "" && (sidebar.Collapsed() || view.ListHidden()) {
-					_, _ = realTmux("display-message", "-d", "1500", note)
+					_, _ = realTmux("display-message", "-d", "1500", tmuxText(note))
 				}
 			}
 			// While more keys are waiting, only the cursor moves. The row
@@ -818,7 +836,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 					if row.Area {
 						name = "area: " + row.Title
 					}
-					_, _ = realTmux("display-message", "-d", "1500", name)
+					_, _ = realTmux("display-message", "-d", "1500", tmuxText(name))
 				}
 			}
 		case <-resized:

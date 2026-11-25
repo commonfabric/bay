@@ -412,9 +412,13 @@ func (v *View) ensureViewer() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("list the view's panes: %w", err)
 	}
-	// The client attaches to the tmux server the view runs on, which is
-	// named by the first field of TMUX in the pane.
-	client := "env -u TMUX " + v.TmuxCommand + " -S \"${TMUX%%,*}\" " + clientAttach
+	// The client attaches to the tmux server the view runs on. Its socket
+	// is written into the command, which then needs no shell's variables.
+	socket, err := v.Tmux("display-message", "-p", "#{socket_path}")
+	if err != nil {
+		return "", fmt.Errorf("find the tmux server's socket: %w", err)
+	}
+	client := "env -u TMUX " + v.TmuxCommand + " -S '" + strings.ReplaceAll(strings.TrimSpace(socket), "'", `'\''`) + "' " + clientAttach
 	sidebar, viewer := "", false
 	for _, line := range strings.Split(out, "\n") {
 		id, command, _ := strings.Cut(strings.TrimSpace(line), "\t")

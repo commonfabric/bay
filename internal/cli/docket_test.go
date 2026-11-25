@@ -49,3 +49,9 @@ func TestTheListKeepsItsWidthWhenTheTerminalChangesSize(t *testing.T) {
 		t.Errorf("zoom: restore %d, save %v, saved %d", restore, save, w.saved)
 	}
 }
+
+func TestTmuxTextShowsAHashAsItIs(t *testing.T) {
+	if got := tmuxText("bay#355 #{session_name}"); got != "bay##355 ##{session_name}" {
+		t.Errorf("tmuxText = %q", got)
+	}
+}

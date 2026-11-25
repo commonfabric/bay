@@ -211,8 +211,8 @@ func (s *Sidebar) jump(label, name string) Action {
 	steps := []func(){
 		func() {},
 		func() {
-			for at := item; at.Parent != nil; at = s.items[*at.Parent] {
-				delete(s.folded, *at.Parent)
+			for _, name := range s.ancestors(itemName) {
+				delete(s.folded, name)
 			}
 			delete(s.folded, itemName)
 		},
@@ -878,10 +878,23 @@ func (s *Sidebar) toggleUnfoldAll() {
 	}
 	s.folded, s.saved = s.saved, nil
 	name, _, _ := strings.Cut(s.Current().Name, " ")
-	for item, ok := s.items[name]; ok && item.Parent != nil; item, ok = s.items[*item.Parent] {
-		delete(s.folded, *item.Parent)
+	for _, name := range s.ancestors(name) {
+		delete(s.folded, name)
 	}
 	s.rebuild()
+}
+
+// ancestors returns the names of the items above name, nearest first. It
+// stops at an item it has already passed, so a cycle of parents in
+// damaged data ends the walk.
+func (s *Sidebar) ancestors(name string) []string {
+	var out []string
+	seen := map[string]bool{name: true}
+	for item, ok := s.items[name]; ok && item.Parent != nil && !seen[*item.Parent]; item, ok = s.items[*item.Parent] {
+		seen[*item.Parent] = true
+		out = append(out, *item.Parent)
+	}
+	return out
 }
 
 // Click applies a mouse press at the given line and column of the last

@@ -1675,3 +1675,26 @@ func TestShowStartsTheRightPanesSessionAgainWhenItWasKilled(t *testing.T) {
 		t.Errorf("started again: %v", f.calls)
 	}
 }
+
+func TestACycleOfParentsDoesNotStopTheList(t *testing.T) {
+	items := tree()
+	a, b := ptr("loop-b"), ptr("loop-a")
+	items["loop-a"] = Item{Name: "loop-a", Kind: "area", Status: "open", Level: "front", Parent: a}
+	items["loop-b"] = Item{Name: "loop-b", Kind: "area", Status: "open", Level: "front", Parent: b}
+	s := NewSidebar(items)
+	if got := s.ancestors("loop-a"); strings.Join(got, ",") != "loop-b" {
+		t.Errorf("ancestors = %v", got)
+	}
+	s.Key("u")
+	s.Key("u")
+}
+
+func TestTheRightPanesClientNamesTheSocketWithoutAShellVariable(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}, clients: "/dev/ttys9\n"}
+	if err := newFakeView(f).Setup(); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("split-window -h -d -t =_docket:view env -u TMUX tmux -S '/dev/ttys9' attach-session -t '=_docket-aux'") != 1 {
+		t.Errorf("calls: %v", f.calls)
+	}
+}
