@@ -1015,7 +1015,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 		// shortened to leave room for them.
 		spans, marks := rowSpans(s.rows[k]), s.marksOf(s.rows[k].Name)
 		if marks != "" {
-			spans = append(clipSpans(spans, width-len([]rune(marks))-1), Span{" " + marks, "key"})
+			spans = append(clipSpans(spans, width-TextWidth(marks)-1), Span{" " + marks, "key"})
 		}
 		lines = append(lines, Line{Spans: clipSpans(spans, width), Shown: k == shown && k != s.cursor})
 	}
@@ -1207,7 +1207,7 @@ func Legend() []Line {
 func clipSpans(spans []Span, width int) []Span {
 	total := 0
 	for _, span := range spans {
-		total += len([]rune(span.Text))
+		total += TextWidth(span.Text)
 	}
 	if width <= 0 || total <= width {
 		return spans
@@ -1215,13 +1215,54 @@ func clipSpans(spans []Span, width int) []Span {
 	var out []Span
 	room := width - 1
 	for _, span := range spans {
-		r := []rune(span.Text)
-		if len(r) >= room {
-			out = append(out, Span{string(r[:room]) + "…", span.Style})
+		if w := TextWidth(span.Text); w >= room {
+			out = append(out, Span{clipText(span.Text, room) + "…", span.Style})
 			return out
+		} else {
+			room -= w
 		}
 		out = append(out, span)
-		room -= len(r)
 	}
 	return out
+}
+
+// TextWidth is the number of terminal columns text takes up: wide
+// characters take two, and combining marks and control characters none.
+func TextWidth(text string) int {
+	n := 0
+	for _, r := range text {
+		n += runeWidth(r)
+	}
+	return n
+}
+
+func runeWidth(r rune) int {
+	switch {
+	case r == 0 || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r) || unicode.IsControl(r):
+		return 0
+	case r >= 0x1100 && r <= 0x115F, r >= 0x2E80 && r <= 0xA4CF, r >= 0xAC00 && r <= 0xD7A3,
+		r >= 0xF900 && r <= 0xFAFF, r >= 0xFE30 && r <= 0xFE6F, r >= 0xFF00 && r <= 0xFF60,
+		r >= 0xFFE0 && r <= 0xFFE6, r >= 0x1F300 && r <= 0x1F64F, r >= 0x1F900 && r <= 0x1F9FF,
+		r >= 0x20000 && r <= 0x3FFFD:
+		return 2
+	}
+	return 1
+}
+
+// clipText returns the longest start of text that is at most width columns.
+func clipText(text string, width int) string {
+	n := 0
+	for k, r := range text {
+		n += runeWidth(r)
+		if n > width {
+			return text[:k]
+		}
+	}
+	return text
+}
+
+// NoticeLine is a bar showing note, on one line of at most width columns.
+func NoticeLine(note string, width int) Line {
+	note = strings.Join(strings.Fields(note), " ")
+	return Line{Spans: clipSpans([]Span{{Text: note}}, width), Bar: true}
 }

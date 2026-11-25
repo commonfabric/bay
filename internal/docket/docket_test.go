@@ -1832,3 +1832,35 @@ func TestLoadRootOrderReadsRootJSON(t *testing.T) {
 		t.Errorf("order = %v %v", order, err)
 	}
 }
+
+func TestNoticeLineFitsTheWidth(t *testing.T) {
+	for _, note := range []string{
+		strings.Repeat("a long message ", 20),
+		"two\nlines " + strings.Repeat("x", 100),
+		strings.Repeat("漢字", 40),
+		"short",
+	} {
+		for _, width := range []int{CollapsedBelow, 30, 80} {
+			text := NoticeLine(note, width).String()
+			if strings.ContainsAny(text, "\r\n") {
+				t.Errorf("notice %q has a line break", text)
+			}
+			if w := TextWidth(text); w > width {
+				t.Errorf("notice %q is %d columns, want at most %d", text, w, width)
+			}
+		}
+	}
+}
+
+func TestRenderedLinesFitTheWidth(t *testing.T) {
+	s := NewSidebar(tree())
+	lines, _ := s.RenderLines(30, 10)
+	if len(lines) != 10 {
+		t.Fatalf("got %d lines, want 10", len(lines))
+	}
+	for _, line := range lines {
+		if w := TextWidth(line.String()); w > 30 {
+			t.Errorf("line %q is %d columns", line.String(), w)
+		}
+	}
+}
