@@ -1050,10 +1050,11 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 		info = []Span{{"«", "key"}, {" close " + s.closing + "?", ""}}
 		hint = keyHints("f", "finished", "d", "dropped", "esc", "cancels")
 	case s.dropping:
-		info = []Span{{"«", "key"}, {" why drop it: " + s.reason + "_", ""}}
+		info = []Span{{"«", "key"}, {" why drop it: " + tailText(s.reason, width-TextWidth("« why drop it: _")) + "_", ""}}
 		hint = keyHints("enter", "closes", "esc", "cancels")
 	case s.typing:
-		info = []Span{{"«", "key"}, {" " + levelNames[s.levels] + " · find: " + s.filter + "_", ""}}
+		prefix := " " + levelNames[s.levels] + " · find: "
+		info = []Span{{"«", "key"}, {prefix + tailText(s.filter, width-TextWidth("«"+prefix+"_")) + "_", ""}}
 		hint = keyHints("enter", "keeps", "esc", "clears")
 	case s.filter != "":
 		info = append(info, Span{" · find: " + s.filter, ""})
@@ -1250,6 +1251,22 @@ func runeWidth(r rune) int {
 		return 2
 	}
 	return 1
+}
+
+// tailText returns text when it fits in width columns, and otherwise "…"
+// followed by the end of text, so that what was typed last stays visible.
+func tailText(text string, width int) string {
+	if TextWidth(text) <= width {
+		return text
+	}
+	room := max(width-1, 0)
+	runes := []rune(text)
+	n, k := 0, len(runes)
+	for k > 0 && n+runeWidth(runes[k-1]) <= room {
+		k--
+		n += runeWidth(runes[k])
+	}
+	return "…" + string(runes[k:])
 }
 
 // clipText returns the longest start of text that is at most width columns.

@@ -1870,3 +1870,16 @@ func TestRenderedLinesFitTheWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestLongFindTextShowsItsEnd(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("/")
+	for _, r := range strings.Repeat("abcdefghij", 5) + "XYZ" {
+		s.Key(string(r))
+	}
+	lines, _ := s.Render(30, 10)
+	bar := lines[len(lines)-2]
+	if TextWidth(bar) > 30 || !strings.HasSuffix(bar, "XYZ_") || !strings.Contains(bar, "…") {
+		t.Errorf("find bar %q (%d columns) should end with the typed end", bar, TextWidth(bar))
+	}
+}
