@@ -22,14 +22,17 @@ type Row struct {
 	Desk     bool
 	Work     string
 	Level    string
-	Open     int  // open questions; for an area, its own and those of the shown items beneath it
+	Open     int  // open questions; for an area, only its own
+	Beneath  int  // on an area, the open questions of the shown items beneath it
 	Blocking bool // an open question holds up all work
 	Bays     []string
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
-	Waiting  bool   // a bay of the row waits for the person; on an area, also a bay beneath it
-	Hot      int    // the row's place in the hotlist, counted from 1; 0 when it is not in it
-	HotRow   bool   // the row is the one in the hotlist, not the one in its area
+	Waiting  bool   // a bay of the row waits for the person; on an area, a bay of the area's own
+	// BeneathWaiting is set on an area when a bay beneath it waits.
+	BeneathWaiting bool
+	Hot            int  // the row's place in the hotlist, counted from 1; 0 when it is not in it
+	HotRow         bool // the row is the one in the hotlist, not the one in its area
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
@@ -425,11 +428,13 @@ func (s *Sidebar) tree() []Row {
 					}
 				}
 				folded := s.folded[item.Name] && s.filter == ""
+				beneathWaiting := false
 				for _, r := range below {
-					waiting = waiting || r.Waiting
+					beneathWaiting = beneathWaiting || r.Waiting || r.BeneathWaiting
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-					Folded: folded, Open: belowOpen + n, Blocking: belowBlocking || b, Bays: bays, Waiting: waiting})
+					Folded: folded, Open: n, Blocking: b, Beneath: belowOpen, Bays: bays, Waiting: waiting,
+					BeneathWaiting: beneathWaiting})
 				if s.allBays {
 					out = append(out, s.bayRows(item, depth)...)
 				}
@@ -1216,14 +1221,20 @@ func rowSpans(r Row) []Span {
 func baseSpans(r Row) []Span {
 	indent := strings.Repeat("  ", r.Depth)
 	var marks []Span
-	if r.Area && r.Waiting {
+	switch {
+	case r.Area && r.Waiting:
 		marks = append(marks, Span{" " + WaitingMark, "waiting"})
+	case r.Area && r.Folded && r.BeneathWaiting:
+		marks = append(marks, Span{" " + WaitingMark, "dim"})
 	}
 	if r.Open > 0 {
 		marks = append(marks, Span{fmt.Sprintf(" ?%d", r.Open), "question"})
 		if r.Blocking {
 			marks = append(marks, Span{"!", "blocking"})
 		}
+	}
+	if r.Area && r.Folded && r.Beneath > 0 {
+		marks = append(marks, Span{fmt.Sprintf(" +%d", r.Beneath), "dim"})
 	}
 	switch {
 	case r.Desk:

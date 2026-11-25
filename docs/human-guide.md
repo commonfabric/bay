@@ -871,9 +871,9 @@ session:
   | yellow `○` | The item's agent is waiting for its next instruction |
   | red `◌` | The item's work is held until something else happens |
   | dim `·` | The item has no bay |
-  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
+  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area's own waits. A dim `▶` there means only a bay beneath the folded area waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
   | cyan `↳ dock/bay` | One bay of an item that has several |
-  | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
+  | yellow `?2` | Two questions wait for your answer; on an area, only the area's own; while the area is folded, a dim `+5` after it counts those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
   | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
