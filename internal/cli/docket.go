@@ -552,7 +552,7 @@ type listWidth struct {
 
 // changed is called when the list is drawn at a new width. window is the
 // width of the view's window, and passing is true while the list is
-// collapsed or a pane is zoomed. It returns a width to give the list back,
+// collapsed or has the window to itself. It returns a width to give the list back,
 // or 0, and whether to save the new width.
 func (w *listWidth) changed(width, window int, passing bool) (restore int, save bool) {
 	w.drawn = width
@@ -633,7 +633,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 		lines, cursor := sidebar.RenderLines(width, height)
 		if err == nil && width != widths.drawn {
-			restore, save := widths.changed(width, view.WindowWidth(), sidebar.Collapsed() || view.Zoomed())
+			restore, save := widths.changed(width, view.WindowWidth(), sidebar.Collapsed() || view.FillsWindow())
 			if restore > 0 {
 				_ = view.SetWidth(restore)
 			}

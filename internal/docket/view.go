@@ -1,7 +1,10 @@
 package docket
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -191,7 +194,94 @@ func (v *View) Setup() error {
 			return fmt.Errorf("bind %s: %w", b[0], err)
 		}
 	}
-	return v.bindMarks(pane)
+	if err := v.bindMarks(pane); err != nil {
+		return err
+	}
+	return v.bindAuxPrefix()
+}
+
+// The key tables of the client in the right pane.
+const (
+	auxKeyTable    = "docket-aux"
+	auxPrefixTable = "docket-aux-prefix"
+)
+
+// auxBlocked are the tmux commands the right pane's prefix keys do not
+// run. Each acts on the session or the client of the right pane, which
+// belong to the view: it would detach the client, attach it to another
+// session, or add to, rename or end the view's session.
+var auxBlocked = map[string]bool{
+	"detach-client": true, "switch-client": true, "attach-session": true,
+	"choose-tree": true, "choose-client": true, "choose-session": true,
+	"new-session": true, "rename-session": true, "kill-session": true, "kill-server": true,
+	"new-window": true, "break-pane": true, "move-window": true, "link-window": true,
+}
+
+// auxPrefixBindings returns tmux commands that copy the prefix table
+// listed by list-keys into auxPrefixTable. A binding that runs a command
+// of auxBlocked shows a message instead.
+func auxPrefixBindings(listing string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(listing, "\n") {
+		fields := strings.Fields(line)
+		at := slices.Index(fields, "prefix")
+		if len(fields) < at+3 || at < 1 || fields[at-1] != "-T" {
+			continue
+		}
+		key := fields[at+1]
+		blocked := false
+		for _, f := range fields[at+2:] {
+			blocked = blocked || auxBlocked[f]
+		}
+		if blocked {
+			fmt.Fprintf(&b, "bind-key -T %s %s display-message 'not in the docket view: this key acts on the view'\n", auxPrefixTable, key)
+			continue
+		}
+		fmt.Fprintln(&b, strings.Replace(line, "-T prefix ", "-T "+auxPrefixTable+" ", 1))
+	}
+	return b.String()
+}
+
+// bindAuxPrefix gives the right pane's client a prefix of its own. tmux
+// has one prefix table for every session, so the session of the right
+// pane turns tmux's prefix off and binds the same prefix keys to a copy
+// of the prefix table, from which the commands of auxBlocked are left
+// out. The copy is made each time the view is set up.
+func (v *View) bindAuxPrefix() error {
+	for _, opt := range [][2]string{{"key-table", auxKeyTable}, {"prefix", "None"}, {"prefix2", "None"}} {
+		if _, err := v.Tmux("set-option", "-t", auxTarget, opt[0], opt[1]); err != nil {
+			return fmt.Errorf("set %s for the right pane: %w", opt[0], err)
+		}
+	}
+	listing, err := v.Tmux("list-keys", "-T", "prefix")
+	if err != nil {
+		return fmt.Errorf("read the prefix keys: %w", err)
+	}
+	commands := auxPrefixBindings(listing)
+	for _, opt := range []string{"prefix", "prefix2"} {
+		out, err := v.Tmux("show-options", "-gv", opt)
+		if key := strings.TrimSpace(out); err == nil && key != "" && key != "None" {
+			commands += fmt.Sprintf("bind-key -T %s %s switch-client -T %s\n", auxKeyTable, key, auxPrefixTable)
+		}
+	}
+	for _, table := range []string{auxKeyTable, auxPrefixTable} {
+		if _, err := v.Tmux("unbind-key", "-q", "-a", "-T", table); err != nil {
+			return fmt.Errorf("clear the keys of %s: %w", table, err)
+		}
+	}
+	f, err := os.CreateTemp("", "bay-docket-keys-*.conf")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	_, werr := f.WriteString(commands)
+	if err := f.Close(); werr != nil || err != nil {
+		return fmt.Errorf("write the right pane's keys: %w", errors.Join(werr, err))
+	}
+	if _, err := v.Tmux("source-file", f.Name()); err != nil {
+		return fmt.Errorf("bind the right pane's keys: %w", err)
+	}
+	return nil
 }
 
 // The key tables that read the mark after Option-' and Option-M.
@@ -238,10 +328,15 @@ func (v *View) ListHidden() bool {
 	return err == nil && strings.TrimSpace(out) == "10"
 }
 
-// Zoomed reports whether a pane of the view's window is zoomed.
-func (v *View) Zoomed() bool {
-	out, err := v.Tmux("display-message", "-p", "-t", v.listTarget(), "#{window_zoomed_flag}")
-	return err == nil && strings.TrimSpace(out) == "1"
+// FillsWindow reports whether the list has the view's window to itself:
+// a pane is zoomed, or the right pane has gone.
+func (v *View) FillsWindow() bool {
+	out, err := v.Tmux("display-message", "-p", "-t", v.listTarget(), "#{window_zoomed_flag} #{window_panes}")
+	if err != nil {
+		return false
+	}
+	zoomed, panes, _ := strings.Cut(strings.TrimSpace(out), " ")
+	return zoomed == "1" || panes == "1"
 }
 
 // WindowWidth returns the width of the view's window, which follows the

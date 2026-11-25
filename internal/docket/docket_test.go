@@ -682,9 +682,9 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 			emptied++
 		}
 	}
-	// The other two are the bookmark tables, each emptied by the command
-	// that fills it.
-	if emptied != 1 || f.ran("unbind-key") != 3 {
+	// The other four are the two bookmark tables and the right pane's two
+	// tables.
+	if emptied != 1 || f.ran("unbind-key") != 5 {
 		t.Errorf("the view's key tables were not emptied once each")
 	}
 	for _, want := range []string{
@@ -1547,5 +1547,52 @@ func TestAnAreaWithABayOfItsOwnShowsThatBayItsQuestionsAndItsWaitingMark(t *test
 	}
 	if a := s.Key("f"); a != CloseItem {
 		t.Errorf("f: %v", a)
+	}
+}
+
+func TestTheRightPanesPrefixKeysLeaveOutCommandsOnTheViewsSession(t *testing.T) {
+	listing := `bind-key    -T prefix       !                    break-pane
+bind-key    -T prefix       %                    split-window -h
+bind-key    -T prefix       \$                   command-prompt -I "#S" { rename-session "%%" }
+bind-key -r -T prefix       Up                   select-pane -U
+bind-key    -T prefix       <                    display-menu -T "x" "New After" w { new-window -a }
+bind-key    -T prefix       [                    copy-mode
+bind-key    -T prefix       d                    detach-client
+bind-key    -T prefix       (                    switch-client -p
+bind-key    -T copy-mode    q                    send-keys -X cancel`
+	got := strings.Split(strings.TrimSpace(auxPrefixBindings(listing)), "\n")
+	want := []string{
+		"bind-key -T docket-aux-prefix ! display-message 'not in the docket view: this key acts on the view'",
+		"bind-key    -T docket-aux-prefix       %                    split-window -h",
+		"bind-key -T docket-aux-prefix \\$ display-message 'not in the docket view: this key acts on the view'",
+		"bind-key -r -T docket-aux-prefix       Up                   select-pane -U",
+		"bind-key -T docket-aux-prefix < display-message 'not in the docket view: this key acts on the view'",
+		"bind-key    -T docket-aux-prefix       [                    copy-mode",
+		"bind-key -T docket-aux-prefix d display-message 'not in the docket view: this key acts on the view'",
+		"bind-key -T docket-aux-prefix ( display-message 'not in the docket view: this key acts on the view'",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s", strings.Join(got, "\n"))
+	}
+}
+
+func TestSetupGivesTheRightPaneItsOwnPrefix(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"set-option -t =docket-aux: key-table docket-aux",
+		"set-option -t =docket-aux: prefix None",
+		"set-option -t =docket-aux: prefix2 None",
+		"list-keys -T prefix",
+		"unbind-key -q -a -T docket-aux",
+		"unbind-key -q -a -T docket-aux-prefix",
+		"source-file ",
+	} {
+		if f.ran(want) < 1 {
+			t.Errorf("not run: %q in %v", want, f.calls)
+		}
 	}
 }

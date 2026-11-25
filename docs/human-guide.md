@@ -877,6 +877,17 @@ Bay's keys and commands work on the right side as they do in the dock. Bay
 finds the dock from the window, so a command run in a bay window acts on
 that window's dock whichever session shows it.
 
+tmux's prefix key works on the right side too, with your own prefix
+bindings, except those that act on a session or a client: detaching,
+switching or choosing sessions, renaming the session, and making or
+moving windows. Those would act on the view's own sessions, so on the
+right side they show a message instead. The view copies your prefix keys
+each time `bay docket view` starts.
+
+Bay manages its docks' sessions and windows itself. It does not handle
+tmux sessions made by hand to share a dock's windows (`tmux new-session
+-t`): bay's window commands act on the dock's own session.
+
 Press `?` in the list for a popup of every key and of the marks above; `q`,
 `Esc` or `Enter` closes it. Keys in the list:
 
