@@ -33,35 +33,36 @@ type Row struct {
 // Sidebar is the state of the list: which items are shown, and where the
 // cursor is. It has no terminal or tmux dependency.
 type Sidebar struct {
-	items    map[string]Item
-	folded   map[string]bool
-	levels   int             // 0 front; 1 front and back; 2 every level
-	allBays  bool            // every item and area with a bay gets a row for each bay
-	saved    map[string]bool // the folds to restore while every area is unfolded; else nil
-	filter   string
-	typing   bool // the filter is being typed
-	rows     []Row
-	marks    map[string]string // for each mark, a letter or digit, the name of its row
-	pending  string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
-	closing  string            // the item x asks to close; else ""
-	bayClose BayClose          // the bay x or X asks to close; its Ref is "" when none
-	dropping bool              // the reason for dropping closing is being typed
-	reason   string            // the reason typed so far
-	outcome  string            // "finished" or "dropped", once chosen
-	command  bool              // F12 came last: the next key is a command even while a filter is typed
-	back     string            // the row the cursor left on the last jump to a mark
-	notice   string            // what the last key has to tell the user
-	missing  map[string]bool   // the bays, as dock/bay, that do not exist
-	waiting  map[string]bool   // the bays, as dock/bay, whose agent waits for the person
-	first    map[string]Row    // for each area row, the first row beneath it that is not an area
-	cursor   int
-	showing  string // the name of the row the right side was last asked to show
-	moved    bool   // the cursor's row left the list, and the cursor is on another row
-	top      int    // first row drawn
-	body     int    // rows the last Render had room for
-	scrolled bool   // the wheel moved the rows since the last key
-	width    int    // columns the last Render had
-	full     int    // columns the last Render had when it was not collapsed
+	items     map[string]Item
+	rootOrder []string // the order of the items at the top of the tree
+	folded    map[string]bool
+	levels    int             // 0 front; 1 front and back; 2 every level
+	allBays   bool            // every item and area with a bay gets a row for each bay
+	saved     map[string]bool // the folds to restore while every area is unfolded; else nil
+	filter    string
+	typing    bool // the filter is being typed
+	rows      []Row
+	marks     map[string]string // for each mark, a letter or digit, the name of its row
+	pending   string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
+	closing   string            // the item x asks to close; else ""
+	bayClose  BayClose          // the bay x or X asks to close; its Ref is "" when none
+	dropping  bool              // the reason for dropping closing is being typed
+	reason    string            // the reason typed so far
+	outcome   string            // "finished" or "dropped", once chosen
+	command   bool              // F12 came last: the next key is a command even while a filter is typed
+	back      string            // the row the cursor left on the last jump to a mark
+	notice    string            // what the last key has to tell the user
+	missing   map[string]bool   // the bays, as dock/bay, that do not exist
+	waiting   map[string]bool   // the bays, as dock/bay, whose agent waits for the person
+	first     map[string]Row    // for each area row, the first row beneath it that is not an area
+	cursor    int
+	showing   string // the name of the row the right side was last asked to show
+	moved     bool   // the cursor's row left the list, and the cursor is on another row
+	top       int    // first row drawn
+	body      int    // rows the last Render had room for
+	scrolled  bool   // the wheel moved the rows since the last key
+	width     int    // columns the last Render had
+	full      int    // columns the last Render had when it was not collapsed
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -271,6 +272,12 @@ func (s *Sidebar) SetItems(items map[string]Item) {
 	s.rebuild()
 }
 
+// SetRootOrder sets the order of the items at the top of the tree.
+func (s *Sidebar) SetRootOrder(order []string) {
+	s.rootOrder = order
+	s.rebuild()
+}
+
 // shown reports whether an item is listed: it is open and at one of the
 // levels shown. A filter keeps, of those, the items whose name, title or
 // bays contain it, and every item of an area whose name or title contains
@@ -322,7 +329,7 @@ func (s *Sidebar) rebuild() {
 	walk = func(parent string, depth int, inArea bool) ([]Row, int, bool) {
 		var out []Row
 		open, blocking := 0, false
-		for _, item := range Children(s.items, parent) {
+		for _, item := range Children(s.items, s.rootOrder, parent) {
 			inArea := inArea || (item.Kind == "area" && s.filter != "" && s.matches(item))
 			below, belowOpen, belowBlocking := walk(item.Name, depth+1, inArea)
 			if item.Kind == "area" {
@@ -743,7 +750,7 @@ func (s *Sidebar) startClose(force bool) {
 		return
 	}
 	var open []string
-	for _, kid := range Children(s.items, name) {
+	for _, kid := range Children(s.items, s.rootOrder, name) {
 		if kid.Status == "open" {
 			open = append(open, kid.Name)
 		}
@@ -760,7 +767,7 @@ func (s *Sidebar) startClose(force bool) {
 
 // hasOpenChild reports whether an open item is directly under name.
 func (s *Sidebar) hasOpenChild(name string) bool {
-	for _, kid := range Children(s.items, name) {
+	for _, kid := range Children(s.items, s.rootOrder, name) {
 		if kid.Status == "open" {
 			return true
 		}

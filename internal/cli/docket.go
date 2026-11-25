@@ -684,6 +684,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 		return err
 	}
 	sidebar := docket.NewSidebar(items)
+	if order, err := docket.LoadRootOrder(stateDir); err == nil {
+		sidebar.SetRootOrder(order)
+	}
 	sidebar.SetMissing(missingBays(items))
 	var windows bayWindows
 	sidebar.SetWaiting(waitingBays(windows.load()))
@@ -761,6 +764,9 @@ func runSidebar(view *docket.View, stateDir string) error {
 			return
 		}
 		sidebar.SetItems(items)
+		if order, err := docket.LoadRootOrder(stateDir); err == nil {
+			sidebar.SetRootOrder(order)
+		}
 		sidebar.SetMissing(missingBays(items))
 		forgetMarks()
 	}
