@@ -238,6 +238,28 @@ Descriptions don't affect tmux tab names — tabs stay short and truncate
 to fit, while descriptions give you a more human-readable hint when
 you're scanning for the right bay.
 
+#### Items and roles
+
+A bay can record the docket item it works on. `bay item docket` sets the
+current bay's item, `bay item` prints it, and `bay item --clear` removes
+it. A bay with a different item already set needs `--replace`, because a
+reused bay becomes a new item. An item name uses lower-case letters,
+digits and hyphens. Bay does not check that docket has such an item, so
+bay works without docket.
+
+A bay also has an optional role within its item, such as `review` or
+`helper`. The bay with the item and no role is the item's primary bay. An
+item has at most one primary bay: bay refuses a second bay with the same
+item and no role, in any dock. Set a role with `bay role review` (or
+`bay new --item docket --role review`) and print it with `bay role`.
+`bay role --clear` makes the bay the item's primary bay.
+
+The item and role appear in `bay show`, `bay show --json`, `bay ls --json`
+and `bay tree --json`. A bay with no item has neither field. A single
+argument that looks like a bay ID (such as `b3`) names the bay to read;
+to set an item or role that looks like a bay ID, name the bay too:
+`bay item self b3`.
+
 In `bay ls` / `bay tree`, only the first line is shown and its length
 adapts to terminal width (floored at 15 characters, capped at 80). Bay
 names and branches are also capped in the human table so one long field
@@ -689,6 +711,11 @@ bay describe                             # print current description
 bay describe [id] [<text>]               # set (first line + optional blank-line-separated body)
 bay describe --edit                      # open $EDITOR for multi-line editing
 bay describe --clear                     # clear description
+bay item [id]                            # print the docket item the bay works on
+bay item [id] <name> [--role <role>]     # set the item (--replace to change an existing one)
+bay item [id] --clear                    # remove the item and role
+bay role [id] [<role>]                   # print or set the role (--clear = primary bay)
+bay new --item <name> [--role <role>]    # create a bay with its item and role
 bay ls                                   # list bays in current dock
 bay ls --json                            # machine-readable bay list
 bay tree                                 # full tree (bays + surfaces)

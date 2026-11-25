@@ -727,6 +727,13 @@ func FormatBayShow(dockName string, bay *engine.BayInfo, long bool) string {
 		}
 	}
 	rows = append(rows, showRow{"dock", dockName})
+	if bay.Item != "" {
+		item := bay.Item
+		if bay.Role != "" {
+			item += " (" + bay.Role + ")"
+		}
+		rows = append(rows, showRow{"item", item})
+	}
 	if bay.Type != "" && bay.Type != "worktree" {
 		rows = append(rows, showRow{"type", bay.Type})
 	}

@@ -107,6 +107,8 @@ func newBayNewCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&shell, "shell", false, "open shell instead of agent")
 	cmd.Flags().StringVar(&opts.Branch, "branch", "", "git branch to checkout (creates it if new)")
 	cmd.Flags().StringVar(&opts.Description, "description", "", "short description shown in picker/ls/tree (~40 chars)")
+	cmd.Flags().StringVar(&opts.Item, "item", "", "docket item the bay works on")
+	cmd.Flags().StringVar(&opts.Role, "role", "", "role within the item (omit for the item's primary bay; needs --item)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "suppress output")
 	cmd.Flags().Lookup("agent").NoOptDefVal = "default"
 
@@ -505,6 +507,8 @@ func newBayShowCmd() *cobra.Command {
 				out := map[string]interface{}{
 					"name":          bayInfo.Name,
 					"description":   bayInfo.Description,
+					"item":          bayInfo.Item,
+					"role":          bayInfo.Role,
 					"dock":          dockName,
 					"type":          bayInfo.Type,
 					"path":          bayInfo.Path,

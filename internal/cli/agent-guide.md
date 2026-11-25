@@ -297,6 +297,8 @@ current dock.
   "id": "b1",
   "name": "auth-fix",
   "description": "Login flow fixes",
+  "item": "docket",
+  "role": "review",
   "dock": "labs",
   "type": "worktree",
   "path": "/Users/dev/projects/labs-worktrees/b1",
@@ -620,6 +622,33 @@ bay describe --edit                       # open $EDITOR
 bay describe b1 "Login fixes"             # set by ID
 bay describe --clear                      # clear current bay's description
 bay describe "Login flow fixes"              # top-level shortcut
+```
+
+#### `bay item [id] [<name>]`, `bay role [id] [<role>]`
+
+A bay can record the docket item it works on (`item`) and its role in that
+item (`role`). The item with no role is the primary bay; an item has at most
+one primary bay across all docks, and bay refuses a second one. Names use
+lower-case letters, digits and hyphens. Bay does not check that docket has
+the item.
+
+`bay item` prints the item (nothing if unset). `bay item <name>` sets it;
+changing an item the bay already has needs `--replace`, which also clears the
+role. `bay item --clear` removes both. `bay role <role>` sets the role;
+`bay role --clear` makes the bay primary. A role needs an item. A single
+argument that looks like a bay ID (`b3`) is read as the bay; to set a name
+that looks like one, name the bay too (`bay item self b3`).
+
+`bay show --json` has `item` and `role` (empty when unset). `bay ls --json`
+and `bay tree --json` include them only when set.
+
+```
+bay item                                  # print current bay's item
+bay item docket                           # set the item (this bay is primary)
+bay item b3 docket --role review          # set by ID, with a role
+bay item b3 other --replace               # change item
+bay role helper                           # set current bay's role
+bay new --item docket --role helper       # create a bay with item and role
 ```
 
 ### Navigation

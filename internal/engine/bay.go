@@ -21,6 +21,8 @@ type BayNewOptions struct {
 	RequireAgent bool   // fail if no agent can be resolved
 	Shell        bool   // open shell instead of agent
 	Branch       string // git branch to checkout (creates it if new)
+	Item         string // docket item the bay works on (optional)
+	Role         string // role within the item; empty = primary (requires Item)
 }
 
 // BayNew creates a new bay with surfaces.
@@ -66,6 +68,12 @@ func (e *Engine) BayNew(opts BayNewOptions) (*manifest.Bay, error) {
 	}
 	if nameExplicit && dock.FindBay(displayName) != nil {
 		return nil, fmt.Errorf("bay name %q already exists in dock %q", displayName, dockName)
+	}
+	if err := validateItemRole(opts.Item, opts.Role); err != nil {
+		return nil, err
+	}
+	if err := checkPrimaryFree(m, opts.Item, opts.Role, "", ""); err != nil {
+		return nil, err
 	}
 
 	agentName := ""
@@ -220,6 +228,8 @@ func (e *Engine) BayNew(opts BayNewOptions) (*manifest.Bay, error) {
 		Path:              bayPath,
 		Description:       desc,
 		DescriptionSource: descSource,
+		Item:              opts.Item,
+		Role:              opts.Role,
 		LastActive:        time.Now().Unix(),
 		Worktree:          worktreeAttrs,
 		Surfaces:          []manifest.Surface{},
@@ -246,6 +256,9 @@ func (e *Engine) BayNew(opts BayNewOptions) (*manifest.Bay, error) {
 			return fmt.Errorf("bay name %q already exists in dock %q", displayName, dockName)
 		}
 
+		if err := checkPrimaryFree(m, bay.Item, bay.Role, "", ""); err != nil {
+			return err
+		}
 		bay.Name = finalName
 		if err := dock.AddBay(bay); err != nil {
 			return err
