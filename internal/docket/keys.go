@@ -3,7 +3,8 @@ package docket
 // KeysHelp lists every key of the docket view.
 const KeysHelp = `In the list:
   j, k            move down or up one row; the right side shows it, and
-                  for an area shows the first item in the area
+                  for an area shows the area's own bay, or else the
+                  first item in the area
   n, p            move to the next or previous item or bay, passing over
                   areas and the row of an item that lists its bays
   J, K            move down or up ten rows

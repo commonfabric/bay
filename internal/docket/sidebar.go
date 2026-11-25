@@ -22,12 +22,12 @@ type Row struct {
 	Desk     bool
 	Work     string
 	Level    string
-	Open     int  // open questions; for an area, those of the shown items beneath it
+	Open     int  // open questions; for an area, its own and those of the shown items beneath it
 	Blocking bool // an open question holds up all work
 	Bays     []string
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
-	Waiting  bool   // a bay of the row waits for the person; on an area, a bay beneath it
+	Waiting  bool   // a bay of the row waits for the person; on an area, also a bay beneath it
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
@@ -325,13 +325,21 @@ func (s *Sidebar) rebuild() {
 			inArea := inArea || (item.Kind == "area" && s.filter != "" && s.matches(item))
 			below, belowOpen, belowBlocking := walk(item.Name, depth+1, inArea)
 			if item.Kind == "area" {
+				n, b := item.OpenQuestions()
+				bays := item.BayRefs()
+				waiting := false
+				for _, ref := range bays {
+					waiting = waiting || s.waiting[ref]
+				}
 				if len(below) == 0 {
 					// An area with no open items under it is listed, so
 					// that it can be closed.
 					if s.hasOpenChild(item.Name) || !s.shown(item, inArea) {
 						continue
 					}
-					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true})
+					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
+						Open: n, Blocking: b, Bays: bays, Waiting: waiting})
+					open, blocking = open+n, blocking || b
 					continue
 				}
 				for _, r := range below {
@@ -341,16 +349,15 @@ func (s *Sidebar) rebuild() {
 					}
 				}
 				folded := s.folded[item.Name] && s.filter == ""
-				waiting := false
 				for _, r := range below {
 					waiting = waiting || r.Waiting
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-					Folded: folded, Open: belowOpen, Blocking: belowBlocking, Waiting: waiting})
+					Folded: folded, Open: belowOpen + n, Blocking: belowBlocking || b, Bays: bays, Waiting: waiting})
 				if !folded {
 					out = append(out, below...)
 				}
-				open, blocking = open+belowOpen, blocking || belowBlocking
+				open, blocking = open+belowOpen+n, blocking || belowBlocking || b
 				continue
 			}
 			if s.shown(item, inArea) {
@@ -464,11 +471,15 @@ func (s *Sidebar) Rows() []Row { return s.rows }
 func (s *Sidebar) Current() Row { return s.rows[s.cursor] }
 
 // Shown returns the row whose window the right side shows for the row
-// under the cursor. For an area that is the first row beneath it that is
-// not an area, whether or not the area is folded. For any other row it
-// is the row under the cursor.
+// under the cursor. For an area with a bay of its own that is the area
+// as a row for that bay. For another area it is the first row beneath it
+// that is not an area, whether or not the area is folded. For any other
+// row it is the row under the cursor.
 func (s *Sidebar) Shown() Row {
 	row := s.rows[s.cursor]
+	if row.Area && len(row.Bays) > 0 {
+		return Row{Name: row.Name, Title: row.Title, Bays: row.Bays}
+	}
 	if first, ok := s.first[row.Name]; ok && row.Area {
 		return first
 	}

@@ -842,9 +842,9 @@ bays where its work happens. `bay docket view` opens a tmux session named
   | yellow `○` | The item's agent is waiting for its next instruction |
   | red `◌` | The item's work is held until something else happens |
   | dim `·` | The item has no bay |
-  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay beneath the area waits. The list checks every two seconds |
+  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds |
   | cyan `↳ dock/bay` | One bay of an item that has several |
-  | yellow `?2` | Two questions wait for your answer; on an area, the total beneath it |
+  | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
   | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
@@ -857,8 +857,9 @@ bays where its work happens. `bay docket view` opens a tmux session named
   Closing a bay with `bay close` takes the bay off the docket items that
   name it and notes it in each item's history. `docket doctor` lists the
   open items whose bay does not exist or has no window.
-  An area shows what the first item listed in the area shows, whether or
-  not the area is folded.
+  An area that has a bay of its own shows that bay. An area without one
+  shows what the first item listed in the area shows, whether or not the
+  area is folded.
   When the cursor is on an area, or on an item that lists its bays, the
   row that the right side shows is shaded grey.
   The first line of the list is the desk, docket's agent session for asking
@@ -885,7 +886,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
-| `Enter` | Move to the right side. On an area, the right side shows the area's first item |
+| `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
 | `Space` | Fold or unfold the area under the cursor |
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
 | `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |

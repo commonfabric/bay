@@ -1442,3 +1442,54 @@ func TestAWaitingBayMarksItsRowItsItemAndItsArea(t *testing.T) {
 		}
 	}
 }
+
+func TestAnAreaWithABayOfItsOwnShowsThatBayItsQuestionsAndItsWaitingMark(t *testing.T) {
+	items := tree()
+	tooling := items["tooling"]
+	tooling.Sites = []Site{{"bay", "bay/b9"}}
+	tooling.Questions = []Question{{BlocksAll: true}, {}}
+	items["tooling"] = tooling
+	items["quiet"] = Item{Name: "quiet", Title: "Quiet", Kind: "area", Status: "open", Level: "front",
+		Sites: []Site{{"bay", "bay/b3"}}}
+	s := NewSidebar(items)
+	s.SetWaiting(map[string]bool{"bay/b9": true})
+	var area, quiet Row
+	for _, r := range s.Rows() {
+		switch r.Name {
+		case "tooling":
+			area = r
+		case "quiet":
+			quiet = r
+		}
+	}
+	// Its own two questions and the one of the sidebar item beneath it.
+	if area.Open != 3 || !area.Blocking || !area.Waiting || len(area.Bays) != 1 {
+		t.Errorf("area row = %+v", area)
+	}
+	if quiet.Waiting || len(quiet.Bays) != 1 {
+		t.Errorf("area with no open items = %+v", quiet)
+	}
+	for i := 0; i < 20 && s.Current().Name != "tooling"; i++ {
+		s.Key("j")
+	}
+	if got := s.Shown(); got.Area || got.Name != "tooling" || len(got.Bays) != 1 || got.Bays[0] != "bay/b9" {
+		t.Errorf("shown = %+v", got)
+	}
+	// An area with open items under it still cannot be closed.
+	if a := s.Key("x"); a != None || !strings.Contains(s.Notice(), "open items under it") {
+		t.Errorf("x: %v %q", a, s.Notice())
+	}
+	// An area with a bay and nothing under it closes from its row.
+	for i := 0; i < 20 && s.Current().Name != "quiet"; i++ {
+		s.Key("k")
+	}
+	if s.Current().Name != "quiet" {
+		t.Fatalf("cursor on %s", s.Current().Name)
+	}
+	if a := s.Key("x"); a != None || s.Notice() != "" {
+		t.Errorf("x on quiet: %v %q", a, s.Notice())
+	}
+	if a := s.Key("f"); a != CloseItem {
+		t.Errorf("f: %v", a)
+	}
+}
