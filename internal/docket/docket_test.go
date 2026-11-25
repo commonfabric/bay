@@ -627,7 +627,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
+	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.

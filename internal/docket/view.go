@@ -149,6 +149,8 @@ func (v *View) Setup() error {
 		return []string{"send-keys", "-t", pane, key}
 	}
 	binds := [][]string{
+		append([]string{"M-j"}, list("F5")...),
+		append([]string{"M-k"}, list("F6")...),
 		append([]string{"M-J"}, list("F5")...),
 		append([]string{"M-K"}, list("F6")...),
 		append([]string{"M-N"}, list("F9")...),
