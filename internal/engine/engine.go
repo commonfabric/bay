@@ -134,6 +134,19 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// ValidateDockName extends ValidateName by reserving names that begin
+// with "_" for tmux sessions that bay makes for itself, such as the docket
+// view's. A dock's tmux session has the dock's name.
+func ValidateDockName(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
+	if strings.HasPrefix(name, "_") {
+		return fmt.Errorf("invalid dock name %q: names beginning with _ are reserved for bay's own tmux sessions", name)
+	}
+	return nil
+}
+
 // ValidateBayName extends ValidateName by reserving generated bay ID
 // patterns (^b[1-9]\d*$ and legacy ^w[1-9]\d*$) plus the reserved home
 // handle. Bay IDs and Names share the same identifier namespace, so allowing

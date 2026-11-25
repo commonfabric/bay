@@ -830,7 +830,9 @@ bay docket view                             # open the item list beside bay wind
 
 docket is a separate tool that keeps a tree of work items. Each item names the
 bays where its work happens. `bay docket view` opens a tmux session named
-`docket` with one window:
+`_docket` with one window. The view's sessions all begin with `_`, and
+bay refuses dock names that begin with `_`, so they never meet a dock's
+session:
 
 - The left side lists the items, grouped under their areas. The marks and
   colors of a row:
@@ -917,7 +919,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `?` | Show the keys |
 | `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
 
-Keys from either side of the `docket` session:
+Keys from either side of the `_docket` session:
 
 | Key | Action |
 |-----|--------|
@@ -937,7 +939,7 @@ seen, the row's name is shown for a moment at the bottom of the terminal.
 
 Every other key goes to the window on the right, including the tmux prefix
 and the other `Option` keys, so bay's keybindings act on the bay being
-shown. The `docket` session has its own key table and no prefix; no other
+shown. The `_docket` session has its own key table and no prefix; no other
 session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default

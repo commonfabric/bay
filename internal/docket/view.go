@@ -11,16 +11,17 @@ import (
 
 // Names of the tmux objects the view uses.
 const (
-	ViewSession  = "docket"      // holds the window with the sidebar
-	ViewWindow   = "view"        //
-	AuxSession   = "docket-aux"  // holds the window that shows an item's record
-	RecordWindow = "record"      //
-	DeskSession  = "docket-desk" // holds the desk agent's window
-	DeskWindow   = "desk"        //
-	KeyTable     = "docket"      // key table of clients attached to ViewSession
+	// The sessions' names begin with "_", which bay refuses for a dock.
+	ViewSession  = "_docket"      // holds the window with the sidebar
+	ViewWindow   = "view"         //
+	AuxSession   = "_docket-aux"  // holds the window that shows an item's record
+	RecordWindow = "record"       //
+	DeskSession  = "_docket-desk" // holds the desk agent's window
+	DeskWindow   = "desk"         //
+	KeyTable     = "docket"       // key table of clients attached to ViewSession
 	SidebarWidth = 36
 	// A leading "=" makes tmux match the session name exactly. Without it
-	// "docket" also matches "docket-desk".
+	// "_docket" also matches "_docket-desk".
 	sidebarPane   = "=" + ViewSession + ":" + ViewWindow + ".{left}"
 	viewerPane    = "=" + ViewSession + ":" + ViewWindow + ".{right}"
 	recordTarget  = "=" + AuxSession + ":" + RecordWindow
@@ -108,22 +109,57 @@ func (v *View) auxWindows() ([]string, error) {
 	return strings.Fields(out), nil
 }
 
-// Setup creates what is missing of the two sessions and their panes, and
-// sets the keys. It changes nothing that is already in place, so it is
-// safe to run again.
-func (v *View) Setup() error {
-	if !v.has(recordTarget) {
-		if _, err := v.Tmux("new-session", "-d", "-s", AuxSession, "-n", RecordWindow, recordWelcome); err != nil {
-			return fmt.Errorf("start the record window: %w", err)
-		}
-		if _, err := v.Tmux("set-option", "-t", auxTarget, "status", "off"); err != nil {
-			return fmt.Errorf("hide the record window's status line: %w", err)
-		}
+// ensureAux starts the right pane's session when it is not running, as
+// when it has been killed, and reports whether it started it.
+func (v *View) ensureAux() (started bool, err error) {
+	if v.has(recordTarget) {
+		return false, nil
 	}
+	if _, err := v.Tmux("new-session", "-d", "-s", AuxSession, "-n", RecordWindow, recordWelcome); err != nil {
+		return false, fmt.Errorf("start the record window: %w", err)
+	}
+	if _, err := v.Tmux("set-option", "-t", auxTarget, "status", "off"); err != nil {
+		return true, fmt.Errorf("hide the record window's status line: %w", err)
+	}
+	return true, nil
+}
+
+// setAux sets the options and keys of the right pane's session.
+func (v *View) setAux() error {
 	// The record window stays when the record's pager is quit, so the
 	// next item's record can be shown in it.
 	if _, err := v.Tmux("set-option", "-w", "-t", recordTarget, "remain-on-exit", "on"); err != nil {
 		return fmt.Errorf("keep the record window: %w", err)
+	}
+	return v.bindAuxPrefix()
+}
+
+// oldSessions maps the names the view's sessions had before they began
+// with "_" to their names now.
+var oldSessions = [][3]string{
+	{"docket", ViewSession, ViewWindow},
+	{"docket-aux", AuxSession, RecordWindow},
+	{"docket-desk", DeskSession, DeskWindow},
+}
+
+// renameOldSessions gives a session of the view that still has its old
+// name its name now, so that what runs in it, such as the desk's agent,
+// keeps running.
+func (v *View) renameOldSessions() {
+	for _, s := range oldSessions {
+		if v.has("="+s[0]+":"+s[2]) && !v.has("="+s[1]+":"+s[2]) {
+			_, _ = v.Tmux("rename-session", "-t", "="+s[0], s[1])
+		}
+	}
+}
+
+// Setup creates what is missing of the two sessions and their panes, and
+// sets the keys. It changes nothing that is already in place, so it is
+// safe to run again.
+func (v *View) Setup() error {
+	v.renameOldSessions()
+	if _, err := v.ensureAux(); err != nil {
+		return err
 	}
 	if !v.has(viewTarget) {
 		if _, err := v.Tmux("new-session", "-d", "-s", ViewSession, "-n", ViewWindow, v.SidebarCommand); err != nil {
@@ -197,7 +233,7 @@ func (v *View) Setup() error {
 	if err := v.bindMarks(pane); err != nil {
 		return err
 	}
-	return v.bindAuxPrefix()
+	return v.setAux()
 }
 
 // The key tables of the client in the right pane.
@@ -467,6 +503,13 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 			_, err = v.Tmux("select-pane", "-t", viewerPane)
 		}
 		return "", err
+	}
+	if started, err := v.ensureAux(); err != nil {
+		return "", err
+	} else if started {
+		if err := v.setAux(); err != nil {
+			return "", err
+		}
 	}
 	if _, err := v.ensureViewer(); err != nil {
 		return "", err

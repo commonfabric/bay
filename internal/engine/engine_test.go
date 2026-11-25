@@ -4339,3 +4339,11 @@ func TestSyncRename_ReplacesPlaceholder(t *testing.T) {
 		t.Errorf("Name = %q, want cache-ttl (placeholder filled)", got.Name)
 	}
 }
+
+func TestValidateDockNameReservesALeadingUnderscore(t *testing.T) {
+	for name, ok := range map[string]bool{"loom": true, "my_dock": true, "_docket": false, "_x": false, "a.b": false} {
+		if err := ValidateDockName(name); (err == nil) != ok {
+			t.Errorf("ValidateDockName(%q) = %v", name, err)
+		}
+	}
+}

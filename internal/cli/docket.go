@@ -102,7 +102,7 @@ func newDocketViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view",
 		Short: "Open the docket view: the item list, and the chosen item's bay window",
-		Long: `Open the tmux session named "docket".
+		Long: `Open the tmux session named "_docket".
 
 Its window has the item list on the left. The right side shows the bay
 window of the item chosen in the list, with all of that window's panes.

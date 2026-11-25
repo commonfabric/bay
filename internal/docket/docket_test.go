@@ -549,7 +549,7 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 		}
 		// A window named like the docket sessions but in another session
 		// must not be taken for one of them.
-		out := "@1 =docket-desk-old:view\n"
+		out := "@1 =_docket-desk-old:view\n"
 		for target := range f.exists {
 			id := target
 			if strings.HasPrefix(target, "=") {
@@ -560,7 +560,7 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 		return out, nil
 	case "list-panes":
 		// The sidebar's pane may have been started by another copy of bay.
-		started := []string{"%1\t\"/other/bay docket sidebar\"", "%2\t\"env -u TMUX tmux -S \"${TMUX%%,*}\" attach-session -t '=docket-aux'\""}
+		started := []string{"%1\t\"/other/bay docket sidebar\"", "%2\t\"env -u TMUX tmux -S \"${TMUX%%,*}\" attach-session -t '=_docket-aux'\""}
 		if f.noList {
 			return started[1] + "\n", nil
 		}
@@ -635,10 +635,10 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("new-session") != 2 || f.ran("split-window") != 1 {
 		t.Fatalf("first setup: %v", f.calls)
 	}
-	if f.ran("set-option -w -t =docket-aux:record remain-on-exit on") != 1 {
+	if f.ran("set-option -w -t =_docket-aux:record remain-on-exit on") != 1 {
 		t.Errorf("the record window is not kept when its pager quits: %v", f.calls)
 	}
-	if f.ran("set-option -t =docket: prefix None") != 1 || f.ran("set-option -t =docket: key-table docket") != 1 {
+	if f.ran("set-option -t =_docket: prefix None") != 1 || f.ran("set-option -t =_docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
 	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
@@ -651,7 +651,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 		}
 	}
 	if f.ran("bind-key -T docket M-h select-pane -t %1") != 1 ||
-		f.ran("bind-key -T docket M-l select-pane -t =docket:view.{right}") != 1 {
+		f.ran("bind-key -T docket M-l select-pane -t =_docket:view.{right}") != 1 {
 		t.Errorf("Option-h and Option-l do not choose the list and the right side: %v", f.calls)
 	}
 	if f.ran("bind-key -T docket M-? send-keys -t %1 F8") != 1 {
@@ -725,7 +725,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 			!strings.HasPrefix(c, "bind-key -T docket-mark-") {
 			t.Errorf("a key was bound outside the docket tables: %s", c)
 		}
-		if strings.HasPrefix(c, "set-option") && !strings.Contains(c, "-t =docket") {
+		if strings.HasPrefix(c, "set-option") && !strings.Contains(c, "-t =_docket") {
 			t.Errorf("an option was set outside the docket sessions: %s", c)
 		}
 	}
@@ -746,8 +746,8 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	if err != nil || note != "" {
 		t.Fatalf("bay window: %q %v", note, err)
 	}
-	if f.ran("link-window -d -s @7 -t =docket-aux:") != 1 ||
-		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@7") != 1 || f.ran("select-pane") != 1 {
+	if f.ran("link-window -d -s @7 -t =_docket-aux:") != 1 ||
+		f.ran("switch-client -c /dev/ttys9 -t =_docket-aux:@7") != 1 || f.ran("select-pane") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 
@@ -765,12 +765,12 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	if err != nil || !strings.Contains(note, "no window") {
 		t.Fatalf("missing window: %q %v", note, err)
 	}
-	if f.ran("respawn-window -k -t =docket-aux:record docket show gone") != 1 ||
-		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@record") != 1 ||
-		f.ran("unlink-window -t =docket-aux:@7") != 1 || len(f.aux) != 0 {
+	if f.ran("respawn-window -k -t =_docket-aux:record docket show gone") != 1 ||
+		f.ran("switch-client -c /dev/ttys9 -t =_docket-aux:@record") != 1 ||
+		f.ran("unlink-window -t =_docket-aux:@7") != 1 || len(f.aux) != 0 {
 		t.Errorf("calls: %v", f.calls)
 	}
-	if f.ran("unlink-window -t =docket-aux:@record") != 0 || f.ran("link-window -d -s @record") != 0 {
+	if f.ran("unlink-window -t =_docket-aux:@record") != 0 || f.ran("link-window -d -s @record") != 0 {
 		t.Errorf("the record window was linked or unlinked: %v", f.calls)
 	}
 	if f.ran("select-pane") != 1 {
@@ -780,7 +780,7 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	if _, err := v.Show(Row{Name: "sidebar bay/b8", Bays: []string{"bay/b8"}, Bay: "bay/b8"}, false); err != nil {
 		t.Fatal(err)
 	}
-	if f.ran("respawn-window -k -t =docket-aux:record docket show sidebar") != 1 {
+	if f.ran("respawn-window -k -t =_docket-aux:record docket show sidebar") != 1 {
 		t.Errorf("a bay row did not show its item's record: %v", f.calls)
 	}
 
@@ -790,7 +790,7 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	if note, err := v.Show(Row{Name: "people", Area: true}, false); err != nil || note != "" || len(f.calls) != before {
 		t.Errorf("an area was shown: %v", f.calls[before:])
 	}
-	if _, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || strings.Join(f.calls[before:], "|") != "select-pane -t =docket:view.{right}" {
+	if _, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || strings.Join(f.calls[before:], "|") != "select-pane -t =_docket:view.{right}" {
 		t.Errorf("enter on an empty area: %v", f.calls[before:])
 	}
 }
@@ -859,7 +859,7 @@ func TestShowStartsTheDeskOnlyWhenItIsNotRunning(t *testing.T) {
 		}
 	}
 	if f.ran("start-desk") != 1 || f.ran("link-window -d -s @desk") != 1 ||
-		f.ran("switch-client -c /dev/ttys9 -t =docket-aux:@desk") != 2 {
+		f.ran("switch-client -c /dev/ttys9 -t =_docket-aux:@desk") != 2 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
@@ -881,7 +881,7 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if f.ran("split-window -h -b -f -d -P -F #{pane_id} -t =docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
+	if f.ran("split-window -h -b -f -d -P -F #{pane_id} -t =_docket:view bay docket sidebar") != 1 || f.ran("split-window") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 	// The keys name the new pane.
@@ -1307,7 +1307,7 @@ func TestListHiddenOnlyWhenAnotherPaneIsZoomed(t *testing.T) {
 		if got := v.ListHidden(); got != c.want {
 			t.Errorf("flags %q: ListHidden = %v, want %v", c.flags, got, c.want)
 		}
-		if asked != "display-message -p -t =docket:view.{left} #{window_zoomed_flag}#{pane_active}" {
+		if asked != "display-message -p -t =_docket:view.{left} #{window_zoomed_flag}#{pane_active}" {
 			t.Errorf("asked tmux %q", asked)
 		}
 	}
@@ -1583,9 +1583,9 @@ func TestSetupGivesTheRightPaneItsOwnPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"set-option -t =docket-aux: key-table docket-aux",
-		"set-option -t =docket-aux: prefix None",
-		"set-option -t =docket-aux: prefix2 None",
+		"set-option -t =_docket-aux: key-table docket-aux",
+		"set-option -t =_docket-aux: prefix None",
+		"set-option -t =_docket-aux: prefix2 None",
 		"list-keys -T prefix",
 		"unbind-key -q -a -T docket-aux",
 		"unbind-key -q -a -T docket-aux-prefix",
@@ -1633,5 +1633,45 @@ func TestShiftBShowsARowForEveryBayWhereXClosesIt(t *testing.T) {
 	s.Key("B")
 	if names(s) != before {
 		t.Errorf("B again: %s, want %s", names(s), before)
+	}
+}
+
+func TestSetupRenamesTheViewsSessionsFromTheirOldNames(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"=docket-desk:desk": true, "=docket:view": true, "=_docket:view": true}, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("rename-session -t =docket-desk _docket-desk") != 1 {
+		t.Errorf("the old desk session was not renamed: %v", f.calls)
+	}
+	// A session that already has its new name is left as it is.
+	if f.ran("rename-session -t =docket ") != 0 || f.ran("rename-session -t =docket-aux") != 0 {
+		t.Errorf("renamed a session that needed no rename: %v", f.calls)
+	}
+}
+
+func TestShowStartsTheRightPanesSessionAgainWhenItWasKilled(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true}, panes: 2, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"new-session -d -s _docket-aux -n record",
+		"set-option -w -t =_docket-aux:record remain-on-exit on",
+		"set-option -t =_docket-aux: key-table docket-aux",
+		"switch-client -c /dev/ttys9 -t =_docket-aux:@7",
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not run once: %q in %v", want, f.calls)
+		}
+	}
+	// With the session running, Show starts nothing.
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("new-session") != 1 {
+		t.Errorf("started again: %v", f.calls)
 	}
 }

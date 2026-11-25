@@ -70,7 +70,7 @@ func (b BayInfo) Label() string {
 
 // DockNew creates a new dock configuration and tmux session.
 func (e *Engine) DockNew(name, path, worktreeDir, agent, terminal string) error {
-	if err := ValidateName(name); err != nil {
+	if err := ValidateDockName(name); err != nil {
 		return err
 	}
 	if path == "" {
@@ -231,7 +231,7 @@ var launchTerminal = func(terminal, session string) (int, error) {
 
 // DockRename renames a dock in manifest, config overrides, and tmux.
 func (e *Engine) DockRename(oldName, newName string) error {
-	if err := ValidateName(newName); err != nil {
+	if err := ValidateDockName(newName); err != nil {
 		return err
 	}
 
