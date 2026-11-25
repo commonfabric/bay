@@ -17,8 +17,21 @@ const KeysHelp = `In the list:
                   as it is while you type. Enter keeps the filter and
                   shows the cursor's row. Esc clears the filter and
                   returns the cursor to the row the right side shows
-  m, then a letter   mark the row under the cursor with that letter or
-                  digit; on the row that has the mark, take it off
+  *               add the row under the cursor to the end of the
+                  hotlist, the rows listed below the desk, or take it
+                  off. At most nine. The row stays in its area, which
+                  shows its number as *1. The cursor stays where it is;
+                  after taking off the row it is on in the hotlist, it
+                  goes to the row that takes its place, or the one above
+                  when it was the last, or to the desk
+  1 to 9          go to that row of the hotlist
+  [, ]            in the hotlist, move the row up or down. Elsewhere,
+                  move the item up or down among the shown items under
+                  the same parent, with docket set --before or --after
+  m, then a letter   mark the row under the cursor with that letter; on
+                  the row that has the mark, take it off. m and a digit
+                  takes the row off the hotlist when it is that digit's
+                  row, and is refused on any other row
   ', then a letter   go to the row with that mark. A row that is not in
                   the list is brought in: its areas are unfolded, its
                   level is shown, and the filter is cleared, as needed
@@ -68,6 +81,7 @@ From either side:
   Option-B             collapse or expand the list
   Option-', a letter   go to a mark; Option-' then ' goes back
   Option-M, a letter   mark the row the right side shows
+  Option-1 to Option-9 go to that row of the hotlist
   Option-h, Option-l   move to the list, or to the right side
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does

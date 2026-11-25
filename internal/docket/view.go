@@ -224,6 +224,8 @@ func (v *View) Setup() error {
 		append([]string{"M-?"}, list("F8")...),
 		// Collapse the list and move to the right side, or expand it.
 		append([]string{"M-B"}, list("F11")...),
+		// Option and a digit go to that row of the hotlist: the list is
+		// sent F12, then the digit.
 		// Bookmarks: the next key is read in a table of its own, which
 		// sends the list F12, the list's key and the mark.
 		{"M-'", "switch-client", "-T", markGoTable, "\\;", "display-message", "go to a mark: press its letter, or ' to go back"},
@@ -244,6 +246,9 @@ func (v *View) Setup() error {
 		// passed on to that pane. The backslash keeps both commands in
 		// the binding; a bare ";" would end the bind-key command.
 		{"MouseDown1Pane", "select-pane", "-t", "=", "\\;", "send-keys", "-M"},
+	}
+	for d := '1'; d <= '9'; d++ {
+		binds = append(binds, append([]string{"M-" + string(d)}, "send-keys", "-t", pane, "F12", string(d)))
 	}
 	// The table belongs to the view. Emptying it first removes keys that an
 	// earlier version bound.

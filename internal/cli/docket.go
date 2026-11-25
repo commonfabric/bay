@@ -382,6 +382,26 @@ func saveMarks(stateDir string, marks map[string]string) error {
 	return os.WriteFile(marksFile(stateDir), data, 0o644)
 }
 
+// hotlistFile is the file that keeps the list's hotlist: the names of its
+// rows, in order.
+func hotlistFile(stateDir string) string { return filepath.Join(stateDir, "view-hotlist.json") }
+
+func loadHotlist(stateDir string) []string {
+	var names []string
+	if data, err := os.ReadFile(hotlistFile(stateDir)); err == nil {
+		_ = json.Unmarshal(data, &names)
+	}
+	return names
+}
+
+func saveHotlist(stateDir string, names []string) error {
+	data, err := json.Marshal(names)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(hotlistFile(stateDir), data, 0o644)
+}
+
 // oldWidthFile is where the list's width was kept before it moved to bay's
 // data folder. loadWidth reads it when the new file is missing, and
 // saveWidth removes it.
@@ -699,6 +719,13 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 	}
 	forgetMarks()
+	sidebar.SetHotlist(loadHotlist(stateDir))
+	forgetHotlist := func() {
+		if sidebar.ForgetHotlist() {
+			_ = saveHotlist(stateDir, sidebar.Hotlist())
+		}
+	}
+	forgetHotlist()
 	// The list starts at the width it had when it was last used. A width
 	// the list is later given is saved, except a collapsed one and one a
 	// zoomed pane gives it. When the terminal changes size, tmux changes
@@ -769,6 +796,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 		sidebar.SetMissing(missingBays(items))
 		forgetMarks()
+		forgetHotlist()
 	}
 
 	keys := make(chan string, 64)
@@ -841,6 +869,17 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = view.SetWidth(docket.SidebarWidth)
 			case docket.MarksChanged:
 				err = saveMarks(stateDir, sidebar.Marks())
+			case docket.HotlistChanged:
+				err = saveHotlist(stateDir, sidebar.Hotlist())
+			case docket.MoveSibling:
+				item, flag, sibling := sidebar.SiblingRequest()
+				out, runErr := exec.Command("docket", "set", item, flag, sibling).CombinedOutput()
+				if runErr != nil {
+					err = fmt.Errorf("docket set %s %s %s: %s", item, flag, sibling, strings.TrimSpace(string(out)))
+				} else {
+					note = item + " moved " + strings.TrimPrefix(flag, "--") + " " + sibling
+					reload()
+				}
 			case docket.CloseItem:
 				item, outcome, reason := sidebar.CloseRequest()
 				args := []string{"close", item, outcome}
