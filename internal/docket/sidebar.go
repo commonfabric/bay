@@ -905,8 +905,8 @@ func (s *Sidebar) ancestors(name string) []string {
 }
 
 // Click applies a mouse press at the given line and column of the last
-// Render, both counted from 0. On a row it moves the cursor there, and on
-// an area it also folds or unfolds it. On the mark at the start of the
+// Render, both counted from 0. On a row it moves the cursor there; on an
+// area row the cursor was already on, it folds or unfolds it. On the mark at the start of the
 // first bar it collapses the sidebar, and anywhere on a collapsed sidebar
 // it expands it. Elsewhere it does nothing.
 func (s *Sidebar) Click(line, column int) Action { return s.did(s.click(line, column)) }
