@@ -29,6 +29,7 @@ type Row struct {
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
 	Waiting  bool   // a bay of the row waits for the person; on an area, a bay of the area's own
+	Empty    bool   // an area with no open items at any level
 	// BeneathWaiting is set on an area when a bay beneath it waits.
 	BeneathWaiting bool
 	Hot            int  // the row's place in the hotlist, counted from 1; 0 when it is not in it
@@ -408,13 +409,14 @@ func (s *Sidebar) tree() []Row {
 					waiting = waiting || s.waiting[ref]
 				}
 				if len(below) == 0 {
-					// An area with no open items under it is listed, so
-					// that it can be closed.
-					if s.hasOpenChild(item.Name) || !s.shown(item, inArea) {
+					// An open area at a level shown is listed whatever is
+					// beneath it. It is marked empty when it has no open
+					// items at any level, and can then be closed.
+					if !s.shown(item, inArea) {
 						continue
 					}
 					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-						Open: n, Blocking: b, Bays: bays, Waiting: waiting})
+						Open: n, Blocking: b, Bays: bays, Waiting: waiting, Empty: !s.hasOpenChild(item.Name)})
 					if s.allBays {
 						out = append(out, s.bayRows(item, depth)...)
 					}
@@ -1249,6 +1251,9 @@ func baseSpans(r Row) []Span {
 		fold := "▾"
 		if r.Folded {
 			fold = "▸"
+		}
+		if r.Empty {
+			return append([]Span{{indent + fold + " " + r.Title + " (empty)", "dim"}}, marks...)
 		}
 		return append([]Span{{indent + fold + " " + r.Title, "area"}}, marks...)
 	}
