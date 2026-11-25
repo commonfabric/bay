@@ -41,6 +41,9 @@ const KeysHelp = `In the list:
                   reminder says which
   s               show the item's state, questions and what it waits on;
                   q, Esc or Enter closes it
+  B               show a row for every bay of every item and area,
+                  where x closes the bay; B again shows them only for
+                  items with more than one bay
   b               collapse the list to a narrow strip
   =               give the list its first width again
   click           go to the row; on an area, also fold or unfold it;

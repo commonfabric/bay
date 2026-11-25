@@ -908,6 +908,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `''` goes back to the row the last jump left |
 | `a` | Show more levels: front, then front + back, then front + back + shelved |
 | `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
+| `B` | Show a row for every bay of every item and area, where `x` closes the bay. `B` again lists bays only for items with more than one |
 | `b` | Collapse the list to a narrow strip |
 | `=` | Give the list its first width again |
 | Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on `»` in the same place, or anywhere on the collapsed strip, expand it |

@@ -36,6 +36,7 @@ type Sidebar struct {
 	items    map[string]Item
 	folded   map[string]bool
 	levels   int             // 0 front; 1 front and back; 2 every level
+	allBays  bool            // every item and area with a bay gets a row for each bay
 	saved    map[string]bool // the folds to restore while every area is unfolded; else nil
 	filter   string
 	typing   bool // the filter is being typed
@@ -339,6 +340,9 @@ func (s *Sidebar) rebuild() {
 					}
 					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
 						Open: n, Blocking: b, Bays: bays, Waiting: waiting})
+					if s.allBays {
+						out = append(out, s.bayRows(item, depth)...)
+					}
 					open, blocking = open+n, blocking || b
 					continue
 				}
@@ -354,6 +358,9 @@ func (s *Sidebar) rebuild() {
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
 					Folded: folded, Open: belowOpen + n, Blocking: belowBlocking || b, Bays: bays, Waiting: waiting})
+				if s.allBays {
+					out = append(out, s.bayRows(item, depth)...)
+				}
 				if !folded {
 					out = append(out, below...)
 				}
@@ -370,11 +377,8 @@ func (s *Sidebar) rebuild() {
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
 					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone, Waiting: waiting})
-				if len(bays) > 1 {
-					for _, ref := range bays {
-						out = append(out, Row{Name: item.Name + " " + ref, Title: item.Title,
-							Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref]})
-					}
+				if len(bays) > 1 || s.allBays {
+					out = append(out, s.bayRows(item, depth)...)
 				}
 				open, blocking = open+n, blocking || b
 			}
@@ -541,14 +545,30 @@ func (s *Sidebar) move(delta int) bool {
 	return true
 }
 
+// bayRows returns a row for each of item's bays, one level deeper.
+func (s *Sidebar) bayRows(item Item, depth int) []Row {
+	var rows []Row
+	for _, ref := range item.BayRefs() {
+		rows = append(rows, Row{Name: item.Name + " " + ref, Title: item.Title,
+			Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref]})
+	}
+	return rows
+}
+
+// listsBays reports whether the item row at k is followed by a row for
+// each of its bays.
+func (s *Sidebar) listsBays(k int) bool {
+	r := s.rows[k]
+	return !r.Area && r.Bay == "" && len(r.Bays) > 0 && k+1 < len(s.rows) && s.rows[k+1].Bay != ""
+}
+
 // moveToItem moves the cursor to the next row in the direction of delta
 // that is neither an area nor an item followed by a row for each of its
 // bays, and reports whether there was one. Such an item's row shows the
 // same window as the row of its first bay.
 func (s *Sidebar) moveToItem(delta int) bool {
 	for k := s.cursor + delta; k >= 0 && k < len(s.rows); k += delta {
-		r := s.rows[k]
-		if !r.Area && (r.Bay != "" || len(r.Bays) < 2) {
+		if !s.rows[k].Area && !s.listsBays(k) {
 			s.cursor = k
 			return true
 		}
@@ -662,6 +682,9 @@ func (s *Sidebar) key(key string) Action {
 		s.toggleUnfoldAll()
 	case "s":
 		return State
+	case "B":
+		s.allBays = !s.allBays
+		s.rebuild()
 	case "b":
 		if s.Collapsed() {
 			return Expand
@@ -1047,7 +1070,7 @@ func (s *Sidebar) shownRow() int {
 		if r.Name != name {
 			continue
 		}
-		if r.Bay == "" && len(r.Bays) > 1 && k+1 < len(s.rows) && s.rows[k+1].Bay != "" {
+		if s.listsBays(k) {
 			return k + 1
 		}
 		return k

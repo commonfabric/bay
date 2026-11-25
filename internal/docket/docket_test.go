@@ -1596,3 +1596,42 @@ func TestSetupGivesTheRightPaneItsOwnPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestShiftBShowsARowForEveryBayWhereXClosesIt(t *testing.T) {
+	items := tree()
+	people := items["people"]
+	people.Sites = []Site{{"bay", "loom/b1"}}
+	items["people"] = people
+	s := NewSidebar(items)
+	before := names(s)
+	if strings.Contains(before, "restart loom/b7") || strings.Contains(before, "people loom/b1") {
+		t.Fatalf("bay rows before B: %s", before)
+	}
+	s.Key("B")
+	after := names(s)
+	for _, want := range []string{"people,people loom/b1,", "restart,restart loom/b7,", "sidebar,sidebar bay/b8,sidebar loom/b19"} {
+		if !strings.Contains(after, want) {
+			t.Errorf("after B, no %q in %s", want, after)
+		}
+	}
+
+	// n passes over an item whose bays have rows: it shows the same window
+	// as its first bay's row.
+	for s.Current().Name != "people loom/b1" {
+		s.Key("j")
+	}
+	if s.Key("n"); s.Current().Name != "restart loom/b7" {
+		t.Errorf("n went to %q", s.Current().Name)
+	}
+	if a := s.Key("x"); a != None {
+		t.Fatalf("x: %v", a)
+	}
+	if a := s.Key("y"); a != CloseBay || s.BayCloseRequest() != (BayClose{Item: "restart", Ref: "loom/b7"}) {
+		t.Errorf("x y on a single bay's row: %v %+v", a, s.BayCloseRequest())
+	}
+
+	s.Key("B")
+	if names(s) != before {
+		t.Errorf("B again: %s, want %s", names(s), before)
+	}
+}
