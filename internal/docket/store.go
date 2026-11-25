@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 )
 
@@ -44,6 +45,7 @@ type Question struct {
 	Text      string  `json:"text"`
 	Answered  *string `json:"answered"`
 	BlocksAll bool    `json:"blocks_all"`
+	Bay       string  `json:"bay"` // the bay the question was asked from, as "dock/bay"; "" when unknown
 }
 
 // Site is a place where work on an item happens. A site of kind "bay" has
@@ -56,8 +58,24 @@ type Site struct {
 // OpenQuestions counts the item's unanswered questions and reports whether
 // any of them holds up all work on the item.
 func (i Item) OpenQuestions() (count int, blocking bool) {
+	return i.openQuestionsWhere(func(string) bool { return true })
+}
+
+// OpenQuestionsFrom counts the item's unanswered questions that were asked
+// from the bay ref.
+func (i Item) OpenQuestionsFrom(ref string) (count int, blocking bool) {
+	return i.openQuestionsWhere(func(bay string) bool { return bay == ref })
+}
+
+// OpenQuestionsOutside counts the item's unanswered questions that were
+// not asked from any of the bays in refs.
+func (i Item) OpenQuestionsOutside(refs []string) (count int, blocking bool) {
+	return i.openQuestionsWhere(func(bay string) bool { return !slices.Contains(refs, bay) })
+}
+
+func (i Item) openQuestionsWhere(match func(bay string) bool) (count int, blocking bool) {
 	for _, q := range i.Questions {
-		if q.Answered == nil || *q.Answered == "" {
+		if (q.Answered == nil || *q.Answered == "") && match(q.Bay) {
 			count++
 			blocking = blocking || q.BlocksAll
 		}

@@ -844,7 +844,7 @@ bays where its work happens. `bay docket view` opens a tmux session named
   | dim `·` | The item has no bay |
   | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area's own waits. A dim `▶` there means only a bay beneath the folded area waits. The list checks every two seconds |
   | cyan `↳ dock/bay` | One bay of an item that has several |
-  | yellow `?2` | Two questions wait for your answer; on an area, only the area's own; while the area is folded, a dim `+5` after it counts those beneath it |
+  | yellow `?2` | Two questions wait for your answer; on a bay's row of an item that lists several bays, those that bay asked, and on the item's row the rest; on an area, only the area's own; while the area is folded, a dim `+5` after it counts those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
   | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
@@ -903,7 +903,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | Drag | On the line between the panes, change the list's width. Expanding a collapsed list gives it the width it had. A double click on that line gives the first width again. The width is saved, and the list starts at it the next time the view starts |
 | Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
 | `?` | Show the keys |
-| `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
+| `q` | Show the questions of the item or bay under the cursor on the right side, in place of its window: open ones first, each with its id, the bay that asked it, its age and its full text, then answered ones with their answers. While it is on, the right side follows the cursor and shows each row's questions; `q` again shows the row's window. On a bay's row of an item that lists several bays, it shows the questions asked from that bay; the item's own row shows the rest. `q` no longer leaves the view; use `Option+D` |
 
 Keys from either side of the `docket` session:
 
@@ -917,7 +917,7 @@ Keys from either side of the `docket` session:
 | `Option+'` and a letter | Go to a mark, as `'` does; `Option+'` then `'` returns to the row the last jump left |
 | `Option+M` and a letter | Mark the row the right side shows, as `m` does; the same mark again takes it off |
 | `Option+d` | Move between the list and the right side |
-| `Option+D` | Leave the view, as `q` does |
+| `Option+D` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
 
 The keys that move the cursor, fold, or use marks from either side work
 while the list is collapsed and while a pane of the view is zoomed. When the list cannot be

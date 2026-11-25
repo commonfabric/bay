@@ -359,6 +359,36 @@ func TestARowSaysWhenItsBayIsGone(t *testing.T) {
 	}
 }
 
+func TestAnItemWithSeveralBaysShowsEachBaysQuestionsOnThatBaysRow(t *testing.T) {
+	items := tree()
+	sidebar := items["sidebar"]
+	sidebar.Questions = []Question{{Bay: "bay/b8"}, {Bay: "bay/b8", BlocksAll: true}, {Bay: "loom/b19"},
+		{Bay: ""}, {Bay: "loom/b3"}}
+	items["sidebar"] = sidebar
+	// restart has one bay, so its row keeps all its questions.
+	restart := items["restart"]
+	restart.Questions = []Question{{Bay: "bay/b8"}}
+	items["restart"] = restart
+	s := NewSidebar(items)
+	got := map[string]string{}
+	for _, r := range s.Rows() {
+		got[r.Name] = fmt.Sprintf("%d%v", r.Open, r.Blocking)
+	}
+	want := map[string]string{"sidebar": "2false", "sidebar bay/b8": "2true", "sidebar loom/b19": "1false",
+		"restart": "1false", "tooling": "0false"}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("%s: open and blocking = %s, want %s", name, got[name], w)
+		}
+	}
+	// The area above counts every question of the item once.
+	for _, r := range s.Rows() {
+		if r.Name == "tooling" && r.Beneath != 5 {
+			t.Errorf("tooling beneath = %d, want 5", r.Beneath)
+		}
+	}
+}
+
 func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 	s := NewSidebar(tree())
 	// Lines: the desk, people, restart, tooling, sidebar and its bays.
@@ -389,6 +419,17 @@ func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 		if got := marked(); got != c.want {
 			t.Errorf("after %q on %s: marked lines %q, want %q", c.key, s.Current().Name, got, c.want)
 		}
+	}
+}
+
+func TestQAsksForTheQuestionsToBeShownOrHiddenAndNoLongerLeavesTheView(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("n")
+	if a := s.Key("q"); a != Questions {
+		t.Errorf("q on an item: %v", a)
+	}
+	if !strings.Contains(KeysHelp, "Option-D") || strings.Contains(KeysHelp, "leave the view; it keeps running") {
+		t.Errorf("the key list does not say Option-D leaves the view")
 	}
 }
 
@@ -608,7 +649,13 @@ func newFakeView(f *fakeTmux) *View {
 			return "", false
 		},
 		RecordCommand: func(item string) string { return "docket show " + item },
-		StartDesk:     func() error { f.exists[deskTarget] = true; f.calls = append(f.calls, "start-desk"); return nil },
+		QuestionsCommand: func(item, bay string) string {
+			if bay != "" {
+				return "docket questions " + item + " --bay " + bay
+			}
+			return "docket questions " + item
+		},
+		StartDesk: func() error { f.exists[deskTarget] = true; f.calls = append(f.calls, "start-desk"); return nil },
 	}
 }
 
@@ -778,6 +825,42 @@ func TestShowLinksTheBayWindowIntoTheViewsSessionOrShowsTheRecord(t *testing.T) 
 	}
 	if _, err := v.Show(Row{Name: "people", Area: true}, true); err != nil || strings.Join(f.calls[before:], "|") != "select-pane -t =docket:view.{right}" {
 		t.Errorf("enter on an empty area: %v", f.calls[before:])
+	}
+}
+
+func TestShowWithQuestionsOnShowsTheRowsQuestionsInTheRecordWindow(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, recordTarget: true}, panes: 2, clients: "/dev/ttys1\n/dev/ttys9\n"}
+	v := newFakeView(f)
+	v.Questions = true
+
+	// An item with a bay window, a bay row of an item, and an area each show
+	// their questions in place of the bay window.
+	for _, c := range []struct {
+		row  Row
+		want string
+	}{
+		{Row{Name: "restart", Bays: []string{"loom/b7"}}, "docket questions restart"},
+		{Row{Name: "sidebar bay/b8", Bays: []string{"bay/b8"}, Bay: "bay/b8"}, "docket questions sidebar --bay bay/b8"},
+		{Row{Name: "people", Area: true}, "docket questions people"},
+	} {
+		if _, err := v.Show(c.row, false); err != nil {
+			t.Fatal(err)
+		}
+		if f.ran("respawn-window -k -t =docket-aux:record "+c.want) != 1 {
+			t.Errorf("%s: calls %v", c.row.Name, f.calls)
+		}
+	}
+	if f.ran("link-window") != 0 {
+		t.Errorf("a bay window was linked while questions were shown: %v", f.calls)
+	}
+
+	// With questions off the bay window is shown again.
+	v.Questions = false
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("link-window -d -s @7") != 1 {
+		t.Errorf("the bay window was not shown again: %v", f.calls)
 	}
 }
 

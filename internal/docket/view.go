@@ -56,6 +56,12 @@ type View struct {
 	BayWindow func(ref string) (string, bool)
 	// RecordCommand is the shell command that prints an item's record.
 	RecordCommand func(item string) string
+	// QuestionsCommand is the shell command that prints an item's
+	// questions, or with a bay only those that bay asked.
+	QuestionsCommand func(item, bay string) string
+	// Questions is set while the right side shows the questions of the
+	// row under the cursor in place of its window.
+	Questions bool
 	// StartDesk starts the desk agent's window when it is not running.
 	StartDesk func() error
 	// Width is the width a newly started sidebar is given: the width saved
@@ -343,7 +349,7 @@ func (v *View) viewerClient() (string, error) {
 // focus set it also moves the keyboard to the right pane. The returned
 // note says what was shown when that is not the bay window itself.
 func (v *View) Show(row Row, focus bool) (note string, err error) {
-	if row.Area {
+	if row.Area && !(v.Questions && !row.Desk) {
 		// An area with no item to show leaves the right side as it is.
 		if focus {
 			_, err = v.Tmux("select-pane", "-t", viewerPane)
@@ -359,6 +365,8 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	}
 	window := ""
 	switch {
+	case v.Questions && !row.Desk:
+		// The questions are shown in the record window below.
 	case row.Desk:
 		if !v.has(deskTarget) {
 			if err := v.StartDesk(); err != nil {
@@ -376,7 +384,11 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	record := v.windowID(recordTarget)
 	if window == "" {
 		item := strings.Fields(row.Name)[0]
-		if _, err := v.Tmux("respawn-window", "-k", "-t", recordTarget, v.RecordCommand(item)); err != nil {
+		command := v.RecordCommand(item)
+		if v.Questions {
+			command = v.QuestionsCommand(item, row.Bay)
+		}
+		if _, err := v.Tmux("respawn-window", "-k", "-t", recordTarget, command); err != nil {
 			return "", fmt.Errorf("show the record: %w", err)
 		}
 		window = record

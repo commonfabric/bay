@@ -375,12 +375,20 @@ func (s *Sidebar) rebuild() {
 					gone = gone && s.missing[ref]
 					waiting = waiting || s.waiting[ref]
 				}
+				// An item that lists several bays shows each bay's own
+				// questions on the bay's row, and the others on its own.
+				rowOpen, rowBlocking := n, b
+				if len(bays) > 1 {
+					rowOpen, rowBlocking = item.OpenQuestionsOutside(bays)
+				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
-					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone, Waiting: waiting})
+					Level: item.Level, Open: rowOpen, Blocking: rowBlocking, Bays: bays, Gone: gone, Waiting: waiting})
 				if len(bays) > 1 {
 					for _, ref := range bays {
+						bayOpen, bayBlocking := item.OpenQuestionsFrom(ref)
 						out = append(out, Row{Name: item.Name + " " + ref, Title: item.Title,
-							Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref]})
+							Depth: depth + 1, Open: bayOpen, Blocking: bayBlocking, Bays: []string{ref}, Bay: ref,
+							Gone: s.missing[ref], Waiting: s.waiting[ref]})
 					}
 				}
 				open, blocking = open+n, blocking || b
@@ -503,8 +511,9 @@ const (
 	Show
 	// ShowAndFocus displays it and moves the keyboard focus to it.
 	ShowAndFocus
-	// Quit asks the caller to take the terminal out of the view.
-	Quit
+	// Questions asks the caller to show or hide the current row's questions
+	// on the right side.
+	Questions
 	// Help asks the caller to show KeysHelp.
 	Help
 	// State asks the caller to show the current row's item.
@@ -697,7 +706,7 @@ func (s *Sidebar) key(key string) Action {
 	case "?":
 		return Help
 	case "q":
-		return Quit
+		return Questions
 	}
 	return None
 }
@@ -990,7 +999,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	// have the style "key". The key that changes the levels is named
 	// beside them.
 	info := []Span{{"«", "key"}, {" " + levelNames[s.levels] + " (", ""}, {"a", "key"}, {")", ""}}
-	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state")
+	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state", "q", "questions")
 	switch {
 	case s.pending == "m":
 		info = []Span{{"«", "key"}, {" mark this row: press a letter", ""}}

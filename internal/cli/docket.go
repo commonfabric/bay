@@ -88,6 +88,13 @@ func newDocketView() (*docket.View, error) {
 		RecordCommand: func(item string) string {
 			return "docket show " + shellQuote(item) + " 2>&1 | less -R"
 		},
+		QuestionsCommand: func(item, bay string) string {
+			command := "docket questions " + shellQuote(item)
+			if bay != "" {
+				command += " --bay " + shellQuote(bay)
+			}
+			return command + " 2>&1 | less -R"
+		},
 		StartDesk: func() error {
 			out, err := exec.Command("docket", "desk", "--no-switch").CombinedOutput()
 			if err != nil {
@@ -717,16 +724,16 @@ func runSidebar(view *docket.View, stateDir string) error {
 				action = sidebar.Key(key)
 			}
 			note = sidebar.Notice()
-			if action == docket.Quit {
-				// Leave the view without closing it: return the terminal
-				// to the tmux session it came from, or detach it when it
-				// came from outside tmux. The list keeps running.
-				if _, err := realTmux("switch-client", "-l"); err != nil {
-					if _, err := realTmux("detach-client"); err != nil {
-						note = err.Error()
-					}
+			if action == docket.Questions {
+				// q shows the questions of the row under the cursor on the
+				// right side, and q again shows the row's window again.
+				if sidebar.Current().Desk {
+					note = "the desk has no questions"
+					action = docket.None
+				} else {
+					view.Questions = !view.Questions
+					action = docket.Show
 				}
-				action = docket.None
 			}
 			var err error
 			switch action {

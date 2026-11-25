@@ -42,6 +42,14 @@ const KeysHelp = `In the list:
                   reminder says which
   s               show the item's state, questions and what it waits on;
                   q, Esc or Enter closes it
+  q               show the questions of the item or bay under the cursor
+                  on the right side: open ones first, each with its id,
+                  asking bay, age and full text, then answered ones.
+                  The right side then follows the cursor, showing each
+                  row's questions. q again shows the row's window. A bay
+                  row of an item that lists several bays shows the
+                  questions asked from that bay; the item's own row
+                  shows the rest
   b               collapse the list to a narrow strip
   =               give the list its first width again
   click           go to the row; on an area, also fold or unfold it;
@@ -52,7 +60,6 @@ const KeysHelp = `In the list:
                   The width is kept for the next start of the view
   wheel           scroll the list; the cursor stays on its row
   ?               show this list
-  q               leave the view; it keeps running
 
 From either side:
   Option-j, Option-k   move down or up one row; in the right side they no
@@ -67,7 +74,8 @@ From either side:
   Option-M, a letter   mark the row the right side shows
   Option-h, Option-l   move to the list, or to the right side
   Option-d             move between the list and the right side
-  Option-D             leave the view, as q does
+  Option-D             leave the view: go back to the session the
+                       terminal came from; the view keeps running
 
 Option-j, -k, -J, -K, -N, -P, Option-Space and the mark keys work while
 the list is collapsed or the right side is zoomed, and the row's name is
