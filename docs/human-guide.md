@@ -987,7 +987,9 @@ running `docket set`, `[` and `]` move it among its siblings the same way,
 and `x` closes it by running `docket close`. On a bay's row, `x` and `X`
 close the bay with `bay close`. It keeps the marks in `view-marks.json` and
 the hotlist in `view-hotlist.json` in docket's folder, and the list's width
-in `docket-view-width.json` in bay's data folder. It writes nothing else.
+in `docket-view-width.json` in bay's data folder. The row the right side
+shows is kept in `docket-view-row.json` in bay's data folder, so that a list
+that starts again puts its cursor back on that row. It writes nothing else.
 
 ### Infrastructure
 

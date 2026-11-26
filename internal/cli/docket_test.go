@@ -80,3 +80,16 @@ func TestTmuxTextShowsAHashAsItIs(t *testing.T) {
 		t.Errorf("tmuxText = %q", got)
 	}
 }
+
+func TestTheShownRowIsSavedAndReadBack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bay", "docket-view-row.json")
+	if got := loadShownRow(path); got != "" {
+		t.Errorf("nothing saved: %q", got)
+	}
+	if err := saveShownRow(path, "\x00docket"); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadShownRow(path); got != "\x00docket" {
+		t.Errorf("read back %q", got)
+	}
+}

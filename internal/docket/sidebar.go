@@ -521,6 +521,28 @@ func (s *Sidebar) rowKeyed(key string) int {
 	return -1
 }
 
+// ShownKey names the row the right side was last asked to show, for
+// ReturnTo after the list starts again. It is "" before any row is shown.
+func (s *Sidebar) ShownKey() string {
+	if s.showing == "" {
+		return ""
+	}
+	return rowKey(s.Current())
+}
+
+// ReturnTo puts the cursor on the row with the key ShownKey gave, and
+// records that the right side shows it. It reports whether the row is
+// listed.
+func (s *Sidebar) ReturnTo(key string) bool {
+	k := s.rowKeyed(key)
+	if key == "" || k < 0 {
+		return false
+	}
+	s.cursor = k
+	s.showing, s.moved = s.Shown().Name, false
+	return true
+}
+
 // did records the row the right side is asked to show.
 func (s *Sidebar) did(action Action) Action {
 	if action == Show || action == ShowAndFocus {

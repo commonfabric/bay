@@ -2130,3 +2130,37 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
 	}
 }
+
+func TestAStartedListReturnsToTheRowTheRightSideShows(t *testing.T) {
+	s := NewSidebar(tree())
+	if s.ShownKey() != "" {
+		t.Fatalf("a key before any row is shown: %q", s.ShownKey())
+	}
+	s.SetHotlist([]string{"tooling"})
+	s.Key("n")
+	if a := s.Key("n"); a != Show {
+		t.Fatalf("n: %v", a)
+	}
+	want := s.Current().Name
+	key := s.ShownKey()
+
+	again := NewSidebar(tree())
+	again.SetHotlist([]string{"tooling"})
+	if !again.ReturnTo(key) || again.Current().Name != want || again.Shown().Name != want {
+		t.Errorf("returned to %q, want %q", again.Current().Name, want)
+	}
+
+	// The hotlist's row and the row in its area are told apart.
+	s.Key("1")
+	hot := s.ShownKey()
+	again = NewSidebar(tree())
+	again.SetHotlist([]string{"tooling"})
+	if !again.ReturnTo(hot) || !again.Current().HotRow {
+		t.Errorf("hotlist row: on %+v", again.Current())
+	}
+
+	// A row no longer listed leaves the cursor where it starts.
+	if again := NewSidebar(tree()); again.ReturnTo("gone-item") || again.cursor != 0 {
+		t.Errorf("returned to a row that is not listed")
+	}
+}
