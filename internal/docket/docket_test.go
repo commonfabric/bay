@@ -1802,3 +1802,33 @@ func TestShowStartsTheRecordWindowAgainInARunningSession(t *testing.T) {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
+
+func TestTheTopOfTheTreeFollowsTheRootOrder(t *testing.T) {
+	items := map[string]Item{
+		"first":  {Name: "first", Title: "First", Kind: "goal", Status: "open", Level: "front", Created: "2026-01-01"},
+		"second": {Name: "second", Title: "Second", Kind: "goal", Status: "open", Level: "front", Created: "2026-01-02"},
+		"third":  {Name: "third", Title: "Third", Kind: "goal", Status: "open", Level: "front", Created: "2026-01-03"},
+	}
+	s := NewSidebar(items)
+	if got := names(s); strings.Index(got, "first") > strings.Index(got, "third") {
+		t.Fatalf("without a root order the rows follow creation: %s", got)
+	}
+	s.SetRootOrder([]string{"third", "first"})
+	got := names(s)
+	if !(strings.Index(got, "third") < strings.Index(got, "first") && strings.Index(got, "first") < strings.Index(got, "second")) {
+		t.Errorf("rows = %s, want third, first, then second", got)
+	}
+}
+
+func TestLoadRootOrderReadsRootJSON(t *testing.T) {
+	dir := t.TempDir()
+	if order, err := LoadRootOrder(dir); err != nil || order != nil {
+		t.Fatalf("missing file: %v %v", order, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "root.json"), []byte(`{"order": ["b", "a"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if order, err := LoadRootOrder(dir); err != nil || strings.Join(order, ",") != "b,a" {
+		t.Errorf("order = %v %v", order, err)
+	}
+}

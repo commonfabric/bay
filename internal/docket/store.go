@@ -122,18 +122,42 @@ func LoadItems(stateDir string) (map[string]Item, error) {
 	return items, nil
 }
 
+// LoadRootOrder reads the order of the items at the top of the tree, which
+// docket keeps in root.json because they have no parent record. A missing
+// file gives no order.
+func LoadRootOrder(stateDir string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(stateDir, "root.json"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var root struct {
+		Order []string `json:"order"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, fmt.Errorf("root.json: %w", err)
+	}
+	return root.Order, nil
+}
+
 // Children returns the items directly under parent in docket's order: the
 // parent's own order list first, then by creation time and name. An empty
-// parent names the top of the tree.
-func Children(items map[string]Item, parent string) []Item {
+// parent names the top of the tree, whose order is rootOrder.
+func Children(items map[string]Item, rootOrder []string, parent string) []Item {
 	var kids []Item
 	for _, item := range items {
 		if (item.Parent == nil && parent == "") || (item.Parent != nil && *item.Parent == parent) {
 			kids = append(kids, item)
 		}
 	}
+	order := items[parent].Order
+	if parent == "" {
+		order = rootOrder
+	}
 	rank := map[string]int{}
-	for k, name := range items[parent].Order {
+	for k, name := range order {
 		rank[name] = k
 	}
 	pos := func(i Item) int {
