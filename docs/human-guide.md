@@ -980,11 +980,12 @@ The keys that move the cursor, fold, or use marks from either side work
 while the list is collapsed and while a pane of the view is zoomed. When the list cannot be
 seen, the row's name is shown for a moment at the bottom of the terminal.
 
-Bay's other `Option` keys, such as `Option+s`, `Option+a`, `Option+p` and
-the `Option+o` menus, act on the bay shown on the right: the view binds
+Bay's other `Option` keys, such as `Option+s`, `Option+a` and the
+`Option+o` menus, act on the bay shown on the right: the view binds
 them again to run from that bay's folder. With no bay shown they do
-nothing. Every other key goes to the window on the right, including the
-tmux prefix. The `_docket` session has its own key table and no prefix; no other
+nothing. `Option+p`, bay's command palette, is not offered in the view;
+it shows the notice "not in the docket view". Every other key goes to the
+window on the right, including the tmux prefix. The `_docket` session has its own key table and no prefix; no other
 session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default

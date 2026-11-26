@@ -233,6 +233,8 @@ func (v *View) Setup() error {
 		// moves to the list and starts a search.
 		{"M-r", "send-keys", "-t", pane, "F12", "r"},
 		{"M-g", "select-pane", "-t", pane, "\\;", "send-keys", "-t", pane, "F12", "/"},
+		// Bay's command palette is not offered in the view.
+		{"M-p", "display-message", "not in the docket view"},
 		append([]string{"M-N"}, list("F9")...),
 		append([]string{"M-P"}, list("F10")...),
 		append([]string{"M-Space"}, list("F7")...),
@@ -389,7 +391,7 @@ const (
 // ownKeys are the keys of bay's root table that the view binds itself.
 var ownKeys = map[string]bool{
 	"M-j": true, "M-k": true, "M-J": true, "M-K": true,
-	"M-h": true, "M-l": true, "M-r": true, "M-g": true, "M-?": true,
+	"M-h": true, "M-l": true, "M-r": true, "M-g": true, "M-?": true, "M-p": true,
 }
 
 // chordTable names the view's copy of one of bay's chord key tables.

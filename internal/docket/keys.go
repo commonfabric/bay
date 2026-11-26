@@ -85,7 +85,8 @@ From either side:
   Option-r             move to the next row with the waiting mark
   Option-g             move to the list and start a search, as / does
   Bay's other Option keys (Option-s, -a, -o and so on) act on the bay
-  shown on the right.
+  shown on the right. Option-p, bay's command palette, is not in the
+  view: it shows a notice.
   Option-N, Option-P   move to the next or previous item or bay, as n
                        and p do
   Option-Space         fold or unfold the area under the cursor

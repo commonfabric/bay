@@ -785,6 +785,7 @@ func TestSetupBindsBaysKeysToRunFromTheShownBaysFolder(t *testing.T) {
 	v := newFakeView(f)
 	v.BayKeys = []BayKey{
 		{Key: "M-s", Command: "bay shell --pane", Verb: "run-shell"},
+		{Key: "M-x", Command: "bay palette --split pane", Verb: "display-popup -w 80% -h 80% -E"},
 		{Key: "M-p", Command: "bay palette --split pane", Verb: "display-popup -w 80% -h 80% -E"},
 		{Key: "M-g", Command: "bay go --pick", Verb: "run-shell"},
 		{Key: "M-o", Command: `display-message -d 2000 "agent" \; switch-client -T bay-agent`, Tmux: true},
@@ -796,7 +797,8 @@ func TestSetupBindsBaysKeysToRunFromTheShownBaysFolder(t *testing.T) {
 	}
 	for _, want := range []string{
 		`bind-key -T docket M-s run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay shell --pane || true"`,
-		`bind-key -T docket M-p if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: -d '#{@docket-bay-dir}' 'bay palette --split pane || true'"`,
+		"bind-key -T docket M-p display-message not in the docket view",
+		`bind-key -T docket M-x if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: -d '#{@docket-bay-dir}' 'bay palette --split pane || true'"`,
 		`bind-key -T docket M-o display-message -d 2000 "agent" ; switch-client -T docket-bay-agent`,
 		`bind-key -T docket-bay-agent c run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay agent claude --pane || true"`,
 		`bind-key -T docket-bay-agent b switch-client -T docket-bay-agent-bay`,
