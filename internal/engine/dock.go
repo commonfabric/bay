@@ -36,6 +36,8 @@ type BayInfo struct {
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Description  string        `json:"description,omitempty"`
+	Item         string        `json:"item,omitempty"`
+	Role         string        `json:"role,omitempty"`
 	Type         string        `json:"type"`
 	Path         string        `json:"path,omitempty"`
 	Branch       string        `json:"branch,omitempty"`
@@ -417,6 +419,8 @@ func (e *Engine) buildBayInfo(bay *manifest.Bay, agent string, waitingWindows ma
 		ID:           bay.ID,
 		Name:         bay.Name,
 		Description:  bay.Description,
+		Item:         bay.Item,
+		Role:         bay.Role,
 		Type:         string(bay.Type),
 		Path:         bay.Path,
 		Branch:       branch,

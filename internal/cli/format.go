@@ -71,6 +71,8 @@ func (v *ListView) SetCurrentContext(eng *engine.Engine) {
 type ListRow struct {
 	Dock           string `json:"dock,omitempty"`
 	BayName        string `json:"bay_name,omitempty"`
+	BayItem        string `json:"bay_item,omitempty"`
+	BayRole        string `json:"bay_role,omitempty"`
 	BayBranch      string `json:"bay_branch,omitempty"`
 	BayDirty       bool   `json:"bay_dirty,omitempty"`
 	BayPending     bool   `json:"bay_pending,omitempty"`
@@ -157,6 +159,8 @@ func ListRows(view ListView) []ListRow {
 				rows = append(rows, ListRow{
 					Dock:          dock.Name,
 					BayName:       bay.Name,
+					BayItem:       bay.Item,
+					BayRole:       bay.Role,
 					BayBranch:     bay.Branch,
 					BayDirty:      bay.Dirty,
 					BayPending:    bay.Pending,
@@ -170,6 +174,8 @@ func ListRows(view ListView) []ListRow {
 				rows = append(rows, ListRow{
 					Dock:           dock.Name,
 					BayName:        bay.Name,
+					BayItem:        bay.Item,
+					BayRole:        bay.Role,
 					BayBranch:      bay.Branch,
 					BayDirty:       bay.Dirty,
 					BayPending:     bay.Pending,
@@ -727,6 +733,13 @@ func FormatBayShow(dockName string, bay *engine.BayInfo, long bool) string {
 		}
 	}
 	rows = append(rows, showRow{"dock", dockName})
+	if bay.Item != "" {
+		item := bay.Item
+		if bay.Role != "" {
+			item += " (" + bay.Role + ")"
+		}
+		rows = append(rows, showRow{"item", item})
+	}
 	if bay.Type != "" && bay.Type != "worktree" {
 		rows = append(rows, showRow{"type", bay.Type})
 	}

@@ -149,6 +149,10 @@ func NewRootCmd(version string) *cobra.Command {
 	bayRenameCmd.GroupID = "bay"
 	bayDescribeCmd := newTopDescribeCmd()
 	bayDescribeCmd.GroupID = "bay"
+	bayItemCmd := newBayItemCmd()
+	bayItemCmd.GroupID = "bay"
+	bayRoleCmd := newBayRoleCmd()
+	bayRoleCmd.GroupID = "bay"
 	homeCmd := newHomeCmd()
 	homeCmd.GroupID = "bay"
 	bayLsCmd := newBayLsCmd()
@@ -218,6 +222,8 @@ func NewRootCmd(version string) *cobra.Command {
 		bayShowCmd,
 		bayRenameCmd,
 		bayDescribeCmd,
+		bayItemCmd,
+		bayRoleCmd,
 		homeCmd,
 		bayLsCmd,
 		prepareCmd,
