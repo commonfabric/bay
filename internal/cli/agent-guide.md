@@ -650,6 +650,17 @@ bay item b3 docket --role review          # set by ID, with a role
 bay item b3 other --replace               # change item
 bay role helper                           # set current bay's role
 bay new --item docket --role helper       # create a bay with item and role
+bay item --all --json                     # every bay that names an item
+```
+
+`bay item --all --json` reads bay's state only (no git or tmux checks), so
+it is fast enough to run on every docket command:
+
+```json
+[
+  { "dock": "bay", "bay": "b20", "item": "bay-item-link" },
+  { "dock": "loom", "bay": "b42", "item": "people-restart", "role": "helper" }
+]
 ```
 
 ### Navigation

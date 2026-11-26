@@ -1228,7 +1228,7 @@ func TestSummaryGivesTheStateQuestionsAndHolds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := Summary(dir, "restart")
+	got, err := Summary(dir, filepath.Join(dir, "no-manifest.json"), "restart")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1243,7 +1243,7 @@ func TestSummaryGivesTheStateQuestionsAndHolds(t *testing.T) {
 			t.Errorf("summary includes %q:\n%s", not, got)
 		}
 	}
-	if _, err := Summary(dir, "nothing"); err == nil {
+	if _, err := Summary(dir, filepath.Join(dir, "no-manifest.json"), "nothing"); err == nil {
 		t.Error("an unknown item gave no error")
 	}
 }
