@@ -127,6 +127,28 @@ func (s *Sidebar) removeHot(name string) Action {
 	return HotlistChanged
 }
 
+// otherPlace moves the cursor between a row of the hotlist and the same
+// row in its area. From the hotlist it brings the row into the list as a
+// jump to a mark does, and unfolds the row itself when it is an area, so
+// that what is under it is listed below the cursor. Either way it is a
+// jump, so typing the quote key twice goes back.
+func (s *Sidebar) otherPlace() Action {
+	row := s.Current()
+	if row.HotRow {
+		itemName, _, _ := strings.Cut(row.Name, " ")
+		delete(s.folded, itemName)
+		return s.jump("o", row.Name)
+	}
+	for k, r := range s.rows {
+		if r.HotRow && r.Name == row.Name {
+			s.cursor, s.back = k, rowKey(row)
+			return Show
+		}
+	}
+	s.notice = "this row is not in the hotlist; * adds it"
+	return None
+}
+
 // jumpHot moves the cursor to row n of the hotlist.
 func (s *Sidebar) jumpHot(n int) Action {
 	if n > s.hotCount() {

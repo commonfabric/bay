@@ -54,7 +54,7 @@ type Sidebar struct {
 	reason    string            // the reason typed so far
 	outcome   string            // "finished" or "dropped", once chosen
 	command   bool              // F12 came last: the next key is a command even while a filter is typed
-	back      string            // the row the cursor left on the last jump to a mark
+	back      string            // the key (rowKey) of the row the cursor left on the last jump
 	notice    string            // what the last key has to tell the user
 	missing   map[string]bool   // the bays, as dock/bay, that do not exist
 	waiting   map[string]bool   // the bays, as dock/bay, whose agent waits for the person
@@ -173,12 +173,16 @@ func (s *Sidebar) mark(pending, key string) Action {
 			s.notice = "no earlier row to return to"
 			return None
 		}
-		return s.jump("''", s.back)
+		if k := s.rowKeyed(s.back); k >= 0 && s.rows[k].HotRow {
+			s.cursor, s.back = k, rowKey(s.Current())
+			return Show
+		}
+		return s.jump("''", strings.TrimPrefix(s.back, hotPrefix))
 	case (pending == "m" || pending == "M") && (digitKey(key) > 0 || key == "0"):
 		s.notice = "a digit is a place in the hotlist, not a mark; * adds or removes this row"
 		return None
 	case pending == "'" && digitKey(key) > 0:
-		from := s.Current().Name
+		from := rowKey(s.Current())
 		action := s.jumpHot(digitKey(key))
 		if action == Show {
 			s.back = from
@@ -215,7 +219,7 @@ func (s *Sidebar) mark(pending, key string) Action {
 // filter, then shows every level. A bay's row that no longer exists
 // stands for its item.
 func (s *Sidebar) jump(label, name string) Action {
-	from := s.Current().Name
+	from := rowKey(s.Current())
 	if name == DeskRow {
 		s.cursor, s.back = 0, from
 		return Show
@@ -495,11 +499,14 @@ func (s *Sidebar) rowNamed(name string) int {
 	return -1
 }
 
+// hotPrefix starts the key of a row in the hotlist.
+const hotPrefix = "\x00"
+
 // rowKey names a row so that the row in the hotlist and the one in its
 // area differ.
 func rowKey(r Row) string {
 	if r.HotRow {
-		return "\x00" + r.Name
+		return hotPrefix + r.Name
 	}
 	return r.Name
 }
@@ -773,6 +780,8 @@ func (s *Sidebar) key(key string) Action {
 		s.pending = key
 	case "*":
 		return s.toggleHot()
+	case "o":
+		return s.otherPlace()
 	case "[", "]":
 		return s.reorder(key == "]")
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":

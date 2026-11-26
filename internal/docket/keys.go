@@ -25,6 +25,11 @@ const KeysHelp = `In the list:
                   goes to the row that takes its place, or the one above
                   when it was the last, or to the desk
   1 to 9          go to that row of the hotlist
+  o               on a row of the hotlist, go to the same row in its
+                  area, brought into the list as ' does, with the area
+                  itself unfolded so that its items are listed below.
+                  On a row in an area that is in the hotlist, go to its
+                  row in the hotlist. '' goes back
   [, ]            in the hotlist, move the row up or down. Elsewhere,
                   move the item up or down among the shown items under
                   the same parent, with docket set --before or --after

@@ -2095,3 +2095,38 @@ func TestTheHotlistHoldsNineRows(t *testing.T) {
 		t.Errorf("hotlist has %d rows, notice %q", got, s.Notice())
 	}
 }
+
+func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"images", "people"})
+	// images is at the back level, which is not shown; people is folded.
+	s.Key("j") // people, in its area
+	s.Key(" ")
+	if a := s.Key("1"); a != Show || s.Current().Name != "images" {
+		t.Fatalf("1: %v on %+v", a, s.Current())
+	}
+	if a := s.Key("o"); a != Show || s.Current().Name != "images" || s.Current().HotRow {
+		t.Fatalf("o on hotlist row 1: %v on %+v", a, s.Current())
+	}
+	s.Key("'")
+	if a := s.Key("'"); a != Show || s.Current().Name != "images" || !s.Current().HotRow {
+		t.Errorf("'' after o: %v on %+v", a, s.Current())
+	}
+	// o on an area in the hotlist unfolds the area.
+	s.Key("2")
+	s.Key("o")
+	if cur := s.Current(); cur.Name != "people" || cur.HotRow || cur.Folded {
+		t.Fatalf("o on hotlist row 2: on %+v", cur)
+	}
+	if next := s.Rows()[s.cursor+1]; next.Name != "restart" {
+		t.Errorf("below the area: %s", next.Name)
+	}
+	// From the area's row, o goes to the hotlist row.
+	if a := s.Key("o"); a != Show || s.Current().Name != "people" || !s.Current().HotRow {
+		t.Errorf("o on people in its area: %v on %+v", a, s.Current())
+	}
+	s.Key("G")
+	if a := s.Key("o"); a != None || s.Notice() == "" {
+		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
+	}
+}
