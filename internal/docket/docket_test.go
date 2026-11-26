@@ -672,13 +672,25 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =_docket: prefix None") != 1 || f.ran("set-option -t =_docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
+	for _, key := range []string{"M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
 		want := "bind-key -T docket " + k + " send-keys -t %1 " + sent
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
+		}
+	}
+	// Option-j steps the list while the list has the keyboard and goes on
+	// to the second client otherwise.
+	for _, want := range []string{
+		"bind-key -T docket M-j if-shell -F #{pane_at_left} send-keys -t %1 F5 send-keys -t =_docket:view.{right} M-j",
+		"bind-key -T docket M-K if-shell -F #{pane_at_left} send-keys -t %1 F6 send-keys -t =_docket:view.{right} M-K",
+		"bind-key -T docket M-r send-keys -t %1 F12 r",
+		`bind-key -T docket M-g select-pane -t %1 \; send-keys -t %1 F12 /`,
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not bound as %q: %v", want, f.calls)
 		}
 	}
 	if f.ran("bind-key -T docket M-h select-pane -t %1") != 1 ||
@@ -765,6 +777,61 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}
 	if f.ran("new-session") != 2 || f.ran("split-window") != 1 {
 		t.Errorf("second setup created more: %v", f.calls)
+	}
+}
+
+func TestSetupBindsBaysKeysToRunFromTheShownBaysFolder(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}}
+	v := newFakeView(f)
+	v.BayKeys = []BayKey{
+		{Key: "M-s", Command: "bay shell --pane", Verb: "run-shell"},
+		{Key: "M-p", Command: "bay palette --split pane", Verb: "display-popup -w 80% -h 80% -E"},
+		{Key: "M-g", Command: "bay go --pick", Verb: "run-shell"},
+		{Key: "M-o", Command: `display-message -d 2000 "agent" \; switch-client -T bay-agent`, Tmux: true},
+		{Table: "bay-agent", Key: "c", Command: "bay agent claude --pane", Verb: "run-shell"},
+		{Table: "bay-agent", Key: "b", Command: `switch-client -T bay-agent-bay`, Tmux: true},
+	}
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`bind-key -T docket M-s run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay shell --pane || true"`,
+		`bind-key -T docket M-p if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: 'cd \"#{@docket-bay-dir}\" && bay palette --split pane || true'"`,
+		`bind-key -T docket M-o display-message -d 2000 "agent" ; switch-client -T docket-bay-agent`,
+		`bind-key -T docket-bay-agent c run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay agent claude --pane || true"`,
+		`bind-key -T docket-bay-agent b switch-client -T docket-bay-agent-bay`,
+		"unbind-key -q -a -T docket-bay-agent",
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not bound as %q: %v", want, f.calls)
+		}
+	}
+	// Bay's keys that move between panes go to the right side's table.
+	v.BayKeys = append(v.BayKeys, BayKey{Key: "M-H", Command: "select-pane -L", Tmux: true, Global: true})
+	if got := v.auxBayKeys(); got != "bind-key -T docket-aux M-H select-pane -L\n" {
+		t.Errorf("the right side's bay keys = %q", got)
+	}
+	// A key the view gives its own meaning is not bound to bay's command.
+	if f.ran("bind-key -T docket M-g run-shell") != 0 {
+		t.Errorf("Option-g runs bay's command: %v", f.calls)
+	}
+}
+
+func TestShowRecordsTheFolderOfTheBayShown(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	v.BayDir = func(ref string) (string, bool) { return "/work/" + ref, ref == "loom/b7" }
+	if _, err := v.Show(Row{Name: "x", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("set-option -g @docket-bay-dir /work/loom/b7") != 1 {
+		t.Errorf("the shown bay's folder is not recorded: %v", f.calls)
+	}
+	if _, err := v.Show(Row{Name: "x"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("set-option -gu @docket-bay-dir") != 1 {
+		t.Errorf("the folder stays after a row with no bay is shown: %v", f.calls)
 	}
 }
 
@@ -916,7 +983,8 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 		t.Errorf("calls: %v", f.calls)
 	}
 	// The keys name the new pane.
-	if f.ran("bind-key -T docket M-J send-keys -t %3 F5") != 1 {
+	if f.ran("bind-key -T docket M-N send-keys -t %3 F9") != 1 ||
+		f.ran("bind-key -T docket M-J if-shell -F #{pane_at_left} send-keys -t %3 F5") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
@@ -2128,5 +2196,21 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 	s.Key("G")
 	if a := s.Key("o"); a != None || s.Notice() == "" {
 		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
+	}
+}
+
+func TestRMovesToTheNextWaitingRowAndWrapsPastTheEnd(t *testing.T) {
+	s := NewSidebar(tree())
+	if a := s.Key("r"); a != None || s.Notice() == "" {
+		t.Errorf("r with nothing waiting: %v %q", a, s.Notice())
+	}
+	s.SetWaiting(map[string]bool{"loom/b19": true})
+	if a := s.Key("r"); a != Show || !strings.HasPrefix(s.Current().Name, "sidebar") || s.Current().Area {
+		t.Errorf("r: %v on %q", a, s.Current().Name)
+	}
+	at := s.Current().Name
+	s.Key("G")
+	if a := s.Key("r"); a != Show || s.Current().Name != at {
+		t.Errorf("r from the last row: %v on %q, want %q", a, s.Current().Name, at)
 	}
 }

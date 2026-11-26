@@ -8,6 +8,8 @@ const KeysHelp = `In the list:
   n, p            move to the next or previous item or bay, passing over
                   areas and the row of an item that lists its bays
   J, K            move down or up ten rows
+  r               move to the next row with the waiting mark, from the
+                  last row to the first
   g, G            go to the first or last row
   Enter           move to the right side, also from an area
   Space           fold or unfold the area under the cursor
@@ -76,9 +78,13 @@ const KeysHelp = `In the list:
   q               leave the view; it keeps running
 
 From either side:
-  Option-j, Option-k   move down or up one row; in the right side they no
-                       longer move between the panes of a bay's window
+  Option-j, Option-k   in the list, move down or up one row; in the right
+                       side, move between the panes of a bay's window
   Option-J, Option-K   the same as Option-j and Option-k
+  Option-r             move to the next row with the waiting mark
+  Option-g             move to the list and start a search, as / does
+  Bay's other Option keys (Option-s, -a, -o and so on) act on the bay
+  shown on the right.
   Option-N, Option-P   move to the next or previous item or bay, as n
                        and p do
   Option-Space         fold or unfold the area under the cursor
@@ -92,7 +98,7 @@ From either side:
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-j, -k, -J, -K, -N, -P, Option-Space and the mark keys work while
+Option-r, -N, -P, Option-Space and the mark keys work while
 the list is collapsed or the right side is zoomed, and the row's name is
 then shown for a moment.
 Every other key, including the tmux prefix, goes to the window on the

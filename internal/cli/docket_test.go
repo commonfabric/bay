@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -78,5 +79,13 @@ func TestTheListKeepsItsWidthWhenTheTerminalChangesSize(t *testing.T) {
 func TestTmuxTextShowsAHashAsItIs(t *testing.T) {
 	if got := tmuxText("bay#355 #{session_name}"); got != "bay##355 ##{session_name}" {
 		t.Errorf("tmuxText = %q", got)
+	}
+}
+
+func TestViewBayKeysAreAllOnesTheViewKnowsHowToBind(t *testing.T) {
+	for _, k := range viewBayKeys() {
+		if !k.Tmux && k.Verb != "run-shell" && !strings.HasPrefix(k.Verb, "display-popup") {
+			t.Errorf("key %s %s runs %q through %q, which the view does not bind", k.Table, k.Key, k.Command, k.Verb)
+		}
 	}
 }

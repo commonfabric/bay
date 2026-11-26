@@ -660,6 +660,21 @@ func (s *Sidebar) moveToItem(delta int) bool {
 	return false
 }
 
+// moveToWaiting moves the cursor to the next row, after the cursor's and
+// wrapping to the first, that has the waiting mark and that n would stop
+// on. It reports whether there is one.
+func (s *Sidebar) moveToWaiting() bool {
+	for i := 1; i <= len(s.rows); i++ {
+		k := (s.cursor + i) % len(s.rows)
+		r := s.rows[k]
+		if r.Waiting && !r.Area && (r.Bay != "" || len(r.Bays) < 2) {
+			s.cursor = k
+			return true
+		}
+	}
+	return false
+}
+
 // JumpRows is how many rows J and K move the cursor.
 const JumpRows = 10
 
@@ -736,6 +751,11 @@ func (s *Sidebar) key(key string) Action {
 		if s.moveToItem(map[string]int{"n": 1, "p": -1}[key]) {
 			return Show
 		}
+	case "r":
+		if s.moveToWaiting() {
+			return Show
+		}
+		s.notice = "no row is waiting"
 	case "J", "K":
 		was := s.cursor
 		if key == "J" {
