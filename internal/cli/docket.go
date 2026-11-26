@@ -100,19 +100,8 @@ func newDocketView() (*docket.View, error) {
 		SidebarCommand: shellQuote(self) + " docket sidebar",
 		TmuxCommand:    "tmux",
 		BayWindow: func(ref string) (string, bool) {
-			dockName, bayID, ok := strings.Cut(ref, "/")
-			if !ok {
-				return "", false
-			}
-			m, err := manifest.Load(manifestFile)
-			if err != nil {
-				return "", false
-			}
-			dock := m.FindDock(dockName)
-			if dock == nil {
-				return "", false
-			}
-			bay := dock.FindBayByID(bayID)
+			dockName, _, _ := strings.Cut(ref, "/")
+			bay := lookupBay(manifestFile, ref)
 			if bay == nil {
 				return "", false
 			}
@@ -135,6 +124,13 @@ func newDocketView() (*docket.View, error) {
 			}
 			return windows[0], true
 		},
+		BayDir: func(ref string) (string, bool) {
+			if bay := lookupBay(manifestFile, ref); bay != nil && bay.Path != "" {
+				return bay.Path, true
+			}
+			return "", false
+		},
+		BayKeys: viewBayKeys(),
 		RecordCommand: func(item string) string {
 			return "docket show " + shellQuote(item) + " 2>&1 | less -R"
 		},
@@ -967,4 +963,33 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 		draw()
 	}
+}
+
+// lookupBay returns the bay named "dock/bay" in the manifest, or nil.
+func lookupBay(manifestFile, ref string) *manifest.Bay {
+	dockName, bayID, ok := strings.Cut(ref, "/")
+	if !ok {
+		return nil
+	}
+	m, err := manifest.Load(manifestFile)
+	if err != nil {
+		return nil
+	}
+	dock := m.FindDock(dockName)
+	if dock == nil {
+		return nil
+	}
+	return dock.FindBayByID(bayID)
+}
+
+// viewBayKeys lists bay's own keys for the docket view to bind again.
+func viewBayKeys() []docket.BayKey {
+	var keys []docket.BayKey
+	for _, kb := range bayKeybindings {
+		keys = append(keys, docket.BayKey{
+			Table: kb.table, Key: kb.key, Command: kb.cmd,
+			Tmux: kb.isTmuxCommand, Verb: kb.tmuxVerb, Global: kb.global,
+		})
+	}
+	return keys
 }
