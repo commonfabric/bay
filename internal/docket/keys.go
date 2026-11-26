@@ -80,7 +80,8 @@ const KeysHelp = `In the list:
 From either side:
   Option-j, Option-k   in the list, move down or up one row; in the right
                        side, move between the panes of a bay's window
-  Option-J, Option-K   the same as Option-j and Option-k
+  Option-J, Option-K   move down or up one row, from either side; the
+                       keyboard stays where it is
   Option-r             move to the next row with the waiting mark
   Option-g             move to the list and start a search, as / does
   Bay's other Option keys (Option-s, -a, -o and so on) act on the bay
@@ -98,7 +99,7 @@ From either side:
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-r, -N, -P, Option-Space and the mark keys work while
+Option-J, -K, -r, -N, -P, Option-Space and the mark keys work while
 the list is collapsed or the right side is zoomed, and the row's name is
 then shown for a moment.
 Every other key, including the tmux prefix, goes to the window on the

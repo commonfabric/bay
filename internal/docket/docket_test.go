@@ -672,7 +672,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =_docket: prefix None") != 1 || f.ran("set-option -t =_docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
+	for _, key := range []string{"M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
@@ -685,7 +685,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	// to the second client otherwise.
 	for _, want := range []string{
 		"bind-key -T docket M-j if-shell -F #{pane_at_left} send-keys -t %1 F5 send-keys -t '=_docket:view.{right}' M-j",
-		"bind-key -T docket M-K if-shell -F #{pane_at_left} send-keys -t %1 F6 send-keys -t '=_docket:view.{right}' M-K",
+		"bind-key -T docket M-K send-keys -t %1 F6",
 		"bind-key -T docket M-r send-keys -t %1 F12 r",
 		`bind-key -T docket M-g select-pane -t %1 \; send-keys -t %1 F12 /`,
 	} {
@@ -796,7 +796,7 @@ func TestSetupBindsBaysKeysToRunFromTheShownBaysFolder(t *testing.T) {
 	}
 	for _, want := range []string{
 		`bind-key -T docket M-s run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay shell --pane || true"`,
-		`bind-key -T docket M-p if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: 'cd \"#{@docket-bay-dir}\" && bay palette --split pane || true'"`,
+		`bind-key -T docket M-p if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: -d '#{@docket-bay-dir}' 'bay palette --split pane || true'"`,
 		`bind-key -T docket M-o display-message -d 2000 "agent" ; switch-client -T docket-bay-agent`,
 		`bind-key -T docket-bay-agent c run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay agent claude --pane || true"`,
 		`bind-key -T docket-bay-agent b switch-client -T docket-bay-agent-bay`,
@@ -984,7 +984,7 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 	}
 	// The keys name the new pane.
 	if f.ran("bind-key -T docket M-N send-keys -t %3 F9") != 1 ||
-		f.ran("bind-key -T docket M-J if-shell -F #{pane_at_left} send-keys -t %3 F5") != 1 {
+		f.ran("bind-key -T docket M-J send-keys -t %3 F5") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
