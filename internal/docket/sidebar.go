@@ -28,6 +28,8 @@ type Row struct {
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
 	Waiting  bool   // a bay of the row waits for the person; on an area, also a bay beneath it
+	Hot      int    // the row's place in the hotlist, counted from 1; 0 when it is not in it
+	HotRow   bool   // the row is the one in the hotlist, not the one in its area
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
@@ -35,6 +37,8 @@ type Row struct {
 type Sidebar struct {
 	items     map[string]Item
 	rootOrder []string // the order of the items at the top of the tree
+	hotlist   []string // the names of the rows in the hotlist, in order
+	sibling   SiblingMove
 	folded    map[string]bool
 	levels    int             // 0 front; 1 front and back; 2 every level
 	allBays   bool            // every item and area with a bay gets a row for each bay
@@ -50,7 +54,7 @@ type Sidebar struct {
 	reason    string            // the reason typed so far
 	outcome   string            // "finished" or "dropped", once chosen
 	command   bool              // F12 came last: the next key is a command even while a filter is typed
-	back      string            // the row the cursor left on the last jump to a mark
+	back      string            // the key (rowKey) of the row the cursor left on the last jump
 	notice    string            // what the last key has to tell the user
 	missing   map[string]bool   // the bays, as dock/bay, that do not exist
 	waiting   map[string]bool   // the bays, as dock/bay, whose agent waits for the person
@@ -146,10 +150,19 @@ func MarkLines(marks map[string]string, items map[string]Item) []Line {
 // Notice returns what the last key has to tell the user, or "".
 func (s *Sidebar) Notice() string { return s.notice }
 
-// markKey reports whether a key can name a mark: one letter or digit.
+// markKey reports whether a key can name a mark: one letter.
 func markKey(key string) bool {
 	r := []rune(key)
-	return len(r) == 1 && (unicode.IsLetter(r[0]) || unicode.IsDigit(r[0]))
+	return len(r) == 1 && unicode.IsLetter(r[0])
+}
+
+// digitKey returns the number a key of one digit from 1 to 9 stands for,
+// and 0 for any other key.
+func digitKey(key string) int {
+	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+		return int(key[0] - '0')
+	}
+	return 0
 }
 
 // mark applies the key that follows m or '.
@@ -160,7 +173,21 @@ func (s *Sidebar) mark(pending, key string) Action {
 			s.notice = "no earlier row to return to"
 			return None
 		}
-		return s.jump("''", s.back)
+		if k := s.rowKeyed(s.back); k >= 0 && s.rows[k].HotRow {
+			s.cursor, s.back = k, rowKey(s.Current())
+			return Show
+		}
+		return s.jump("''", strings.TrimPrefix(s.back, hotPrefix))
+	case (pending == "m" || pending == "M") && (digitKey(key) > 0 || key == "0"):
+		s.notice = "a digit is a place in the hotlist, not a mark; * adds or removes this row"
+		return None
+	case pending == "'" && digitKey(key) > 0:
+		from := rowKey(s.Current())
+		action := s.jumpHot(digitKey(key))
+		if action == Show {
+			s.back = from
+		}
+		return action
 	case !markKey(key):
 		return None
 	case pending == "m" || pending == "M":
@@ -192,7 +219,7 @@ func (s *Sidebar) mark(pending, key string) Action {
 // filter, then shows every level. A bay's row that no longer exists
 // stands for its item.
 func (s *Sidebar) jump(label, name string) Action {
-	from := s.Current().Name
+	from := rowKey(s.Current())
 	if name == DeskRow {
 		s.cursor, s.back = 0, from
 		return Show
@@ -321,10 +348,48 @@ const (
 func (s *Sidebar) rebuild() {
 	current := ""
 	if s.cursor < len(s.rows) {
-		current = s.rows[s.cursor].Name
+		current = rowKey(s.rows[s.cursor])
 	}
 	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true}}
 	s.first = map[string]Row{}
+	hot := s.hotRows()
+	tree := s.tree()
+	place := map[string]int{}
+	for k, r := range hot {
+		place[r.Name] = k + 1
+	}
+	for k := range tree {
+		tree[k].Hot = place[tree[k].Name]
+	}
+	s.rows = append(append(rows, hot...), tree...)
+	// The cursor stays on its row. When that row has left the list the
+	// cursor goes to the row the right side shows. When that has left
+	// too, the cursor goes to the first item a filter lists, or else to
+	// the first row, and returns to the shown row when it is listed again.
+	shown := s.rowNamed(s.showing)
+	if k := s.rowKeyed(current); k >= 0 && !(s.moved && shown >= 0) {
+		s.cursor = k
+		return
+	}
+	if shown >= 0 {
+		s.cursor, s.moved = shown, false
+		return
+	}
+	// With no filter the cursor stays at its place in the list, on the
+	// row that followed the one that left.
+	s.moved = true
+	at := s.cursor
+	s.cursor = 0
+	if s.filter != "" {
+		s.moveToItem(1)
+	} else if current != "" {
+		s.cursor = max(0, min(at, len(s.rows)-1))
+	}
+}
+
+// tree returns the rows of the items under their areas, as the filter,
+// the levels and the folds show them.
+func (s *Sidebar) tree() []Row {
 	var walk func(parent string, depth int, inArea bool) (rows []Row, open int, blocking bool)
 	walk = func(parent string, depth int, inArea bool) ([]Row, int, bool) {
 		var out []Row
@@ -395,30 +460,7 @@ func (s *Sidebar) rebuild() {
 		return out, open, blocking
 	}
 	tree, _, _ := walk("", 0, false)
-	s.rows = append(rows, tree...)
-	// The cursor stays on its row. When that row has left the list the
-	// cursor goes to the row the right side shows. When that has left
-	// too, the cursor goes to the first item a filter lists, or else to
-	// the first row, and returns to the shown row when it is listed again.
-	shown := s.rowNamed(s.showing)
-	if k := s.rowNamed(current); k >= 0 && !(s.moved && shown >= 0) {
-		s.cursor = k
-		return
-	}
-	if shown >= 0 {
-		s.cursor, s.moved = shown, false
-		return
-	}
-	// With no filter the cursor stays at its place in the list, on the
-	// row that followed the one that left.
-	s.moved = true
-	at := s.cursor
-	s.cursor = 0
-	if s.filter != "" {
-		s.moveToItem(1)
-	} else if current != "" {
-		s.cursor = max(0, min(at, len(s.rows)-1))
-	}
+	return tree
 }
 
 // levelOrder lists the levels from the front.
@@ -446,9 +488,33 @@ func (s *Sidebar) LevelChange(action Action) (item, level string, ok bool) {
 }
 
 // rowNamed returns the index of the row with the given name, or -1.
+// A row of the hotlist is not found by this: it has the name of the row
+// in its area.
 func (s *Sidebar) rowNamed(name string) int {
 	for k, r := range s.rows {
-		if r.Name == name {
+		if r.Name == name && !r.HotRow {
+			return k
+		}
+	}
+	return -1
+}
+
+// hotPrefix starts the key of a row in the hotlist.
+const hotPrefix = "\x00"
+
+// rowKey names a row so that the row in the hotlist and the one in its
+// area differ.
+func rowKey(r Row) string {
+	if r.HotRow {
+		return hotPrefix + r.Name
+	}
+	return r.Name
+}
+
+// rowKeyed returns the index of the row with the given key, or -1.
+func (s *Sidebar) rowKeyed(key string) int {
+	for k, r := range s.rows {
+		if rowKey(r) == key {
 			return k
 		}
 	}
@@ -519,6 +585,11 @@ const (
 	Expand
 	// MarksChanged asks the caller to save the marks.
 	MarksChanged
+	// HotlistChanged asks the caller to save the hotlist.
+	HotlistChanged
+	// MoveSibling asks the caller to move an item among its siblings.
+	// SiblingRequest names it.
+	MoveSibling
 	// Deeper and Nearer ask the caller to move the item under the cursor
 	// one level away from the front or toward it. LevelChange names the
 	// item and its new level.
@@ -533,6 +604,12 @@ const (
 	// longer exists off its item. BayCloseRequest says which.
 	CloseBay
 )
+
+// SiblingMove is a move of an item to just before or just after a sibling.
+type SiblingMove struct {
+	Item, Sibling string
+	After         bool
+}
 
 // BayClose is a bay that x or X asks to close.
 type BayClose struct {
@@ -701,6 +778,14 @@ func (s *Sidebar) key(key string) Action {
 		return ResetWidth
 	case "m", "'":
 		s.pending = key
+	case "*":
+		return s.toggleHot()
+	case "o":
+		return s.otherPlace()
+	case "[", "]":
+		return s.reorder(key == "]")
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		return s.jumpHot(digitKey(key))
 	case "x":
 		s.startClose(false)
 	case "X":
@@ -937,7 +1022,7 @@ func (s *Sidebar) click(line, column int) Action {
 
 func (s *Sidebar) toggleFold() {
 	row := s.Current()
-	if !row.Area {
+	if !row.Area || row.HotRow {
 		return
 	}
 	s.folded[row.Name] = !s.folded[row.Name]
@@ -1020,7 +1105,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 		if marks != "" {
 			spans = append(clipSpans(spans, width-TextWidth(marks)-1), Span{" " + marks, "key"})
 		}
-		lines = append(lines, Line{Spans: clipSpans(spans, width), Shown: k == shown && k != s.cursor})
+		lines = append(lines, Line{Spans: clipSpans(spans, width), Shown: k == shown && k != s.cursor && s.rows[k].Name != s.rows[s.cursor].Name})
 	}
 	for len(lines) < body {
 		lines = append(lines, Line{})
@@ -1091,7 +1176,7 @@ func (s *Sidebar) shownRow() int {
 		name = s.Shown().Name
 	}
 	for k, r := range s.rows {
-		if r.Name != name {
+		if r.Name != name || r.HotRow {
 			continue
 		}
 		if s.listsBays(k) {
@@ -1115,8 +1200,20 @@ func (s *Sidebar) marksOf(name string) string {
 	return strings.Join(marks, "")
 }
 
-// rowSpans draws one row.
+// rowSpans draws one row. A row of the hotlist starts with its number; a
+// row in an area that is in the hotlist ends with it.
 func rowSpans(r Row) []Span {
+	spans := baseSpans(r)
+	switch {
+	case r.HotRow:
+		return append([]Span{{fmt.Sprint(r.Hot) + " ", "key"}}, spans...)
+	case r.Hot > 0:
+		return append(spans, Span{fmt.Sprintf(" *%d", r.Hot), "key"})
+	}
+	return spans
+}
+
+func baseSpans(r Row) []Span {
 	indent := strings.Repeat("  ", r.Depth)
 	var marks []Span
 	if r.Area && r.Waiting {
@@ -1202,6 +1299,7 @@ func Legend() []Line {
 		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
 		entry(Span{"(bay gone)", "dim"}, "the item's bay no longer exists"),
 		entry(Span{"'a", "key"}, "a mark on the row; type 'a to go to it"),
+		entry(Span{"*2", "key"}, "the row is row 2 of the hotlist; type 2 to go to it"),
 		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),
 		entry(Span{"", ""}, "cursor is on its area or its item"),
 	}

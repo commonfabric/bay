@@ -17,11 +17,29 @@ const KeysHelp = `In the list:
                   as it is while you type. Enter keeps the filter and
                   shows the cursor's row. Esc clears the filter and
                   returns the cursor to the row the right side shows
-  m, then a letter   mark the row under the cursor with that letter or
-                  digit; on the row that has the mark, take it off
+  *               add the row under the cursor to the end of the
+                  hotlist, the rows listed below the desk, or take it
+                  off. At most nine. The row stays in its area, which
+                  shows its number as *1. The cursor stays where it is;
+                  after taking off the row it is on in the hotlist, it
+                  goes to the row that takes its place, or the one above
+                  when it was the last, or to the desk
+  1 to 9          go to that row of the hotlist
+  o               on a row of the hotlist, go to the same row in its
+                  area, brought into the list as ' does, with the area
+                  itself unfolded so that its items are listed below.
+                  On a row in an area that is in the hotlist, go to its
+                  row in the hotlist. '' goes back
+  [, ]            in the hotlist, move the row up or down. Elsewhere,
+                  move the item up or down among the shown items under
+                  the same parent, with docket set --before or --after
+  m, then a letter   mark the row under the cursor with that letter; on
+                  the row that has the mark, take it off. m and a digit
+                  is refused: only * changes the hotlist
   ', then a letter   go to the row with that mark. A row that is not in
                   the list is brought in: its areas are unfolded, its
                   level is shown, and the filter is cleared, as needed
+  ', then a digit    go to that row of the hotlist, as the digit does
   ''              go back to the row the last ' left
                   A mark is forgotten when its item is closed or deleted.
   >, <            move the item under the cursor one level away from the
@@ -66,8 +84,10 @@ From either side:
   Option-Space         fold or unfold the area under the cursor
   Option-?             show the item's state, as s does
   Option-B             collapse or expand the list
-  Option-', a letter   go to a mark; Option-' then ' goes back
+  Option-', a letter   go to a mark, or with a digit to that row of the
+                       hotlist; Option-' then ' goes back
   Option-M, a letter   mark the row the right side shows
+  Option-1 to Option-9 go to that row of the hotlist
   Option-h, Option-l   move to the list, or to the right side
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does

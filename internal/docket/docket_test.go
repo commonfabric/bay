@@ -254,9 +254,9 @@ func TestMarksAreSetDrawnAndTakenOff(t *testing.T) {
 		t.Errorf("m a changed the levels: %s", got)
 	}
 	s.Key("m")
-	s.Key("7")
+	s.Key("g")
 	lines, _ := s.RenderLines(14, 12)
-	if got := lines[2].String(); !strings.HasSuffix(got, " '7'a") || len([]rune(got)) > 14 {
+	if got := lines[2].String(); !strings.HasSuffix(got, " 'a'g") || len([]rune(got)) > 14 {
 		t.Errorf("marked row = %q", got)
 	}
 	if last := lines[2].Spans[len(lines[2].Spans)-1]; last.Style != "key" {
@@ -672,7 +672,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =_docket: prefix None") != 1 || f.ran("set-option -t =_docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7"} {
+	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
@@ -1881,5 +1881,252 @@ func TestLongFindTextShowsItsEnd(t *testing.T) {
 	bar := lines[len(lines)-2]
 	if TextWidth(bar) > 30 || !strings.HasSuffix(bar, "XYZ_") || !strings.Contains(bar, "…") {
 		t.Errorf("find bar %q (%d columns) should end with the typed end", bar, TextWidth(bar))
+	}
+}
+
+// hotNames lists the names of the rows of the hotlist.
+func hotNames(s *Sidebar) string {
+	var out []string
+	for _, r := range s.Rows() {
+		if r.HotRow {
+			out = append(out, r.Name)
+		}
+	}
+	return strings.Join(out, ",")
+}
+
+func TestStarAddsTheRowToTheHotlistAndTakesItOff(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar and its bays.
+	s.Key("n") // restart
+	if a := s.Key("*"); a != HotlistChanged || s.Current().Name != "restart" || s.Current().HotRow {
+		t.Fatalf("*: %v on %+v", a, s.Current())
+	}
+	s.Key("j") // tooling
+	s.Key("*")
+	if got := names(s); got != DeskRow+",restart,tooling,people,restart,tooling,sidebar,sidebar bay/b8,sidebar loom/b19" {
+		t.Fatalf("rows = %s", got)
+	}
+	if s.Current().Name != "tooling" || s.Current().HotRow {
+		t.Errorf("the cursor left its row: %+v", s.Current())
+	}
+	lines, _ := s.RenderLines(30, 14)
+	if got := lines[1].String(); !strings.HasPrefix(got, "1 ") {
+		t.Errorf("hotlist row 1 = %q", got)
+	}
+	if got := lines[5].String(); !strings.HasSuffix(got, "*2") {
+		t.Errorf("the area row of tooling = %q", got)
+	}
+	// * on the row in the hotlist takes it off; the cursor goes to the
+	// row that takes its place.
+	s.Key("1")
+	if s.Current().Name != "restart" || !s.Current().HotRow {
+		t.Fatalf("1: on %+v", s.Current())
+	}
+	if a := s.Key("*"); a != HotlistChanged || hotNames(s) != "tooling" || s.Current().Name != "tooling" || !s.Current().HotRow {
+		t.Fatalf("* on row 1: %v, hotlist %s, on %+v", a, hotNames(s), s.Current())
+	}
+	// The last row's removal leaves the cursor on the desk.
+	s.Key("*")
+	if hotNames(s) != "" || !s.Current().Desk {
+		t.Errorf("after the last: hotlist %q, on %+v", hotNames(s), s.Current())
+	}
+	if len(s.Hotlist()) != 0 {
+		t.Errorf("hotlist = %v", s.Hotlist())
+	}
+}
+
+func TestTheCursorGoesToTheRowAboveWhenTheLastHotlistRowIsTakenOff(t *testing.T) {
+	s := NewSidebar(tree())
+	for _, name := range []string{"people", "tooling"} {
+		s.SetHotlist(append(s.Hotlist(), name))
+	}
+	s.Key("2")
+	if !s.Current().HotRow || s.Current().Name != "tooling" {
+		t.Fatalf("on %+v", s.Current())
+	}
+	s.Key("*")
+	if s.Current().Name != "people" || !s.Current().HotRow {
+		t.Errorf("on %+v", s.Current())
+	}
+}
+
+func TestADigitGoesToThatHotlistRowFromEitherSide(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"tooling", "restart"})
+	if a := s.Key("2"); a != Show || s.Current().Name != "restart" || !s.Current().HotRow {
+		t.Fatalf("2: %v on %+v", a, s.Current())
+	}
+	if a := s.Key("3"); a != None || s.Notice() == "" || s.Current().Name != "restart" {
+		t.Errorf("3: %v %q on %s", a, s.Notice(), s.Current().Name)
+	}
+	// Option-1 while a filter is typed: F12, 1.
+	s.Key("/")
+	s.Key("f12")
+	if a := s.Key("1"); a != Show || s.Current().Name != "tooling" || !s.Current().HotRow {
+		t.Errorf("Option-1: %v on %+v", a, s.Current())
+	}
+	// The hotlist shows the row whatever the filter shows.
+	for _, key := range []string{"s", "i"} {
+		s.Key(key)
+	}
+	if got := hotNames(s); got != "tooling,restart" {
+		t.Errorf("hotlist under a filter = %s", got)
+	}
+}
+
+func TestADigitAfterMIsRefusedAndAfterAQuoteGoesToThatHotlistRow(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"restart", "tooling"})
+	s.Key("n") // restart, in its area
+	for _, key := range []string{"1", "2"} {
+		s.Key("m")
+		if a := s.Key(key); a != None || s.Notice() == "" || hotNames(s) != "restart,tooling" || len(s.Marks()) != 0 {
+			t.Errorf("m %s: %v %q, hotlist %s, marks %v", key, a, s.Notice(), hotNames(s), s.Marks())
+		}
+	}
+	s.Key("1") // restart, in the hotlist
+	s.Key("m")
+	if a := s.Key("1"); a != None || hotNames(s) != "restart,tooling" {
+		t.Errorf("m 1 on hotlist row 1: %v, hotlist %s", a, hotNames(s))
+	}
+	// Option-M 2 from the right side: F12, m, 2.
+	s.Key("f12")
+	s.Key("m")
+	if a := s.Key("2"); a != None || hotNames(s) != "restart,tooling" {
+		t.Errorf("Option-M 2: %v, hotlist %s", a, hotNames(s))
+	}
+	s.Key("g")
+	s.Key("'")
+	if a := s.Key("2"); a != Show || s.Current().Name != "tooling" || !s.Current().HotRow {
+		t.Fatalf("' 2: %v on %+v", a, s.Current())
+	}
+	s.Key("'")
+	if a := s.Key("'"); a != Show || !s.Current().Desk {
+		t.Errorf("'' after ' 2: %v on %+v", a, s.Current())
+	}
+	s.Key("'")
+	if a := s.Key("3"); a != None || s.Notice() == "" {
+		t.Errorf("' 3: %v %q", a, s.Notice())
+	}
+}
+
+func TestBracketsMoveAHotlistRowAndTheCursorFollowsIt(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"restart", "tooling", "people"})
+	s.Key("1")
+	if a := s.Key("["); a != None || s.Notice() == "" {
+		t.Errorf("[ on the first row: %v %q", a, s.Notice())
+	}
+	if a := s.Key("]"); a != HotlistChanged || hotNames(s) != "tooling,restart,people" || s.Current().Name != "restart" || !s.Current().HotRow {
+		t.Errorf("]: %v %s on %+v", a, hotNames(s), s.Current())
+	}
+	if got := s.Current().Hot; got != 2 {
+		t.Errorf("number = %d", got)
+	}
+}
+
+func TestBracketsOutsideTheHotlistMoveAnItemAmongItsShownSiblings(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("a") // show the back level
+	// Rows: the desk, people, restart, images, tooling, sidebar and its bays.
+	s.Key("j") // people
+	if a := s.Key("["); a != None || s.Notice() == "" {
+		t.Errorf("[ on the first top row: %v %q", a, s.Notice())
+	}
+	if a := s.Key("]"); a != MoveSibling {
+		t.Fatalf("]: %v", a)
+	}
+	if item, flag, sibling := s.SiblingRequest(); item != "people" || flag != "--after" || sibling != "tooling" {
+		t.Errorf("request = %s %s %s", item, flag, sibling)
+	}
+	s.Key("j") // restart
+	if a := s.Key("]"); a != MoveSibling {
+		t.Fatalf("] on restart: %v", a)
+	}
+	if item, flag, sibling := s.SiblingRequest(); item != "restart" || flag != "--after" || sibling != "images" {
+		t.Errorf("request = %s %s %s", item, flag, sibling)
+	}
+	// A move does not leave the parent.
+	if a := s.Key("["); a != None {
+		t.Errorf("[ on the first of its parent: %v", a)
+	}
+	s.Key("G") // the last bay row
+	if a := s.Key("["); a != None || s.Notice() == "" {
+		t.Errorf("[ on a bay's row: %v %q", a, s.Notice())
+	}
+	s.Key("g")
+	if a := s.Key("]"); a != None || s.Notice() == "" {
+		t.Errorf("] on the desk: %v %q", a, s.Notice())
+	}
+}
+
+func TestAHotlistRowOfAClosedItemIsForgotten(t *testing.T) {
+	items := tree()
+	s := NewSidebar(items)
+	s.SetHotlist([]string{"restart", "sidebar loom/b19"})
+	if got := hotNames(s); got != "restart,sidebar loom/b19" {
+		t.Fatalf("hotlist = %s", got)
+	}
+	closed := items["restart"]
+	closed.Status = "closed"
+	items["restart"] = closed
+	s.SetItems(items)
+	if !s.ForgetHotlist() || hotNames(s) != "sidebar loom/b19" {
+		t.Errorf("hotlist = %s", hotNames(s))
+	}
+}
+
+func TestTheHotlistHoldsNineRows(t *testing.T) {
+	items := map[string]Item{}
+	var order []string
+	for k := 0; k < 10; k++ {
+		name := fmt.Sprintf("g%d", k)
+		items[name] = Item{Name: name, Title: name, Kind: "goal", Status: "open", Level: "front"}
+		order = append(order, name)
+	}
+	s := NewSidebar(items)
+	s.SetRootOrder(order)
+	for _, name := range order {
+		s.cursor = s.rowNamed(name)
+		s.Key("*")
+	}
+	if got := len(s.Hotlist()); got != MaxHot || s.Notice() == "" {
+		t.Errorf("hotlist has %d rows, notice %q", got, s.Notice())
+	}
+}
+
+func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"images", "people"})
+	// images is at the back level, which is not shown; people is folded.
+	s.Key("j") // people, in its area
+	s.Key(" ")
+	if a := s.Key("1"); a != Show || s.Current().Name != "images" {
+		t.Fatalf("1: %v on %+v", a, s.Current())
+	}
+	if a := s.Key("o"); a != Show || s.Current().Name != "images" || s.Current().HotRow {
+		t.Fatalf("o on hotlist row 1: %v on %+v", a, s.Current())
+	}
+	s.Key("'")
+	if a := s.Key("'"); a != Show || s.Current().Name != "images" || !s.Current().HotRow {
+		t.Errorf("'' after o: %v on %+v", a, s.Current())
+	}
+	// o on an area in the hotlist unfolds the area.
+	s.Key("2")
+	s.Key("o")
+	if cur := s.Current(); cur.Name != "people" || cur.HotRow || cur.Folded {
+		t.Fatalf("o on hotlist row 2: on %+v", cur)
+	}
+	if next := s.Rows()[s.cursor+1]; next.Name != "restart" {
+		t.Errorf("below the area: %s", next.Name)
+	}
+	// From the area's row, o goes to the hotlist row.
+	if a := s.Key("o"); a != Show || s.Current().Name != "people" || !s.Current().HotRow {
+		t.Errorf("o on people in its area: %v on %+v", a, s.Current())
+	}
+	s.Key("G")
+	if a := s.Key("o"); a != None || s.Notice() == "" {
+		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
 	}
 }
