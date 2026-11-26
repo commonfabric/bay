@@ -2164,3 +2164,21 @@ func TestAStartedListReturnsToTheRowTheRightSideShows(t *testing.T) {
 		t.Errorf("returned to a row that is not listed")
 	}
 }
+
+func TestTheHotlistDoesNotGiveAnAreaAHiddenFirstItem(t *testing.T) {
+	items := tree()
+	items["quiet"] = Item{Name: "quiet", Title: "Quiet", Kind: "area", Status: "open", Level: "front"}
+	// At the front level the area lists only an empty area beneath it.
+	items["empty"] = Item{Name: "empty", Title: "Empty", Kind: "area", Status: "open", Level: "front", Parent: ptr("quiet")}
+	items["later"] = Item{Name: "later", Title: "Later", Kind: "goal", Status: "open", Level: "back", Parent: ptr("quiet")}
+	s := NewSidebar(items)
+	s.SetHotlist([]string{"tooling"})
+	k := s.rowNamed("quiet")
+	if k < 0 {
+		t.Fatalf("the area is not listed: %s", names(s))
+	}
+	s.cursor = k
+	if got := s.Shown().Name; got == "later" {
+		t.Errorf("the area shows %q, an item at a level not shown", got)
+	}
+}
