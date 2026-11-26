@@ -684,8 +684,8 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	// Option-j steps the list while the list has the keyboard and goes on
 	// to the second client otherwise.
 	for _, want := range []string{
-		"bind-key -T docket M-j if-shell -F #{pane_at_left} send-keys -t %1 F5 send-keys -t =_docket:view.{right} M-j",
-		"bind-key -T docket M-K if-shell -F #{pane_at_left} send-keys -t %1 F6 send-keys -t =_docket:view.{right} M-K",
+		"bind-key -T docket M-j if-shell -F #{pane_at_left} send-keys -t %1 F5 send-keys -t '=_docket:view.{right}' M-j",
+		"bind-key -T docket M-K if-shell -F #{pane_at_left} send-keys -t %1 F6 send-keys -t '=_docket:view.{right}' M-K",
 		"bind-key -T docket M-r send-keys -t %1 F12 r",
 		`bind-key -T docket M-g select-pane -t %1 \; send-keys -t %1 F12 /`,
 	} {
@@ -2212,5 +2212,39 @@ func TestRMovesToTheNextWaitingRowAndWrapsPastTheEnd(t *testing.T) {
 	s.Key("G")
 	if a := s.Key("r"); a != Show || s.Current().Name != at {
 		t.Errorf("r from the last row: %v on %q, want %q", a, s.Current().Name, at)
+	}
+}
+
+func TestKeysQuoteAPaneTargetInsideACommandString(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}}
+	var binds [][]string
+	v := newFakeView(f)
+	v.Tmux = func(args ...string) (string, error) {
+		if args[0] == "bind-key" {
+			binds = append(binds, args)
+		}
+		return f.run(args...)
+	}
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range binds {
+		for _, arg := range b {
+			// An argument with a space is a command string that tmux
+			// parses again when the key is pressed.
+			if !strings.Contains(arg, " ") {
+				continue
+			}
+			for _, side := range []string{".{left}", ".{right}"} {
+				for rest := arg; strings.Contains(rest, side); {
+					at := strings.Index(rest, side) + len(side)
+					if at >= len(rest) || rest[at] != '\'' {
+						t.Errorf("%s: unquoted %s in %q", b[3], side, arg)
+						break
+					}
+					rest = rest[at:]
+				}
+			}
+		}
 	}
 }

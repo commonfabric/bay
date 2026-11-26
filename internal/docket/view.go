@@ -222,10 +222,12 @@ func (v *View) Setup() error {
 		// Option-j and Option-k step the list while the list has the
 		// keyboard. While the right side has it they go on to the right
 		// side's client, which moves between the panes of the window shown.
-		{"M-j", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F5", "send-keys -t " + viewerPane + " M-j"},
-		{"M-k", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F6", "send-keys -t " + viewerPane + " M-k"},
-		{"M-J", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F5", "send-keys -t " + viewerPane + " M-J"},
-		{"M-K", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F6", "send-keys -t " + viewerPane + " M-K"},
+		// A target inside a command string is quoted: tmux reads an
+		// unquoted { as the start of a block of commands.
+		{"M-j", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F5", "send-keys -t '" + viewerPane + "' M-j"},
+		{"M-k", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F6", "send-keys -t '" + viewerPane + "' M-k"},
+		{"M-J", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F5", "send-keys -t '" + viewerPane + "' M-J"},
+		{"M-K", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F6", "send-keys -t '" + viewerPane + "' M-K"},
 		// Option-r moves to the next row with the waiting mark. Option-g
 		// moves to the list and starts a search.
 		{"M-r", "send-keys", "-t", pane, "F12", "r"},
