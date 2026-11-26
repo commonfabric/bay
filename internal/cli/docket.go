@@ -453,7 +453,7 @@ func keysPage(stateDir string) []docket.Line {
 		}
 		lines = append(lines, docket.Line{Spans: []docket.Span{{Text: text, Style: style}}})
 	}
-	items, _ := docket.LoadItems(stateDir)
+	items, _ := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Your bookmarks:", Style: "heading"}}})
 	lines = append(lines, docket.MarkLines(loadMarks(stateDir), items)...)
 	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Marks and colors:", Style: "heading"}}})
@@ -471,7 +471,7 @@ func newDocketStateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			text, err := docket.Summary(stateDir, args[0])
+			text, err := docket.Summary(stateDir, bayPaths().ManifestFile, args[0])
 			if err != nil {
 				return err
 			}
@@ -699,7 +699,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h")
 	defer fmt.Print("\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l")
 
-	items, err := docket.LoadItems(stateDir)
+	items, err := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 	if err != nil {
 		return err
 	}
@@ -785,7 +785,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		fmt.Print(b.String())
 	}
 	reload := func() {
-		items, err := docket.LoadItems(stateDir)
+		items, err := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 		if err != nil {
 			note = err.Error()
 			return

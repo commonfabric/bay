@@ -254,6 +254,11 @@ item and no role, in any dock. Set a role with `bay role review` (or
 `bay new --item docket --role review`) and print it with `bay role`.
 `bay role --clear` makes the bay the item's primary bay.
 
+`bay item --all` lists every bay that names an item, one per line
+(`dock/bay`, item, role), straight from bay's state without checking each
+bay's git state; `--json` prints the same as a list of objects. Docket uses
+it, and bay's docket view takes each item's bays from the same state.
+
 The item and role appear in `bay show`, `bay show --json`, `bay ls --json`
 and `bay tree --json`. A bay with no item has neither field. A single
 argument that looks like a bay ID (such as `b3`) names the bay to read;
@@ -715,6 +720,7 @@ bay item [id]                            # print the docket item the bay works o
 bay item [id] <name> [--role <role>]     # set the item (--replace to change an existing one)
 bay item [id] --clear                    # remove the item and role
 bay role [id] [<role>]                   # print or set the role (--clear = primary bay)
+bay item --all [--json]                  # every bay that names an item (fast; no git checks)
 bay new --item <name> [--role <role>]    # create a bay with its item and role
 bay ls                                   # list bays in current dock
 bay ls --json                            # machine-readable bay list
