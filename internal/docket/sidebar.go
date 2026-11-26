@@ -9,8 +9,16 @@ import (
 )
 
 // DeskRow is the name of the row for the desk, the agent session attached
-// to the whole tree. No item can have this name: item names hold no spaces.
-const DeskRow = "the desk"
+// to the whole tree. The row stands for the root item, whose site is the
+// desk.
+const DeskRow = RootItem
+
+// OldDeskRow is the desk row's name in marks saved before the row was the
+// root item's.
+const OldDeskRow = "the desk"
+
+// deskLabel is how the desk row is shown.
+const deskLabel = "the desk"
 
 // Row is one line of the sidebar.
 type Row struct {
@@ -135,7 +143,11 @@ func MarkLines(marks map[string]string, items map[string]Item) []Line {
 		default:
 			title = item.Title
 		}
-		spans := []Span{{"  ", ""}, {"'" + mark, "key"}, {"  " + name, ""}}
+		shown := name
+		if name == DeskRow {
+			shown = deskLabel
+		}
+		spans := []Span{{"  ", ""}, {"'" + mark, "key"}, {"  " + shown, ""}}
 		if title != "" {
 			spans = append(spans, Span{"  " + title, "dim"})
 		}
@@ -350,7 +362,9 @@ func (s *Sidebar) rebuild() {
 	if s.cursor < len(s.rows) {
 		current = rowKey(s.rows[s.cursor])
 	}
-	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true}}
+	open, blocking := s.items[RootItem].OpenQuestions()
+	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true,
+		Open: open, Blocking: blocking}}
 	s.first = map[string]Row{}
 	hot := s.hotRows()
 	tree := s.tree()
@@ -1227,7 +1241,7 @@ func baseSpans(r Row) []Span {
 	}
 	switch {
 	case r.Desk:
-		return []Span{{"◆ " + r.Name, "desk"}}
+		return append([]Span{{"◆ " + deskLabel, "desk"}}, marks...)
 	case r.Bay != "" && r.Gone:
 		return []Span{{indent + "↳ " + r.Bay + " (gone)", "dim"}}
 	case r.Bay != "" && r.Waiting:
@@ -1292,7 +1306,8 @@ func Legend() []Line {
 		entry(Span{WaitingMark + " item", "waiting"}, "an agent in its bay waits for you;"),
 		entry(Span{"", ""}, "after an area, in a bay beneath it"),
 		entry(Span{"↳ dock/bay", "bay"}, "one bay of an item that has several"),
-		entry(Span{"◆ the desk", "desk"}, "the agent session for the whole tree"),
+		entry(Span{"◆ " + deskLabel, "desk"}, "the agent session for the whole tree,"),
+		entry(Span{"", ""}, "with the questions about the whole tree"),
 		entry(Span{"?2", "question"}, "two questions wait for your answer;"),
 		entry(Span{"", ""}, "on an area, the total beneath it"),
 		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
