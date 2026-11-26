@@ -300,7 +300,7 @@ The state is kept in bay's own record, so it stays when the session ends
 and when tmux restarts. It goes when the bay is closed. `bay show` shows
 it, and `bay show --json`, `bay ls --json`, `bay tree --json` and
 `bay item --all --json` carry it as `state` (`bay_state` in `--rows`
-output).
+output). The docket view shows it on the rows of bays that name an item.
 
 ### Surfaces
 
@@ -909,6 +909,7 @@ session:
   | dim `·` | The item has no bay |
   | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
   | cyan `↳ dock/bay` | One bay of an item that has several |
+  | `🦚` after the work mark | The lifecycle state its bay's session set (see `bay state`). On an item's row, the first mark among its bays, primary bay first, passing over 🫖 unless every bay has it: 🫖 on an item's row says the whole item is finished and waits only to be closed. While any bay has a state, a row without one has blank space there, so names stay aligned. `?` lists every mark |
   | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |

@@ -55,7 +55,8 @@ func newBayStateCmd() *cobra.Command {
 		Short: "Read or set a bay's lifecycle state",
 		Long: `Read or set the lifecycle state of a bay: one mark that says where the
 bay's work is. The bay's session sets it at each change of state. The
-state stays when the session ends, and goes when the bay is closed.
+docket list shows the mark on the bay's row. The state stays when the
+session ends, and goes when the bay is closed.
 
 Give a state by its word or its mark:
 

@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 // DeskRow is the name of the row for the desk, the agent session attached
@@ -28,6 +30,7 @@ type Row struct {
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
 	Waiting  bool   // a bay of the row waits for the person; on an area, also a bay beneath it
+	State    string // the lifecycle mark drawn after the work symbol; blank space when the row has none but another row has one; "" when no row has one
 	Hot      int    // the row's place in the hotlist, counted from 1; 0 when it is not in it
 	HotRow   bool   // the row is the one in the hotlist, not the one in its area
 }
@@ -58,6 +61,7 @@ type Sidebar struct {
 	notice    string            // what the last key has to tell the user
 	missing   map[string]bool   // the bays, as dock/bay, that do not exist
 	waiting   map[string]bool   // the bays, as dock/bay, whose agent waits for the person
+	states    map[string]string // for each bay, as dock/bay, that has one, its lifecycle state word
 	first     map[string]Row    // for each area row, the first row beneath it that is not an area
 	cursor    int
 	showing   string // the name of the row the right side was last asked to show
@@ -292,6 +296,43 @@ func (s *Sidebar) SetWaiting(waiting map[string]bool) bool {
 	return true
 }
 
+// SetStates tells the list each bay's lifecycle state word, keyed by
+// dock/bay. It reports whether that changed what the list shows.
+func (s *Sidebar) SetStates(states map[string]string) bool {
+	if maps.Equal(s.states, states) {
+		return false
+	}
+	s.states = states
+	s.rebuild()
+	return true
+}
+
+// stateCell returns what the row of the given bays draws in the column of
+// lifecycle marks. An item row shows the first mark among its bays,
+// primary bay first, passing over 🫖 (nothing left to do) unless every bay
+// has it: 🫖 on an item row says the whole item is finished. A row with
+// no mark gets blank space as wide as a mark while any bay has one, so
+// that the names stay aligned.
+func (s *Sidebar) stateCell(bays []string) string {
+	if len(s.states) == 0 {
+		return ""
+	}
+	done := len(bays) > 0
+	for _, ref := range bays {
+		word := s.states[ref]
+		if word != "done" {
+			done = false
+		}
+		if word != "" && word != "done" {
+			return manifest.StateMarkOf(word)
+		}
+	}
+	if done {
+		return manifest.StateMarkOf("done")
+	}
+	return "  "
+}
+
 // SetItems replaces the items. The cursor stays on the row it was on when
 // that row is still shown.
 func (s *Sidebar) SetItems(items map[string]Item) {
@@ -448,7 +489,8 @@ func (s *Sidebar) tree() []Row {
 					waiting = waiting || s.waiting[ref]
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Work: item.Work,
-					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone, Waiting: waiting})
+					Level: item.Level, Open: n, Blocking: b, Bays: bays, Gone: gone, Waiting: waiting,
+					State: s.stateCell(bays)})
 				if len(bays) > 1 || s.allBays {
 					out = append(out, s.bayRows(item, depth)...)
 				}
@@ -634,7 +676,8 @@ func (s *Sidebar) bayRows(item Item, depth int) []Row {
 	var rows []Row
 	for _, ref := range item.BayRefs() {
 		rows = append(rows, Row{Name: item.Name + " " + ref, Title: item.Title,
-			Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref]})
+			Depth: depth + 1, Bays: []string{ref}, Bay: ref, Gone: s.missing[ref], Waiting: s.waiting[ref],
+			State: s.stateCell([]string{ref})})
 	}
 	return rows
 }
@@ -1231,9 +1274,9 @@ func baseSpans(r Row) []Span {
 	case r.Bay != "" && r.Gone:
 		return []Span{{indent + "↳ " + r.Bay + " (gone)", "dim"}}
 	case r.Bay != "" && r.Waiting:
-		return []Span{{indent, ""}, {WaitingMark, "waiting"}, {" " + r.Bay, "bay"}}
+		return []Span{{indent, ""}, {WaitingMark, "waiting"}, {" " + stateText(r) + r.Bay, "bay"}}
 	case r.Bay != "":
-		return []Span{{indent + "↳ " + r.Bay, "bay"}}
+		return []Span{{indent + "↳ " + stateText(r) + r.Bay, "bay"}}
 	case r.Area:
 		fold := "▾"
 		if r.Folded {
@@ -1245,7 +1288,7 @@ func baseSpans(r Row) []Span {
 	if r.Waiting {
 		symbol, style = WaitingMark, "waiting"
 	}
-	spans := append([]Span{{indent, ""}, {symbol, style}, {" " + r.Name, ""}}, marks...)
+	spans := append([]Span{{indent, ""}, {symbol, style}, {" " + stateText(r) + r.Name, ""}}, marks...)
 	if r.Gone {
 		spans = append(spans, Span{" (bay gone)", "dim"})
 	}
@@ -1253,6 +1296,15 @@ func baseSpans(r Row) []Span {
 		spans = append(spans, Span{" (" + r.Level + ")", "dim"})
 	}
 	return spans
+}
+
+// stateText returns the row's lifecycle mark followed by a space, or ""
+// when no row has a mark.
+func stateText(r Row) string {
+	if r.State == "" {
+		return ""
+	}
+	return r.State + " "
 }
 
 // WaitingMark is drawn in place of an item's work mark, or a bay's ↳,
@@ -1280,10 +1332,10 @@ func WorkSymbol(work string, hasBay bool) (symbol, style string) {
 // Legend explains the marks and styles of the rows, one line each.
 func Legend() []Line {
 	entry := func(mark Span, meaning string) Line {
-		pad := strings.Repeat(" ", max(1, 16-len([]rune(mark.Text))))
+		pad := strings.Repeat(" ", max(1, 16-TextWidth(mark.Text)))
 		return Line{Spans: []Span{{"  ", ""}, mark, {pad + meaning, ""}}}
 	}
-	return []Line{
+	lines := []Line{
 		entry(Span{"▾ area", "area"}, "an area; ▸ when it is folded"),
 		entry(Span{"● item", "running"}, "its agent is working"),
 		entry(Span{"○ item", "ready"}, "its agent is waiting for its next instruction"),
@@ -1292,6 +1344,14 @@ func Legend() []Line {
 		entry(Span{WaitingMark + " item", "waiting"}, "an agent in its bay waits for you;"),
 		entry(Span{"", ""}, "after an area, in a bay beneath it"),
 		entry(Span{"↳ dock/bay", "bay"}, "one bay of an item that has several"),
+		entry(Span{"○ 🦚 item", "ready"}, "where the work is, as its bay's session says;"),
+		entry(Span{"", ""}, "on an item, its bays' first mark; 🫖 when"),
+		entry(Span{"", ""}, "every bay has nothing left to do"),
+	}
+	for _, m := range manifest.StateMarks {
+		lines = append(lines, entry(Span{"  " + m.Mark, ""}, m.Meaning))
+	}
+	return append(lines, []Line{
 		entry(Span{"◆ the desk", "desk"}, "the agent session for the whole tree"),
 		entry(Span{"?2", "question"}, "two questions wait for your answer;"),
 		entry(Span{"", ""}, "on an area, the total beneath it"),
@@ -1302,7 +1362,7 @@ func Legend() []Line {
 		entry(Span{"*2", "key"}, "the row is row 2 of the hotlist; type 2 to go to it"),
 		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),
 		entry(Span{"", ""}, "cursor is on its area or its item"),
-	}
+	}...)
 }
 
 // clipSpans shortens a line to width columns, ending it with "…".
@@ -1344,7 +1404,8 @@ func runeWidth(r rune) int {
 		return 0
 	case r >= 0x1100 && r <= 0x115F, r >= 0x2E80 && r <= 0xA4CF, r >= 0xAC00 && r <= 0xD7A3,
 		r >= 0xF900 && r <= 0xFAFF, r >= 0xFE30 && r <= 0xFE6F, r >= 0xFF00 && r <= 0xFF60,
-		r >= 0xFFE0 && r <= 0xFFE6, r >= 0x1F300 && r <= 0x1F64F, r >= 0x1F900 && r <= 0x1F9FF,
+		r >= 0xFFE0 && r <= 0xFFE6, r >= 0x1F300 && r <= 0x1F64F, r >= 0x1F680 && r <= 0x1F6FF,
+		r >= 0x1F900 && r <= 0x1F9FF, r >= 0x1FA70 && r <= 0x1FAFF, r == 0x270A, r == 0x270B,
 		r >= 0x20000 && r <= 0x3FFFD:
 		return 2
 	}
