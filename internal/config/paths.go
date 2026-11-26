@@ -18,6 +18,8 @@ type Paths struct {
 	// so a pending Option+w last-surface tap can never be consumed as
 	// authorization for an Option+Shift+W force-close.
 	ForceCloseConfirm string
+	// DocketViewWidth keeps the width of the docket view's list.
+	DocketViewWidth string
 }
 
 // DefaultPaths returns the standard paths using XDG defaults.
@@ -36,5 +38,6 @@ func DefaultPaths() Paths {
 		PaletteRecents:    filepath.Join(dataDir, "palette-recents.json"),
 		CloseConfirm:      filepath.Join(dataDir, "close-confirm"),
 		ForceCloseConfirm: filepath.Join(dataDir, "force-close-confirm"),
+		DocketViewWidth:   filepath.Join(dataDir, "docket-view-width.json"),
 	}
 }

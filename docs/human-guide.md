@@ -946,9 +946,9 @@ The command reads docket's files (`$DOCKET_STATE`, default
 `~/.local/share/docket`) and bay's manifest. It changes docket's items in
 two cases: `>` and `<` change the level of the item under the cursor by
 running `docket set`, and `x` closes it by running `docket close`. On a
-bay's row, `x` and `X` close the bay with `bay close`. It keeps the marks and the list's width in
-`view-marks.json` and `view-width.json` in docket's folder. It writes
-nothing else, and nothing of bay's.
+bay's row, `x` and `X` close the bay with `bay close`. It keeps the marks
+in `view-marks.json` in docket's folder, and the list's width in
+`docket-view-width.json` in bay's data folder. It writes nothing else.
 
 ### Infrastructure
 

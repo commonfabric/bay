@@ -2,7 +2,9 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -63,10 +65,11 @@ func newDocketView() (*docket.View, error) {
 		return nil, err
 	}
 	manifestFile := bayPaths().ManifestFile
-	width := 0
+	oldWidth := ""
 	if stateDir, err := docket.StateDir(); err == nil {
-		width = loadWidth(stateDir)
+		oldWidth = oldWidthFile(stateDir)
 	}
+	width := loadWidth(bayPaths().DocketViewWidth, oldWidth)
 	return &docket.View{
 		Width:          width,
 		Tmux:           realTmux,
@@ -328,15 +331,21 @@ func saveMarks(stateDir string, marks map[string]string) error {
 	return os.WriteFile(marksFile(stateDir), data, 0o644)
 }
 
-// widthFile is the file that keeps the list's width, beside its marks.
-func widthFile(stateDir string) string { return filepath.Join(stateDir, "view-width.json") }
+// oldWidthFile is where the list's width was kept before it moved to bay's
+// data folder. loadWidth reads it when the new file is missing, and
+// saveWidth removes it.
+func oldWidthFile(stateDir string) string { return filepath.Join(stateDir, "view-width.json") }
 
 // loadWidth reads the list's saved width, and 0 when none is saved.
-func loadWidth(stateDir string) int {
+func loadWidth(path, oldPath string) int {
 	var saved struct {
 		Width int `json:"width"`
 	}
-	if data, err := os.ReadFile(widthFile(stateDir)); err == nil {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) && oldPath != "" {
+		data, err = os.ReadFile(oldPath)
+	}
+	if err == nil {
 		_ = json.Unmarshal(data, &saved)
 	}
 	if saved.Width < docket.CollapsedBelow {
@@ -345,12 +354,21 @@ func loadWidth(stateDir string) int {
 	return saved.Width
 }
 
-func saveWidth(stateDir string, width int) error {
+func saveWidth(path, oldPath string, width int) error {
 	data, err := json.Marshal(map[string]int{"width": width})
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(widthFile(stateDir), data, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	if oldPath != "" {
+		_ = os.Remove(oldPath)
+	}
+	return nil
 }
 
 // keysPage is the text of the keys popup: the keys, the marks that are
@@ -649,7 +667,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 				_ = view.SetWidth(restore)
 			}
 			if save {
-				_ = saveWidth(stateDir, width)
+				_ = saveWidth(bayPaths().DocketViewWidth, oldWidthFile(stateDir), width)
 			}
 		}
 		if note != "" && !sidebar.Collapsed() {

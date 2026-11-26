@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestFitPopupKeepsAPopupInsideTheTerminal(t *testing.T) {
 	for _, c := range []struct{ want, room, got int }{{40, 60, 40}, {58, 60, 58}, {59, 60, 58}, {75, 60, 58}, {75, 0, 75}} {
@@ -11,21 +15,42 @@ func TestFitPopupKeepsAPopupInsideTheTerminal(t *testing.T) {
 }
 
 func TestSavedWidthIsReadBackAndACollapsedOneIsIgnored(t *testing.T) {
-	dir := t.TempDir()
-	if got := loadWidth(dir); got != 0 {
+	path := filepath.Join(t.TempDir(), "bay", "docket-view-width.json")
+	if got := loadWidth(path, ""); got != 0 {
 		t.Errorf("no saved width: got %d, want 0", got)
 	}
-	if err := saveWidth(dir, 52); err != nil {
+	if err := saveWidth(path, "", 52); err != nil {
 		t.Fatal(err)
 	}
-	if got := loadWidth(dir); got != 52 {
+	if got := loadWidth(path, ""); got != 52 {
 		t.Errorf("saved 52: got %d", got)
 	}
-	if err := saveWidth(dir, 2); err != nil {
+	if err := saveWidth(path, "", 2); err != nil {
 		t.Fatal(err)
 	}
-	if got := loadWidth(dir); got != 0 {
+	if got := loadWidth(path, ""); got != 0 {
 		t.Errorf("saved a collapsed width: got %d, want 0", got)
+	}
+}
+
+func TestAWidthInDocketsFolderIsReadUntilTheNewFileIsSaved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bay", "docket-view-width.json")
+	old := filepath.Join(dir, "view-width.json")
+	if err := os.WriteFile(old, []byte(`{"width":44}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadWidth(path, old); got != 44 {
+		t.Errorf("old file only: got %d, want 44", got)
+	}
+	if err := saveWidth(path, old, 50); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("old file still there after a save: %v", err)
+	}
+	if got := loadWidth(path, old); got != 50 {
+		t.Errorf("after save: got %d, want 50", got)
 	}
 }
 
