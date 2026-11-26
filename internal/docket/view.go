@@ -63,6 +63,12 @@ type View struct {
 	BayWindow func(ref string) (string, bool)
 	// RecordCommand is the shell command that prints an item's record.
 	RecordCommand func(item string) string
+	// BayDir returns the folder of a bay given as "dock/bay", and false
+	// when the bay is unknown.
+	BayDir func(ref string) (string, bool)
+	// BayKeys are bay's own tmux keys. The view binds them again so that
+	// they act on the bay shown on the right.
+	BayKeys []BayKey
 	// StartDesk starts the desk agent's window when it is not running.
 	StartDesk func() error
 	// Width is the width a newly started sidebar is given: the width saved
@@ -213,10 +219,22 @@ func (v *View) Setup() error {
 		return []string{"send-keys", "-t", pane, key}
 	}
 	binds := [][]string{
-		append([]string{"M-j"}, list("F5")...),
-		append([]string{"M-k"}, list("F6")...),
+		// Option-j and Option-k step the list while the list has the
+		// keyboard. While the right side has it they go on to the right
+		// side's client, which moves between the panes of the window shown.
+		// Option-J and Option-K step the list from either side.
+		// A target inside a command string is quoted: tmux reads an
+		// unquoted { as the start of a block of commands.
+		{"M-j", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F5", "send-keys -t '" + viewerPane + "' M-j"},
+		{"M-k", "if-shell", "-F", "#{pane_at_left}", "send-keys -t " + pane + " F6", "send-keys -t '" + viewerPane + "' M-k"},
 		append([]string{"M-J"}, list("F5")...),
 		append([]string{"M-K"}, list("F6")...),
+		// Option-r moves to the next row with the waiting mark. Option-g
+		// moves to the list and starts a search.
+		{"M-r", "send-keys", "-t", pane, "F12", "r"},
+		{"M-g", "select-pane", "-t", pane, "\\;", "send-keys", "-t", pane, "F12", "/"},
+		// Bay's command palette is not offered in the view.
+		{"M-p", "display-message", "not in the docket view"},
 		append([]string{"M-N"}, list("F9")...),
 		append([]string{"M-P"}, list("F10")...),
 		append([]string{"M-Space"}, list("F7")...),
@@ -261,6 +279,9 @@ func (v *View) Setup() error {
 		}
 	}
 	if err := v.bindMarks(pane); err != nil {
+		return err
+	}
+	if err := v.bindBayKeys(); err != nil {
 		return err
 	}
 	return v.setAux()
@@ -323,7 +344,7 @@ func (v *View) bindAuxPrefix() error {
 	if err != nil {
 		return fmt.Errorf("read the prefix keys: %w", err)
 	}
-	commands := auxPrefixBindings(listing)
+	commands := auxPrefixBindings(listing) + v.auxBayKeys()
 	for _, opt := range []string{"prefix", "prefix2"} {
 		out, err := v.Tmux("show-options", "-gv", opt)
 		if key := strings.TrimSpace(out); err == nil && key != "" && key != "None" {
@@ -348,6 +369,109 @@ func (v *View) bindAuxPrefix() error {
 		return fmt.Errorf("bind the right pane's keys: %w", err)
 	}
 	return nil
+}
+
+// BayKey is one of bay's own tmux keys.
+type BayKey struct {
+	Table   string // the chord's key table, or "" for the root table
+	Key     string
+	Command string // the shell command a bay key runs, or a tmux command when Tmux is set
+	Tmux    bool   // Command is a tmux command and runs as it is
+	Verb    string // the tmux command that runs Command in a shell: run-shell or a display-popup
+	Global  bool   // a tmux command bay binds in every session, such as moving between panes
+}
+
+// dirOption holds the folder of the bay shown on the right, or nothing
+// when the right side shows no bay.
+const (
+	dirOption = "@docket-bay-dir"
+	dirFormat = "#{" + dirOption + "}"
+)
+
+// ownKeys are the keys of bay's root table that the view binds itself.
+var ownKeys = map[string]bool{
+	"M-j": true, "M-k": true, "M-J": true, "M-K": true,
+	"M-h": true, "M-l": true, "M-r": true, "M-g": true, "M-?": true, "M-p": true,
+}
+
+// chordTable names the view's copy of one of bay's chord key tables.
+func chordTable(table string) string { return "docket-" + table }
+
+// bayKeyCommand returns the tmux command the view binds a bay key to. A
+// bay command runs from the folder of the bay shown, in the pane the
+// right side's client has current: bay finds its bay from its working
+// directory.
+func bayKeyCommand(k BayKey) string {
+	if k.Tmux {
+		// A chord's key switches to the view's copy of the table. Bay's
+		// command separates commands as a configuration file does, with
+		// \; . The view passes the command as one argument, in which a
+		// bare ; separates them.
+		command := strings.ReplaceAll(k.Command, "switch-client -T bay-", "switch-client -T "+chordTable("bay-"))
+		return strings.ReplaceAll(command, `\;`, ";")
+	}
+	// display-popup expands formats in its start directory and not in
+	// its shell command; run-shell expands them in its shell command and
+	// not in its start directory. With no bay shown the key does nothing.
+	if strings.HasPrefix(k.Verb, "display-popup") {
+		return fmt.Sprintf(`if-shell -F "%s" "%s -t %s -d '%s' '%s || true'"`, dirFormat, k.Verb, auxTarget, dirFormat, k.Command)
+	}
+	return fmt.Sprintf(`%s -t %s "[ -n '%s' ] && cd '%s' && %s || true"`, k.Verb, auxTarget, dirFormat, dirFormat, k.Command)
+}
+
+// bindBayKeys binds bay's keys that run bay, and the chords that lead to
+// them, in the view's key tables.
+func (v *View) bindBayKeys() error {
+	chords := map[string]bool{}
+	for _, k := range v.BayKeys {
+		if k.Table != "" {
+			chords[chordTable(k.Table)] = true
+		}
+	}
+	for table := range chords {
+		if _, err := v.Tmux("unbind-key", "-q", "-a", "-T", table); err != nil {
+			return fmt.Errorf("clear the keys of %s: %w", table, err)
+		}
+	}
+	for _, k := range v.BayKeys {
+		table := KeyTable
+		if k.Global {
+			continue
+		} else if k.Table != "" {
+			table = chordTable(k.Table)
+		} else if ownKeys[k.Key] {
+			continue
+		}
+		if _, err := v.Tmux("bind-key", "-T", table, k.Key, bayKeyCommand(k)); err != nil {
+			return fmt.Errorf("bind %s: %w", k.Key, err)
+		}
+	}
+	return nil
+}
+
+// auxBayKeys returns the tmux commands that bind bay's global keys, such
+// as the ones that move between panes, in the right side's key table. The
+// view's own table passes them to the right side, where they act on the
+// window shown.
+func (v *View) auxBayKeys() string {
+	var b strings.Builder
+	for _, k := range v.BayKeys {
+		if k.Global && k.Table == "" {
+			fmt.Fprintf(&b, "bind-key -T %s %s %s\n", auxKeyTable, k.Key, k.Command)
+		}
+	}
+	return b.String()
+}
+
+// setBayDir records the folder of the bay shown on the right, or clears
+// it when the right side shows no bay.
+func (v *View) setBayDir(dir string) {
+	args := []string{"set-option", "-g", dirOption, dir}
+	// The keys' commands quote the folder.
+	if dir == "" || strings.ContainsAny(dir, "'\"\\$`") {
+		args = []string{"set-option", "-gu", dirOption}
+	}
+	_, _ = v.Tmux(args...)
 }
 
 // The key tables that read the mark after Option-' and Option-M.
@@ -583,7 +707,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	if err != nil {
 		return "", err
 	}
-	window, dock := "", ""
+	window, dock, dir := "", "", ""
 	switch {
 	case row.Desk:
 		if !v.has(deskTarget) {
@@ -597,6 +721,9 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 		if id, ok := v.BayWindow(row.Bays[0]); ok && v.inDock(bayDock, id) {
 			window = id
 			dock = bayDock
+			if v.BayDir != nil {
+				dir, _ = v.BayDir(row.Bays[0])
+			}
 		} else {
 			note = row.Bays[0] + " has no window; showing the record"
 		}
@@ -631,6 +758,7 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 	if dock != "" {
 		v.markSeen(dock, window)
 	}
+	v.setBayDir(dir)
 	// Remove the window shown before. unlink-window refuses to remove a
 	// window from the only session that holds it, so a window whose own
 	// session has gone stays here and keeps running.

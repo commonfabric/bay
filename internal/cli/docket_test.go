@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/commonfabric/bay/internal/docket"
@@ -119,5 +120,13 @@ func TestMarksAndHotlistMoveIntoTheRootItemsFolder(t *testing.T) {
 	}
 	if got := loadHotlist(dir); len(got) != 1 || got[0] != "bay-tool" {
 		t.Errorf("hotlist after save = %v", got)
+	}
+}
+
+func TestViewBayKeysAreAllOnesTheViewKnowsHowToBind(t *testing.T) {
+	for _, k := range viewBayKeys() {
+		if !k.Tmux && k.Verb != "run-shell" && !strings.HasPrefix(k.Verb, "display-popup") {
+			t.Errorf("key %s %s runs %q through %q, which the view does not bind", k.Table, k.Key, k.Command, k.Verb)
+		}
 	}
 }

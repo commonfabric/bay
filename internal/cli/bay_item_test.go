@@ -161,6 +161,9 @@ func TestRunItem_AllListsEveryLinkedBay(t *testing.T) {
 	if err := runItem(eng, &out, []string{"b2", "docket"}, itemFlags{dock: "labs", role: "helper", roleSet: true}); err != nil {
 		t.Fatal(err)
 	}
+	if err := eng.BaySetState("labs", "b2", "pr"); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	if err := runItem(eng, &out, nil, itemFlags{all: true, json: true}); err != nil {
 		t.Fatal(err)
@@ -169,7 +172,7 @@ func TestRunItem_AllListsEveryLinkedBay(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
 		t.Fatalf("%v: %s", err, out.String())
 	}
-	want := []itemRow{{"labs", "b1", "docket", ""}, {"labs", "b2", "docket", "helper"}}
+	want := []itemRow{{"labs", "b1", "docket", "", ""}, {"labs", "b2", "docket", "helper", "pr"}}
 	if !reflect.DeepEqual(rows, want) {
 		t.Errorf("rows = %+v, want %+v", rows, want)
 	}

@@ -196,6 +196,10 @@ Each bay has three identity concepts:
   one returns `did you mean "b1"?` with the canonical ID.
 - An optional **description** (see below) for richer context.
 
+A bay can also record the docket item it works on, and a **lifecycle
+state**: one mark, such as 🦚 for looking after an open PR, that the bay's
+session sets to say where the work is (see `bay state`).
+
 Together the ID and Name produce the bay's **canonical label**:
 - `home` for the home pseudo-bay,
 - `<id>` when the Name is empty (e.g. `b2`),
@@ -272,6 +276,31 @@ doesn't push the whole view sideways. Pipe the output or set
 `COLUMNS=200 bay tree` to force a wider description layout; piped output
 always uses the full 80-character description cap. Use `bay show`,
 `bay ls --json`, or `bay tree --json` for full names and branches.
+
+#### Lifecycle state
+
+A bay's session can record where the bay's work is with one mark, its
+lifecycle state. `bay state pr` sets it, `bay state` prints it, and
+`bay state --clear` removes it. A state is given by its word or its mark:
+
+| Mark | Word | Meaning |
+|------|------|---------|
+| 🧱 | `building` | Building |
+| 💬 | `answering` | Answering a question |
+| 🐤 | `judging` | Waiting for you to judge the result |
+| ✋ | `trying` | Waiting for you to try something by hand |
+| 📚 | `stacked` | Stacked on unmerged work |
+| 🦚 | `pr` | Looking after an open PR |
+| 👀 | `ci` | Watching CI |
+| 🪻 | `merged` | Merged and doing follow-ups |
+| 🚨 | `main` | Fixing a broken main branch |
+| 🫖 | `done` | Nothing left to do; the bay can be closed |
+
+The state is kept in bay's own record, so it stays when the session ends
+and when tmux restarts. It goes when the bay is closed. `bay show` shows
+it, and `bay show --json`, `bay ls --json`, `bay tree --json` and
+`bay item --all --json` carry it as `state` (`bay_state` in `--rows`
+output).
 
 ### Surfaces
 
@@ -720,6 +749,7 @@ bay item [id]                            # print the docket item the bay works o
 bay item [id] <name> [--role <role>]     # set the item (--replace to change an existing one)
 bay item [id] --clear                    # remove the item and role
 bay role [id] [<role>]                   # print or set the role (--clear = primary bay)
+bay state [id] [<state>]                 # print or set the lifecycle state (--clear removes it)
 bay item --all [--json]                  # every bay that names an item (fast; no git checks)
 bay new --item <name> [--role <role>]    # create a bay with its item and role
 bay ls                                   # list bays in current dock
@@ -933,6 +963,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
 | `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
 | `J` / `K` | Move down / up ten rows |
+| `r` | Move to the next row with the waiting mark, from the last row to the first |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
 | `Space` | Fold or unfold the area under the cursor |
@@ -962,7 +993,11 @@ Keys from either side of the `_docket` session:
 
 | Key | Action |
 |-----|--------|
-| `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
+| `Option+j` / `Option+k` | In the list, move down / up one row. In the right side, select the pane below / above in the window shown |
+| `Option+J` / `Option+K` | Move down / up one row, from either side. The keyboard stays where it is |
+| `Option+h` / `Option+l` | Move the keyboard to the list / to the right side |
+| `Option+r` | Move to the next row with the waiting mark, as `r` does |
+| `Option+g` | Move to the list and start a search, as `/` does |
 | `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
@@ -977,9 +1012,12 @@ The keys that move the cursor, fold, or use marks from either side work
 while the list is collapsed and while a pane of the view is zoomed. When the list cannot be
 seen, the row's name is shown for a moment at the bottom of the terminal.
 
-Every other key goes to the window on the right, including the tmux prefix
-and the other `Option` keys, so bay's keybindings act on the bay being
-shown. The `_docket` session has its own key table and no prefix; no other
+Bay's other `Option` keys, such as `Option+s`, `Option+a` and the
+`Option+o` menus, act on the bay shown on the right: the view binds
+them again to run from that bay's folder. With no bay shown they do
+nothing. `Option+p`, bay's command palette, is not offered in the view;
+it shows the notice "not in the docket view". Every other key goes to the
+window on the right, including the tmux prefix. The `_docket` session has its own key table and no prefix; no other
 session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default
