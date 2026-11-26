@@ -260,7 +260,7 @@ func TestSaveAndLoad(t *testing.T) {
 		},
 	})
 
-	if err := Save(path, original); err != nil {
+	if err := save(path, original); err != nil {
 		t.Fatal(err)
 	}
 
@@ -281,7 +281,7 @@ func TestSave_CreatesDirectories(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "dir", "manifest.json")
 
-	if err := Save(path, New()); err != nil {
+	if err := save(path, New()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -296,7 +296,7 @@ func TestSave_AtomicWrite(t *testing.T) {
 	// Save initial version
 	m := New()
 	m.Docks = append(m.Docks, Dock{Name: "first"})
-	if err := Save(path, m); err != nil {
+	if err := save(path, m); err != nil {
 		t.Fatal(err)
 	}
 
@@ -309,7 +309,7 @@ func TestSave_AtomicWrite(t *testing.T) {
 
 	// Save again — should create a backup of the first version.
 	m.Docks[0].Name = "second"
-	if err := Save(path, m); err != nil {
+	if err := save(path, m); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1573,7 +1573,7 @@ func TestSaveAndLoad_PreservesID(t *testing.T) {
 			{ID: "w3", Name: "alpha", Type: BayTypeWorktree, Path: "/repo-worktrees/w3"},
 		},
 	})
-	if err := Save(path, original); err != nil {
+	if err := save(path, original); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := Load(path)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/spf13/cobra"
 )
 
@@ -132,7 +133,7 @@ func TestSurfaceCommands_UseSurfaceCompletions(t *testing.T) {
 	defer os.Setenv("XDG_DATA_HOME", origXDG)
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	root := NewRootCmd("test")
 
@@ -182,7 +183,7 @@ func TestSurfaceCompletions(t *testing.T) {
 	defer os.Setenv("XDG_DATA_HOME", origXDG)
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	fn := surfaceCompletions()
 	completions, directive := fn(nil, nil, "")
@@ -236,7 +237,7 @@ func TestSurfaceCompletions_NoSelfAfterColon(t *testing.T) {
 	defer os.Setenv("XDG_DATA_HOME", origXDG)
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	fn := surfaceCompletions()
 	completions, _ := fn(nil, nil, "b1:")
@@ -267,7 +268,7 @@ func TestBayFlagCompletions(t *testing.T) {
 	defer os.Setenv("XDG_DATA_HOME", origXDG)
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	fn := bayFlagCompletions()
 	// Pass non-empty args — flag completers must NOT short-circuit on args.
@@ -306,7 +307,7 @@ func TestDockFlagCompletions(t *testing.T) {
 	defer os.Setenv("XDG_DATA_HOME", origXDG)
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	fn := dockFlagCompletions()
 	// Pass non-empty args — flag completers must NOT short-circuit on args.
@@ -380,7 +381,7 @@ func TestBayCompletions(t *testing.T) {
 			},
 		},
 	}
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	// Override the default data dir via env
 	origXDG := os.Getenv("XDG_DATA_HOME")
@@ -448,7 +449,7 @@ func TestDockCompletions(t *testing.T) {
 
 	bayDir := filepath.Join(dir, "bay")
 	os.MkdirAll(bayDir, 0o755)
-	manifest.Save(filepath.Join(bayDir, "manifest.json"), m)
+	manifesttest.Save(filepath.Join(bayDir, "manifest.json"), m)
 
 	fn := dockCompletions()
 	completions, _ := fn(nil, nil, "")

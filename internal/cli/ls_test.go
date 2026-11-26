@@ -9,6 +9,7 @@ import (
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/git"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/tmux"
 )
 
@@ -37,7 +38,7 @@ func testListEngine(t *testing.T) (*engine.Engine, string) {
 	mockGit.SetGlobalIgnored(true)
 
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, &manifest.Manifest{
+	manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "labs", Path: repoDir, Agent: "claude", Bays: []manifest.Bay{}},
