@@ -69,3 +69,17 @@ func TestLoadItemsWithBays(t *testing.T) {
 		t.Errorf("with a manifest: %v", got)
 	}
 }
+
+func TestApplyBayLinks_ABayNamingAnOldNameIsABayOfTheItem(t *testing.T) {
+	items := map[string]Item{
+		"survive": {Name: "survive", Aliases: []string{"restart"}},
+	}
+	ApplyBayLinks(items, []BayLink{
+		{Ref: "loom/b3", Item: "restart", Role: "review"},
+		{Ref: "loom/b4", Item: "survive"},
+	})
+	want := []Site{{"bay", "loom/b4"}, {"bay", "loom/b3"}}
+	if got := items["survive"].Sites; !reflect.DeepEqual(got, want) {
+		t.Errorf("sites = %v, want %v", got, want)
+	}
+}

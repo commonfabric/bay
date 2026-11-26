@@ -878,7 +878,10 @@ when the person presses `>` or `<`, closes an item or a bay when the
 person presses `x` or `X`. It keeps its marks and hotlist in
 docket's root item folder (`items/_root/marks.json` and `hotlist.json`),
 and the list's width in bay's data folder. The root of docket's tree is the
-item `_root`; the list's first row, the desk, stands for it.
+item `_root`; the list's first row, the desk, stands for it. An item that
+`docket rename` renamed keeps its old names in `aliases` in its
+`item.json`. A bay whose item is an old name is shown under the item, and
+the view's marks, hotlist, folds and cursor move to the new name.
 
 ### Surface commands
 

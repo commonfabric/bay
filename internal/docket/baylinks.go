@@ -28,13 +28,16 @@ func BayLinksFromManifest(m *manifest.Manifest) []BayLink {
 // ApplyBayLinks replaces each item's bay sites with the bays that name the
 // item, primary bay first. Sites of other kinds are kept. Bay holds the
 // link between a bay and its item; the bay sites in docket's own records
-// are not read.
+// are not read. A bay that names an old name of an item is a bay of that
+// item.
 func ApplyBayLinks(items map[string]Item, links []BayLink) {
+	renames := Renames(items)
 	byItem := map[string][]Site{}
 	for _, primary := range []bool{true, false} {
 		for _, l := range links {
 			if (l.Role == "") == primary {
-				byItem[l.Item] = append(byItem[l.Item], Site{Kind: "bay", Ref: l.Ref})
+				name := Renamed(l.Item, renames)
+				byItem[name] = append(byItem[name], Site{Kind: "bay", Ref: l.Ref})
 			}
 		}
 	}
