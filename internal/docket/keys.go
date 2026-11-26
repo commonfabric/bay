@@ -18,9 +18,11 @@ const KeysHelp = `In the list:
   Enter           move to the right side, also from an area
   Space           fold or unfold the area under the cursor
   u               unfold every area; u again puts the folds back
-  /               search by name, title or bay in the levels shown, folded
-                  areas included. The cursor moves to the first match
-                  as you type, and the right side stays as it is. Enter
+  /               search the text the rows show (an item's name, an
+                  area's title, a bay on its own row) in the levels
+                  shown, folded areas included. The cursor moves to
+                  the first match as you type, and the right side
+                  stays as it is. Enter
                   keeps the search, shows the cursor's row and sets n and
                   p to go between matches; Esc returns the cursor and the
                   folds. A match in a folded area unfolds it. The line

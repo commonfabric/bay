@@ -976,14 +976,40 @@ func (s *Sidebar) typeFilter(key string) Action {
 	return None
 }
 
-// rowMatches reports whether the search text is in the name, title or bays
-// of an item's or area's row. A bay's row and the desk match nothing.
+// searchable reports whether a span of a row holds text that a search looks
+// in and highlights: an item's name, an area's title, or a bay.
+func searchable(span Span) bool {
+	return (span.Style == "" || span.Style == "area" || span.Style == "bay") && strings.TrimSpace(span.Text) != ""
+}
+
+// rowMatches reports whether the search text is in the text the row shows:
+// an item's name, an area's title, or the bay on a bay's row.
 func rowMatches(r Row, text string) bool {
-	if r.Desk || r.Bay != "" || text == "" {
+	if r.Desk || text == "" {
 		return false
 	}
-	all := r.Name + " " + r.Title + " " + strings.Join(r.Bays, " ")
-	return strings.Contains(strings.ToLower(all), strings.ToLower(text))
+	needle := strings.ToLower(text)
+	for _, span := range baseSpans(r) {
+		if searchable(span) && strings.Contains(strings.ToLower(span.Text), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRows returns the indexes of the rows that match the text. An item
+// and its bay rows are one match, at the first of them that matches.
+func matchRows(rows []Row, text string) []int {
+	var out []int
+	last := ""
+	for k, r := range rows {
+		item, _, _ := strings.Cut(r.Name, " ")
+		if !rowMatches(r, text) || (r.Bay != "" && item == last) {
+			continue
+		}
+		out, last = append(out, k), item
+	}
+	return out
 }
 
 // unfoldedTree returns the rows of the items under their areas at the
@@ -1001,11 +1027,10 @@ func (s *Sidebar) unfoldedTree(levels int) []Row {
 // match the text in the levels up to the given one. It looks inside folded
 // areas.
 func (s *Sidebar) searchHits(text string, levels int) []string {
+	rows := s.unfoldedTree(levels)
 	var hits []string
-	for _, r := range s.unfoldedTree(levels) {
-		if rowMatches(r, text) {
-			hits = append(hits, r.Name)
-		}
+	for _, k := range matchRows(rows, text) {
+		hits = append(hits, rows[k].Name)
 	}
 	return hits
 }
@@ -1026,10 +1051,7 @@ func (s *Sidebar) nextMatch(text, from string, dir int, here bool) (name string,
 	}
 	s.wrapped = ""
 	pick, wrap := -1, -1
-	for k := range rows {
-		if !rowMatches(rows[k], text) {
-			continue
-		}
+	for _, k := range matchRows(rows, text) {
 		ahead := k > at || (here && k == at)
 		if dir < 0 {
 			ahead = k < at
@@ -1220,7 +1242,11 @@ func (s *Sidebar) searchStatus() string {
 	hits := s.searchHits(s.search, s.levels)
 	out := "/" + s.search
 	here, _, _ := strings.Cut(s.Current().Name, " ")
-	switch at := slices.Index(hits, here); {
+	at := slices.IndexFunc(hits, func(name string) bool {
+		item, _, _ := strings.Cut(name, " ")
+		return item == here
+	})
+	switch {
 	case len(hits) == 0:
 		out += " no match"
 	case at >= 0:
@@ -1234,8 +1260,8 @@ func (s *Sidebar) searchStatus() string {
 	return out
 }
 
-// highlight splits the spans that hold names and titles so that the text
-// found is drawn in the style "match".
+// highlight splits the spans that a search looks in so that the text found
+// is drawn in the style "match".
 func highlight(spans []Span, text string) []Span {
 	if text == "" {
 		return spans
@@ -1244,8 +1270,7 @@ func highlight(spans []Span, text string) []Span {
 	var out []Span
 	for _, span := range spans {
 		lower := strings.ToLower(span.Text)
-		if (span.Style != "" && span.Style != "area" && span.Style != "bay") ||
-			strings.TrimSpace(span.Text) == "" || len(lower) != len(span.Text) {
+		if !searchable(span) || len(lower) != len(span.Text) {
 			out = append(out, span)
 			continue
 		}

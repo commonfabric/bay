@@ -2271,16 +2271,71 @@ func TestSearchWithNoMatchLeavesTheCursorAndTheEarlierSearch(t *testing.T) {
 
 func TestSearchCountsMatchesInLevelsNotShown(t *testing.T) {
 	s := NewSidebar(tree())
-	// "pe" is in the area people, at the front, and in the title of images,
-	// at the back.
-	for _, key := range []string{"/", "p", "e", "enter"} {
+	// "es" is in restart, at the front, and in images, at the back.
+	for _, key := range []string{"/", "e", "s", "enter"} {
 		s.Key(key)
 	}
-	if s.Current().Name != "people" {
+	if s.Current().Name != "restart" {
 		t.Fatalf("on %s", s.Current().Name)
 	}
-	if bar := lastButOne(s); !strings.Contains(bar, "/pe 1 of 1, 1 more in other levels") {
+	if bar := lastButOne(s); !strings.Contains(bar, "/es 1 of 1, 1 more in other levels") {
 		t.Errorf("bar = %q", bar)
+	}
+}
+
+func TestSearchMatchesOnlyTheTextARowShows(t *testing.T) {
+	s := NewSidebar(tree())
+	// "List survives a restart" is restart's title, which its row does not
+	// show; restart's one bay, loom/b7, is not shown either.
+	for _, query := range []string{"list", "b7"} {
+		for _, key := range append(append([]string{"/"}, strings.Split(query, "")...), "enter") {
+			s.Key(key)
+		}
+		if s.Notice() != "no match for "+query {
+			t.Errorf("%s: notice %q on %s", query, s.Notice(), s.Current().Name)
+		}
+	}
+	// A bay that has its own row is shown, so it matches, and the cursor
+	// goes to that row.
+	for _, key := range []string{"/", "b", "1", "9", "enter"} {
+		s.Key(key)
+	}
+	if s.Current().Name != "sidebar loom/b19" {
+		t.Errorf("b19: on %s", s.Current().Name)
+	}
+	// An item and its bay rows are one match, at the first row that
+	// matches: "b" is in sidebar and in both its bays.
+	s.Key("g")
+	for _, key := range []string{"/", "s", "i", "d", "e", "b", "enter"} {
+		s.Key(key)
+	}
+	if bar := lastButOne(s); !strings.Contains(bar, "/sideb 1 of 1") {
+		t.Errorf("bar = %q", bar)
+	}
+}
+
+func TestSearchHighlightsEveryMatchItCounts(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("a") // front and back: images is listed too
+	for _, key := range []string{"/", "e", "enter"} {
+		s.Key(key)
+	}
+	lines, _ := s.RenderLines(60, 16)
+	highlighted := map[string]bool{}
+	for k, line := range lines {
+		if k >= len(s.Rows()) {
+			break
+		}
+		for _, span := range line.Spans {
+			if span.Style == "match" {
+				highlighted[s.Rows()[k].Name] = true
+			}
+		}
+	}
+	for _, r := range s.Rows() {
+		if rowMatches(r, "e") != highlighted[r.Name] {
+			t.Errorf("%s: matches %v, highlighted %v", r.Name, rowMatches(r, "e"), highlighted[r.Name])
+		}
 	}
 }
 
