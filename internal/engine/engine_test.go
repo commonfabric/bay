@@ -10,6 +10,7 @@ import (
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/git"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/tmux"
 )
 
@@ -40,7 +41,7 @@ func testEngine(t *testing.T) (*Engine, string) {
 	eng := New(cfg, configPath, manifestPath, archivePath, mockTmux, mockGit)
 
 	// Set up docks in the manifest (they now own their checkout path).
-	manifest.Save(manifestPath, &manifest.Manifest{
+	manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "labs", Path: repoDir, Agent: "claude", Bays: []manifest.Bay{}},
@@ -266,7 +267,7 @@ func TestDockNew_RollbackRestoresExistingConfig(t *testing.T) {
 			t.Fatalf("LoadManifest: %v", err)
 		}
 		m.Docks = append(m.Docks, manifest.Dock{Name: "other", Path: researchDir})
-		if err := manifest.Save(eng.manifestPath, m); err != nil {
+		if err := manifesttest.Save(eng.manifestPath, m); err != nil {
 			t.Fatalf("SaveManifest: %v", err)
 		}
 		return 0, nil
@@ -393,7 +394,7 @@ func TestRecover_RelaunchesHostTerminal(t *testing.T) {
 	m, _ := eng.LoadManifest()
 	dock := m.FindDock("labs")
 	dock.Host = &manifest.GUIAttrs{AppCommand: "ghostty", PID: 0}
-	eng.saveManifest(m)
+	manifesttest.Save(eng.manifestPath, m)
 
 	eng.Config.Docks["labs"] = config.DockConfig{
 		Terminal: "ghostty",
@@ -433,7 +434,7 @@ func TestRecover_HostTerminalFailureIsWarning(t *testing.T) {
 	m, _ := eng.LoadManifest()
 	dock := m.FindDock("labs")
 	dock.Host = &manifest.GUIAttrs{AppCommand: "ghostty", PID: 0}
-	eng.saveManifest(m)
+	manifesttest.Save(eng.manifestPath, m)
 
 	eng.Config.Docks["labs"] = config.DockConfig{
 		Terminal: "ghostty",
@@ -589,7 +590,7 @@ func TestBayNew_RequireAgentUsesProbeWhenNoDockDefault(t *testing.T) {
 
 	m, _ := eng.LoadManifest()
 	m.FindDock("labs").Agent = ""
-	if err := eng.saveManifest(m); err != nil {
+	if err := manifesttest.Save(eng.manifestPath, m); err != nil {
 		t.Fatalf("saveManifest: %v", err)
 	}
 	eng.Config.DefaultAgent = ""
@@ -940,6 +941,29 @@ func TestBayClose_Worktree(t *testing.T) {
 	}
 }
 
+func TestBayClose_LeavesAnUnreadableArchiveAlone(t *testing.T) {
+	eng, _ := testEngine(t)
+	if _, err := eng.BayNew(BayNewOptions{Dock: "labs"}); err != nil {
+		t.Fatalf("BayNew failed: %v", err)
+	}
+	damaged := []byte("{not json")
+	if err := os.WriteFile(eng.archivePath, damaged, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := eng.BayClose("labs", "b1", false); err != nil {
+		t.Fatalf("BayClose failed: %v", err)
+	}
+
+	got, err := os.ReadFile(eng.archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(damaged) {
+		t.Errorf("archive was replaced: %q", got)
+	}
+}
+
 func TestBayClose_DeletesPushedBranch(t *testing.T) {
 	eng, _ := testEngine(t)
 
@@ -1274,7 +1298,7 @@ func TestBayTidy_ClearsAutoDescription(t *testing.T) {
 	b.DescriptionSource = manifest.DescriptionSourceAuto
 	b.DescriptionSummarizedAt = 123
 	b.DescriptionInputHash = "sha256:x"
-	if err := manifest.Save(mp, m); err != nil {
+	if err := manifesttest.Save(mp, m); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1304,7 +1328,7 @@ func TestBayTidy_PreservesUserDescription(t *testing.T) {
 	b := m.FindDock("labs").FindBayByID(bay.ID)
 	b.Description = "My deliberate brief"
 	b.DescriptionSource = manifest.DescriptionSourceUser
-	if err := manifest.Save(mp, m); err != nil {
+	if err := manifesttest.Save(mp, m); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1334,7 +1358,7 @@ func TestBayTidy_ClearsAutoDescriptionWhenAlreadyDetached(t *testing.T) {
 	b := m.FindDock("labs").FindBayByID(bay.ID)
 	b.Description = "Old merged task"
 	b.DescriptionSource = manifest.DescriptionSourceAuto
-	if err := manifest.Save(mp, m); err != nil {
+	if err := manifesttest.Save(mp, m); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2506,7 +2530,7 @@ func TestDockInit_ErrorsWithoutCheckoutPath(t *testing.T) {
 
 	// Hand-edited manifests can lack a checkout path; report it rather
 	// than claiming success.
-	manifest.Save(filepath.Join(dir, "manifest.json"), &manifest.Manifest{
+	manifesttest.Save(filepath.Join(dir, "manifest.json"), &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks:   []manifest.Dock{{Name: "pathless", Bays: []manifest.Bay{}}},
 	})
@@ -3588,7 +3612,7 @@ func TestResolveSelf_SymlinkedPath(t *testing.T) {
 	m.Docks[0].Bays = []manifest.Bay{
 		{Name: "linked", Path: linkBay},
 	}
-	if err := manifest.Save(eng.manifestPath, m); err != nil {
+	if err := manifesttest.Save(eng.manifestPath, m); err != nil {
 		t.Fatalf("save manifest: %v", err)
 	}
 

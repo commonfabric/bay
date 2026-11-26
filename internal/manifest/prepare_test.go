@@ -72,7 +72,7 @@ func TestSave_WritesV7EmptyPrepareArrays(t *testing.T) {
 			},
 		},
 	}
-	if err := Save(path, m); err != nil {
+	if err := save(path, m); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	data, err := os.ReadFile(path)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/tmux"
 )
 
@@ -106,7 +107,7 @@ func setupCWDvsSession(t *testing.T) (*engine.Engine, *tmux.Mock) {
 	m.Docks = append(m.Docks, manifest.Dock{
 		Name: "otherdock", Path: otherRepo, Agent: "claude", Bays: []manifest.Bay{},
 	})
-	if err := manifest.Save(manifestPath, m); err != nil {
+	if err := manifesttest.Save(manifestPath, m); err != nil {
 		t.Fatalf("save manifest: %v", err)
 	}
 

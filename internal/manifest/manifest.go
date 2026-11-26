@@ -707,32 +707,6 @@ func Load(path string) (*Manifest, error) {
 	return Parse(data)
 }
 
-// Save writes the manifest to a file with file locking.
-// Save writes the manifest to disk. Before overwriting, backs up the
-// current version to the backups/ directory (at most once per minute).
-func Save(path string, m *Manifest) error {
-	return WithLock(path, func() error {
-		// Rolling backup before overwriting.
-		BackupIfNeeded(path)
-		ensureV7Defaults(m)
-
-		data, err := json.MarshalIndent(m, "", "  ")
-		if err != nil {
-			return fmt.Errorf("encoding manifest: %w", err)
-		}
-
-		// Atomic write: write to temp, then rename.
-		tmpPath := path + ".tmp"
-		if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
-			return fmt.Errorf("writing manifest: %w", err)
-		}
-		if err := os.Rename(tmpPath, path); err != nil {
-			return fmt.Errorf("renaming manifest: %w", err)
-		}
-		return nil
-	})
-}
-
 // LockedUpdate atomically loads the manifest, calls fn for modifications, and saves.
 func LockedUpdate(path string, fn func(m *Manifest) error) error {
 	return LockedUpdateMaybe(path, func(m *Manifest) (bool, error) {
@@ -796,11 +770,6 @@ func LockedUpdateMaybe(path string, fn func(m *Manifest) (bool, error)) error {
 // LoadArchive reads the archive file.
 func LoadArchive(path string) (*Manifest, error) {
 	return Load(path)
-}
-
-// SaveArchive writes the archive file with locking.
-func SaveArchive(path string, m *Manifest) error {
-	return Save(path, m)
 }
 
 // AllBays returns all bays across all docks, sorted by dock then bay name.

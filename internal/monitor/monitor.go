@@ -320,16 +320,10 @@ func (m *Monitor) CheckOnce() error {
 
 	// Periodic background tasks (slower cadence than prompt checking).
 	m.cycle++
-	manifestDirty := false
-
 	if m.git != nil && m.cycle%MergeCheckCycles == 0 {
-		if m.detectMerges(mf) {
-			manifestDirty = true
+		if merged := m.detectMerges(mf); len(merged) > 0 {
+			_ = recordMerges(m.manifestPath, merged)
 		}
-	}
-
-	if manifestDirty {
-		_ = manifest.Save(m.manifestPath, mf)
 	}
 
 	// Auto-description dispatch (detached workers; reads mf, never
@@ -517,12 +511,18 @@ func (m *Monitor) detectPRs(mf *manifest.Manifest) bool {
 	return changed
 }
 
+// mergedBay names a bay whose branch was found merged into the default branch.
+type mergedBay struct {
+	dock, id, name, branch string
+}
+
 // detectMerges checks active bays for branches merged into default.
 // Only checks bays with recent activity (within activityWindow).
-// Performs git fetch before merge check. Returns true if any status changed.
-func (m *Monitor) detectMerges(mf *manifest.Manifest) bool {
+// Performs git fetch before merge check. Marks the bays merged in mf and
+// returns them, for recordMerges to write to the manifest.
+func (m *Monitor) detectMerges(mf *manifest.Manifest) []mergedBay {
 	now := time.Now().Unix()
-	changed := false
+	var merged []mergedBay
 
 	// Collect repos that need fetching (deduplicate).
 	fetched := map[string]bool{}
@@ -548,16 +548,42 @@ func (m *Monitor) detectMerges(mf *manifest.Manifest) bool {
 				fetched[bay.Path] = true
 			}
 
-			merged, err := m.git.IsMergedIntoDefault(bay.Path, bay.Worktree.Branch)
-			if err != nil || !merged {
+			isMerged, err := m.git.IsMergedIntoDefault(bay.Path, bay.Worktree.Branch)
+			if err != nil || !isMerged {
 				continue
 			}
 
 			bay.Worktree.Merged = true
-			changed = true
+			merged = append(merged, mergedBay{dock: dock.Name, id: bay.ID, name: bay.Name, branch: bay.Worktree.Branch})
 		}
 	}
-	return changed
+	return merged
+}
+
+// recordMerges marks the given bays merged in the manifest on disk. It
+// reads the manifest under the lock, so changes other commands made since
+// the monitor's own read are kept. A bay that has since closed, or whose
+// branch has changed, is left alone.
+func recordMerges(path string, merged []mergedBay) error {
+	return manifest.LockedUpdateMaybe(path, func(mf *manifest.Manifest) (bool, error) {
+		changed := false
+		for _, b := range merged {
+			dock := mf.FindDock(b.dock)
+			if dock == nil {
+				continue
+			}
+			bay := dock.FindBayByID(b.id)
+			if b.id == "" {
+				bay = dock.FindBay(b.name)
+			}
+			if bay == nil || bay.Worktree == nil || bay.Worktree.Branch != b.branch || bay.Worktree.Merged {
+				continue
+			}
+			bay.Worktree.Merged = true
+			changed = true
+		}
+		return changed, nil
+	})
 }
 
 // hasMonitorableSurface returns true if the surface is an agent or cmd that should be monitored.

@@ -506,21 +506,18 @@ func (e *Engine) removeBayState(dockName, bayID string, force bool, additionalCl
 
 	// Archive the bay. Disambiguate name if it already exists
 	// in the archive (same bay closed and recreated before).
-	archive, err := manifest.LoadArchive(e.archivePath)
-	if err != nil {
-		archive = manifest.New()
-	}
-	archiveDock := archive.FindDock(dockName)
-	if archiveDock == nil {
-		_ = archive.AddDock(manifest.Dock{Name: dockName})
-		archiveDock = archive.FindDock(dockName)
-	}
-	archived := *bay
-	for i := 2; archiveDock.FindBay(archived.Name) != nil; i++ {
-		archived.Name = fmt.Sprintf("%s-%d", bay.Name, i)
-	}
-	_ = archiveDock.AddBay(archived)
-	_ = manifest.SaveArchive(e.archivePath, archive)
+	_ = manifest.LockedUpdate(e.archivePath, func(archive *manifest.Manifest) error {
+		archiveDock := archive.FindDock(dockName)
+		if archiveDock == nil {
+			_ = archive.AddDock(manifest.Dock{Name: dockName})
+			archiveDock = archive.FindDock(dockName)
+		}
+		archived := *bay
+		for i := 2; archiveDock.FindBay(archived.Name) != nil; i++ {
+			archived.Name = fmt.Sprintf("%s-%d", bay.Name, i)
+		}
+		return archiveDock.AddBay(archived)
+	})
 
 	// Remove from manifest atomically in case another command updated the dock.
 	if err := e.withManifest(func(m *manifest.Manifest) error {

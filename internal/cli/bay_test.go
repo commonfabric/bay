@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 )
 
 func TestFormatBayShort_AllFields(t *testing.T) {
@@ -40,7 +41,7 @@ func TestRunDescribeRejectsHomeReadOnly(t *testing.T) {
 		t.Fatalf("mkdir repo: %v", err)
 	}
 	manifestPath := filepath.Join(dir, "data", "bay", "manifest.json")
-	if err := manifest.Save(manifestPath, &manifest.Manifest{
+	if err := manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "labs", Path: repoDir, Bays: []manifest.Bay{}},
