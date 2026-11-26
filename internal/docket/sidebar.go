@@ -175,15 +175,15 @@ func (s *Sidebar) mark(pending, key string) Action {
 		}
 		return s.jump("''", s.back)
 	case (pending == "m" || pending == "M") && (digitKey(key) > 0 || key == "0"):
-		name := s.Current().Name
-		if pending == "M" && s.showing != "" {
-			name = s.showing
+		s.notice = "a digit is a place in the hotlist, not a mark; * adds or removes this row"
+		return None
+	case pending == "'" && digitKey(key) > 0:
+		from := s.Current().Name
+		action := s.jumpHot(digitKey(key))
+		if action == Show {
+			s.back = from
 		}
-		if n := digitKey(key); n == 0 || n > len(s.hotlist) || s.hotlist[n-1] != name {
-			s.notice = "a digit takes row " + key + " off the hotlist, on that row only; * adds or removes this row"
-			return None
-		}
-		return s.removeHot(name)
+		return action
 	case !markKey(key):
 		return None
 	case pending == "m" || pending == "M":

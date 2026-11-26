@@ -936,8 +936,8 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `view-hotlist.json` in docket's folder |
 | `1` to `9` | Go to that row of the hotlist. Numbers are positions, so they close up when a row leaves |
 | `[` and `]` | In the hotlist, move the row up or down. On any other row, move the item up or down among the shown items under the same parent, by running `docket set <item> --before <sibling>` or `--after <sibling>`; an item does not move to another parent |
-| `m` then a letter | Mark the row under the cursor with that letter. The mark is drawn at the end of the row as `'a`. On the row that has the mark, `m` and the letter take it off. `m` and a digit takes a row off the hotlist when it is the row in that place, and is refused on any other row. Marks are kept when the view is closed. A mark is forgotten when its item is closed or deleted. The `?` screen lists the marks that are set, above its legend |
-| `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `''` goes back to the row the last jump left |
+| `m` then a letter | Mark the row under the cursor with that letter. The mark is drawn at the end of the row as `'a`. On the row that has the mark, `m` and the letter take it off. `m` and a digit is refused with a notice: only `*` changes the hotlist. Marks are kept when the view is closed. A mark is forgotten when its item is closed or deleted. The `?` screen lists the marks that are set, above its legend |
+| `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `'` and a digit goes to that row of the hotlist, as the digit does. `''` goes back to the row the last jump left |
 | `a` | Show more levels: front, then front + back, then front + back + shelved |
 | `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
 | `B` | Show a row for every bay of every item and area, where `x` closes the bay. `B` again lists bays only for items with more than one |
@@ -958,7 +958,7 @@ Keys from either side of the `_docket` session:
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
-| `Option+'` and a letter | Go to a mark, as `'` does; `Option+'` then `'` returns to the row the last jump left |
+| `Option+'` and a letter | Go to a mark, or with a digit to that row of the hotlist, as `'` does; `Option+'` then `'` returns to the row the last jump left |
 | `Option+M` and a letter | Mark the row the right side shows, as `m` does; the same mark again takes it off |
 | `Option+1` to `Option+9` | Go to that row of the hotlist, as `1` to `9` do |
 | `Option+d` | Move between the list and the right side |

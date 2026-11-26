@@ -1975,24 +1975,39 @@ func TestADigitGoesToThatHotlistRowFromEitherSide(t *testing.T) {
 	}
 }
 
-func TestADigitMarkTakesARowOffTheHotlistOnlyOnItsOwnRow(t *testing.T) {
+func TestADigitAfterMIsRefusedAndAfterAQuoteGoesToThatHotlistRow(t *testing.T) {
 	s := NewSidebar(tree())
 	s.SetHotlist([]string{"restart", "tooling"})
 	s.Key("n") // restart, in its area
-	s.Key("m")
-	if a := s.Key("2"); a != None || s.Notice() == "" || len(s.Hotlist()) != 2 {
-		t.Fatalf("m 2 on another row: %v %q %v", a, s.Notice(), s.Hotlist())
+	for _, key := range []string{"1", "2"} {
+		s.Key("m")
+		if a := s.Key(key); a != None || s.Notice() == "" || hotNames(s) != "restart,tooling" || len(s.Marks()) != 0 {
+			t.Errorf("m %s: %v %q, hotlist %s, marks %v", key, a, s.Notice(), hotNames(s), s.Marks())
+		}
 	}
-	if len(s.Marks()) != 0 {
-		t.Errorf("a digit set a mark: %v", s.Marks())
-	}
+	s.Key("1") // restart, in the hotlist
 	s.Key("m")
-	if a := s.Key("1"); a != HotlistChanged || hotNames(s) != "tooling" {
-		t.Errorf("m 1 on its row: %v, hotlist %s", a, hotNames(s))
+	if a := s.Key("1"); a != None || hotNames(s) != "restart,tooling" {
+		t.Errorf("m 1 on hotlist row 1: %v, hotlist %s", a, hotNames(s))
+	}
+	// Option-M 2 from the right side: F12, m, 2.
+	s.Key("f12")
+	s.Key("m")
+	if a := s.Key("2"); a != None || hotNames(s) != "restart,tooling" {
+		t.Errorf("Option-M 2: %v, hotlist %s", a, hotNames(s))
+	}
+	s.Key("g")
+	s.Key("'")
+	if a := s.Key("2"); a != Show || s.Current().Name != "tooling" || !s.Current().HotRow {
+		t.Fatalf("' 2: %v on %+v", a, s.Current())
 	}
 	s.Key("'")
-	if a := s.Key("1"); a != None || len(s.Marks()) != 0 {
-		t.Errorf("' 1: %v %v", a, s.Marks())
+	if a := s.Key("'"); a != Show || !s.Current().Desk {
+		t.Errorf("'' after ' 2: %v on %+v", a, s.Current())
+	}
+	s.Key("'")
+	if a := s.Key("3"); a != None || s.Notice() == "" {
+		t.Errorf("' 3: %v %q", a, s.Notice())
 	}
 }
 
