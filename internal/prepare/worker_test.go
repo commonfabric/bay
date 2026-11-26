@@ -11,6 +11,7 @@ import (
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 )
 
 func TestWorker_RunTrueMarksStepReadyAndWritesLog(t *testing.T) {
@@ -469,7 +470,7 @@ func newWorkerHarness(t *testing.T, steps []config.BayPrepareConfig) workerHarne
 	}); err != nil {
 		t.Fatalf("AddBay: %v", err)
 	}
-	if err := manifest.Save(manifestPath, m); err != nil {
+	if err := manifesttest.Save(manifestPath, m); err != nil {
 		t.Fatalf("Save manifest: %v", err)
 	}
 

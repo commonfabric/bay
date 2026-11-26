@@ -56,11 +56,6 @@ func (e *Engine) LoadManifest() (*manifest.Manifest, error) {
 	return m, nil
 }
 
-// saveManifest saves the manifest with file locking.
-func (e *Engine) saveManifest(m *manifest.Manifest) error {
-	return manifest.Save(e.manifestPath, m)
-}
-
 // withManifest loads the manifest, passes it to fn for modification, and saves.
 // The entire read-modify-write cycle is done under a file lock.
 func (e *Engine) withManifest(fn func(m *manifest.Manifest) error) error {

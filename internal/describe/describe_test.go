@@ -12,6 +12,7 @@ import (
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/transcript"
 )
 
@@ -32,7 +33,7 @@ func writeManifest(t *testing.T, path string, bay manifest.Bay) {
 	t.Helper()
 	m := manifest.New()
 	m.Docks = append(m.Docks, manifest.Dock{Name: "labs", Path: "/repo", Bays: []manifest.Bay{bay}})
-	if err := manifest.Save(path, m); err != nil {
+	if err := manifesttest.Save(path, m); err != nil {
 		t.Fatal(err)
 	}
 }

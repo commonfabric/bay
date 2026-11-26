@@ -12,6 +12,7 @@ import (
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/git"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/tmux"
 )
 
@@ -290,7 +291,7 @@ func createTestManifest(t *testing.T, dir string, tmuxWindowID string) string {
 		},
 	}
 	path := filepath.Join(dir, "manifest.json")
-	if err := manifest.Save(path, m); err != nil {
+	if err := manifesttest.Save(path, m); err != nil {
 		t.Fatalf("saving test manifest: %v", err)
 	}
 	return path
@@ -319,7 +320,7 @@ func createShellOnlyManifest(t *testing.T, dir string, tmuxWindowID string) stri
 		},
 	}
 	path := filepath.Join(dir, "manifest.json")
-	if err := manifest.Save(path, m); err != nil {
+	if err := manifesttest.Save(path, m); err != nil {
 		t.Fatalf("saving test manifest: %v", err)
 	}
 	return path
@@ -576,7 +577,7 @@ func TestRun_CancelsOnContext(t *testing.T) {
 
 	manifestPath := filepath.Join(dir, "manifest.json")
 	m := manifest.New()
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	patternsPath := filepath.Join(dir, "waiting-patterns.txt")
 	os.WriteFile(patternsPath, []byte(""), 0o644)
@@ -650,7 +651,7 @@ func TestCheckOnce_RenamesWindowOnBranchChange(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	if err := manifest.Save(manifestPath, m); err != nil {
+	if err := manifesttest.Save(manifestPath, m); err != nil {
 		t.Fatalf("saving manifest: %v", err)
 	}
 
@@ -753,7 +754,7 @@ func TestCheckOnce_DetectsPR(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	// Configure mock: PR exists for this branch.
 	mockGit.SetPR("/tmp", "feature/login", "99")
@@ -801,7 +802,7 @@ func TestCheckOnce_PRCheckedAtPreventsRecheckWithinTTL(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	patternsPath := filepath.Join(dir, "waiting-patterns.txt")
 	os.WriteFile(patternsPath, []byte(""), 0o644)
@@ -848,7 +849,7 @@ func TestCheckOnce_SkipsPRDetectionForBayWithNoPath(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	patternsPath := filepath.Join(dir, "waiting-patterns.txt")
 	os.WriteFile(patternsPath, []byte(""), 0o644)
@@ -892,7 +893,7 @@ func TestCheckOnce_DetectsMergedBranch(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	// Configure: branch is merged into default.
 	mockGit.SetMerged("/tmp", "feature/done", true)
@@ -917,6 +918,105 @@ func TestCheckOnce_DetectsMergedBranch(t *testing.T) {
 	}
 }
 
+// gitWritingDuringFetch is a git mock whose Fetch runs a function first,
+// standing in for another command that changes the manifest while the
+// monitor is fetching.
+type gitWritingDuringFetch struct {
+	*git.Mock
+	during func()
+}
+
+func (g *gitWritingDuringFetch) Fetch(path string) error {
+	if g.during != nil {
+		g.during()
+		g.during = nil
+	}
+	return g.Mock.Fetch(path)
+}
+
+func TestCheckOnce_MergeKeepsChangesMadeDuringTheCheck(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "manifest.json")
+	m := manifest.New()
+	m.Docks = []manifest.Dock{{
+		Name: "dev",
+		Bays: []manifest.Bay{{
+			ID:         "b1",
+			Name:       "feature-bay",
+			Path:       "/tmp",
+			LastActive: time.Now().Unix(),
+			Worktree:   &manifest.WorktreeAttrs{Repo: "labs", Branch: "feature/done"},
+		}},
+	}}
+	if err := manifesttest.Save(manifestPath, m); err != nil {
+		t.Fatal(err)
+	}
+
+	mockGit := &gitWritingDuringFetch{Mock: git.NewMock()}
+	mockGit.SetMerged("/tmp", "feature/done", true)
+	patternsPath := filepath.Join(dir, "waiting-patterns.txt")
+	os.WriteFile(patternsPath, []byte(""), 0o644)
+	mon := NewWithGit(tmux.NewMock(), mockGit, manifestPath, patternsPath, filepath.Join(dir, "monitor.pid"), 1)
+
+	// While the merge check fetches, another command adds a bay.
+	mockGit.during = func() {
+		if err := manifest.LockedUpdate(manifestPath, func(mf *manifest.Manifest) error {
+			return mf.FindDock("dev").AddBay(manifest.Bay{ID: "b2", Name: "new-bay", Type: manifest.BayTypeWorktree})
+		}); err != nil {
+			t.Error(err)
+		}
+	}
+	for i := 0; i < MergeCheckCycles; i++ {
+		mon.CheckOnce()
+	}
+	if mockGit.during != nil {
+		t.Fatal("the merge check did not fetch")
+	}
+
+	updated, err := manifest.Load(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dock := updated.FindDock("dev")
+	if dock.FindBayByID("b2") == nil {
+		t.Error("the bay added during the merge check was lost")
+	}
+	if b := dock.FindBayByID("b1"); b == nil || !b.Worktree.Merged {
+		t.Error("feature-bay not marked merged")
+	}
+}
+
+func TestRecordMergesLeavesClosedAndRebranchedBaysAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	m := manifest.New()
+	m.Docks = []manifest.Dock{{
+		Name: "dev",
+		Bays: []manifest.Bay{{
+			ID:       "b1",
+			Name:     "reused",
+			Worktree: &manifest.WorktreeAttrs{Branch: "other-branch"},
+		}},
+	}}
+	if err := manifesttest.Save(path, m); err != nil {
+		t.Fatal(err)
+	}
+	err := recordMerges(path, []mergedBay{
+		{dock: "dev", id: "b1", name: "reused", branch: "feature/done"},
+		{dock: "dev", id: "b9", name: "closed", branch: "feature/gone"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, _ := manifest.Load(path)
+	dock := updated.FindDock("dev")
+	if len(dock.Bays) != 1 {
+		t.Errorf("bays = %d, want 1: a closed bay must not come back", len(dock.Bays))
+	}
+	if dock.FindBayByID("b1").Worktree.Merged {
+		t.Error("a bay now on another branch was marked merged")
+	}
+}
+
 func TestCheckOnce_SkipsMergeCheckForInactiveBay(t *testing.T) {
 	dir := t.TempDir()
 	mock := tmux.NewMock()
@@ -937,7 +1037,7 @@ func TestCheckOnce_SkipsMergeCheckForInactiveBay(t *testing.T) {
 		},
 	}
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, m)
+	manifesttest.Save(manifestPath, m)
 
 	mockGit.SetMerged("/tmp", "feature/old", true)
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/occupant"
 	"github.com/commonfabric/bay/internal/tmux"
 )
@@ -343,7 +344,7 @@ func TestRunWho_NoArgSkipsStalePaneRecord(t *testing.T) {
 	dock := m.FindDock("labs")
 	agent := dock.FindBayByID(b2.ID).FindSurface("agent")
 	dock.FindBayByID("b1").FindSurface("shell").Tmux.PaneID = agent.Tmux.PaneID
-	if err := manifest.Save(filepath.Join(dir, "manifest.json"), m); err != nil {
+	if err := manifesttest.Save(filepath.Join(dir, "manifest.json"), m); err != nil {
 		t.Fatal(err)
 	}
 	mockTmux.SetCurrentWindowID(agent.Tmux.WindowID)

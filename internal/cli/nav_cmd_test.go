@@ -11,6 +11,7 @@ import (
 	"github.com/commonfabric/bay/internal/engine"
 	"github.com/commonfabric/bay/internal/git"
 	"github.com/commonfabric/bay/internal/manifest"
+	"github.com/commonfabric/bay/internal/manifest/manifesttest"
 	"github.com/commonfabric/bay/internal/nav"
 	"github.com/commonfabric/bay/internal/tmux"
 )
@@ -35,7 +36,7 @@ func testNavEngine(t *testing.T) (*engine.Engine, *tmux.Mock, *git.Mock, string)
 	mockGit.SetGlobalIgnored(true)
 
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, &manifest.Manifest{
+	manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "labs", Path: repoDir, Agent: "claude", Bays: []manifest.Bay{}},
@@ -714,7 +715,7 @@ func TestAutoBootstrap_SkipsExistingDock(t *testing.T) {
 	mockGit.SetRepoRoot(resolvedRepo, resolvedRepo)
 
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, &manifest.Manifest{
+	manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "myproject", Path: resolvedRepo, Bays: []manifest.Bay{}},
@@ -766,7 +767,7 @@ func TestAutoBootstrap_ReusesExistingDockByCheckoutPath(t *testing.T) {
 	mockGit.SetRepoRoot(resolvedRepo, resolvedRepo)
 
 	manifestPath := filepath.Join(dir, "manifest.json")
-	manifest.Save(manifestPath, &manifest.Manifest{
+	manifesttest.Save(manifestPath, &manifest.Manifest{
 		Version: manifest.CurrentVersion,
 		Docks: []manifest.Dock{
 			{Name: "dev", Path: resolvedRepo, Bays: []manifest.Bay{}},
