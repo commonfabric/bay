@@ -2,12 +2,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/engine"
@@ -70,6 +72,9 @@ func newEngine() (*engine.Engine, error) {
 // them, in one docket command. It does nothing when docket is not installed. Docket's items name
 // the bays of the user's own bay state, so it also does nothing in a test
 // and when XDG_DATA_HOME points bay at other state.
+// docketTimeout bounds how long closing a bay waits for docket.
+const docketTimeout = 10 * time.Second
+
 func tellDocketBaysClosed(refs []string) {
 	if testing.Testing() {
 		return
@@ -84,7 +89,9 @@ func tellDocketBaysClosed(refs []string) {
 	if err != nil {
 		return
 	}
-	_ = exec.Command(docket, append([]string{"gone", "bay"}, refs...)...).Run()
+	ctx, cancel := context.WithTimeout(context.Background(), docketTimeout)
+	defer cancel()
+	_ = exec.CommandContext(ctx, docket, append([]string{"gone", "bay"}, refs...)...).Run()
 }
 
 const bayHelpTemplate = `Bay — bay management for tmux and git worktrees.

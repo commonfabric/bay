@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/detach"
@@ -392,11 +394,23 @@ func newDockCloseCmd() *cobra.Command {
 // runs it in a process of its own, so that the kills finish when bay
 // dock close runs in one of the windows being killed.
 func newDockCloseFinishCmd() *cobra.Command {
-	return &cobra.Command{
+	var output string
+	var caller int
+	cmd := &cobra.Command{
 		Use:    "close-finish <name>",
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// The caller reads and removes the output file when it is
+			// still running. When closing the dock killed it, the helper
+			// removes the file.
+			if output != "" && caller > 0 {
+				defer func() {
+					if syscall.Kill(caller, 0) != nil {
+						_ = os.Remove(output)
+					}
+				}()
+			}
 			eng, err := newEngine()
 			if err != nil {
 				return err
@@ -405,6 +419,9 @@ func newDockCloseFinishCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&output, "output", "", "the file the caller reads this command's output from")
+	cmd.Flags().IntVar(&caller, "caller", 0, "the process id of the command that started this one")
+	return cmd
 }
 
 // finishDockClose runs bay dock close-finish in a new session and waits
@@ -425,7 +442,7 @@ func finishDockClose(eng *engine.Engine, name string) error {
 	defer os.Remove(out.Name())
 	defer out.Close()
 
-	helper := exec.Command(exe, "dock", "close-finish", name)
+	helper := exec.Command(exe, "dock", "close-finish", name, "--output", out.Name(), "--caller", strconv.Itoa(os.Getpid()))
 	helper.Stdout = out
 	helper.Stderr = out
 	if err := detach.Start(helper); err != nil {

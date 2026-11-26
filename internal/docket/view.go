@@ -103,6 +103,22 @@ func (v *View) has(target string) bool {
 	return v.windowID(target) != ""
 }
 
+// inDock reports whether the window is one of the dock session's windows.
+// A window id kept from before a tmux server restart can name another
+// session's window.
+func (v *View) inDock(dock, window string) bool {
+	out, err := v.Tmux("list-windows", "-t", "="+dock, "-F", "#{window_id}")
+	if err != nil {
+		return false
+	}
+	for _, id := range strings.Fields(out) {
+		if id == window {
+			return true
+		}
+	}
+	return false
+}
+
 // auxWindows returns the ids of the windows in AuxSession.
 func (v *View) auxWindows() ([]string, error) {
 	out, err := v.Tmux("list-windows", "-t", auxTarget, "-F", "#{window_id}")
@@ -117,6 +133,12 @@ func (v *View) auxWindows() ([]string, error) {
 func (v *View) ensureAux() (started bool, err error) {
 	if v.has(recordTarget) {
 		return false, nil
+	}
+	if _, err := v.Tmux("has-session", "-t", "="+AuxSession); err == nil {
+		if _, err := v.Tmux("new-window", "-d", "-t", auxTarget, "-n", RecordWindow, recordWelcome); err != nil {
+			return false, fmt.Errorf("start the record window: %w", err)
+		}
+		return true, nil
 	}
 	if _, err := v.Tmux("new-session", "-d", "-s", AuxSession, "-n", RecordWindow, recordWelcome); err != nil {
 		return false, fmt.Errorf("start the record window: %w", err)
@@ -225,7 +247,7 @@ func (v *View) Setup() error {
 	}
 	// The table belongs to the view. Emptying it first removes keys that an
 	// earlier version bound.
-	if _, err := v.Tmux("unbind-key", "-a", "-T", KeyTable); err != nil {
+	if _, err := v.Tmux("unbind-key", "-q", "-a", "-T", KeyTable); err != nil {
 		return fmt.Errorf("clear the view's keys: %w", err)
 	}
 	for _, b := range binds {
@@ -482,11 +504,13 @@ func (v *View) viewerClient() (string, error) {
 // note says what was shown when that is not the bay window itself.
 // markSeen clears what selecting a window in its dock clears: bay's
 // waiting mark, and the bell flag on the dock's tab. tmux clears a tab's
-// bell flag only when the tab is selected, so when the flag is set the
-// window is selected in the dock's session and the window that was
-// current there is selected again. The dock's previous window, used by
-// tmux's last-window, becomes this window. The monitor sets the waiting
-// mark again while the agent's prompt is still on screen.
+// bell flag only when the tab becomes current, so when the flag is set the
+// window is made current in the dock's session and the window that was
+// current there is made current again. When the window is already
+// current, another window is made current first. A window that is
+// selected only to restore the dock keeps its waiting mark, which bay's
+// select hook would otherwise clear. The monitor sets the waiting mark
+// again while the agent's prompt is still on screen.
 func (v *View) markSeen(dock, window string) {
 	target := "=" + dock + ":" + window
 	_, _ = v.Tmux("set-window-option", "-t", target, "@bay-waiting", "0")
@@ -495,11 +519,40 @@ func (v *View) markSeen(dock, window string) {
 		return
 	}
 	current, err := v.Tmux("display-message", "-p", "-t", "="+dock+":", "#{window_id}")
-	if err != nil || strings.TrimSpace(current) == "" {
+	current = strings.TrimSpace(current)
+	if err != nil || current == "" {
 		return
 	}
-	if _, err := v.Tmux("select-window", "-t", target); err == nil {
-		_, _ = v.Tmux("select-window", "-t", "="+dock+":"+strings.TrimSpace(current))
+	if current != window {
+		if _, err := v.Tmux("select-window", "-t", target); err == nil {
+			v.selectKeepingMark(dock, current)
+		}
+		return
+	}
+	windows, err := v.Tmux("list-windows", "-t", "="+dock, "-F", "#{window_id}")
+	if err != nil {
+		return
+	}
+	for _, other := range strings.Fields(windows) {
+		if other != window {
+			v.selectKeepingMark(dock, other)
+			_, _ = v.Tmux("select-window", "-t", target)
+			return
+		}
+	}
+}
+
+// selectKeepingMark makes a window current in its dock and keeps its
+// waiting mark as it was.
+func (v *View) selectKeepingMark(dock, window string) {
+	target := "=" + dock + ":" + window
+	mark, err := v.Tmux("display-message", "-p", "-t", target, "#{@bay-waiting}")
+	mark = strings.TrimSpace(mark)
+	if _, err := v.Tmux("select-window", "-t", target); err != nil {
+		return
+	}
+	if err == nil && mark != "" && mark != "0" {
+		_, _ = v.Tmux("set-window-option", "-t", target, "@bay-waiting", mark)
 	}
 }
 
@@ -535,9 +588,10 @@ func (v *View) Show(row Row, focus bool) (note string, err error) {
 		}
 		window = v.windowID(deskTarget)
 	case len(row.Bays) > 0:
-		if id, ok := v.BayWindow(row.Bays[0]); ok && v.has(id) {
+		bayDock, _, _ := strings.Cut(row.Bays[0], "/")
+		if id, ok := v.BayWindow(row.Bays[0]); ok && v.inDock(bayDock, id) {
 			window = id
-			dock, _, _ = strings.Cut(row.Bays[0], "/")
+			dock = bayDock
 		} else {
 			note = row.Bays[0] + " has no window; showing the record"
 		}

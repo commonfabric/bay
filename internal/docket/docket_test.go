@@ -516,14 +516,15 @@ func TestRenderKeepsTheCursorInViewAndClipsLongLines(t *testing.T) {
 // fakeTmux records the commands a View runs and answers the reads it makes.
 type fakeTmux struct {
 	calls   []string
-	exists  map[string]bool // window ids and "=session:window" targets that exist
-	panes   int             // panes in the view window: the sidebar, then the client
-	noList  bool            // the sidebar's pane has gone and the client's remains
-	clients string          // ttys list-clients prints
-	aux     []string        // ids of the linked windows in the aux session
-	stuck   map[string]bool // ids unlink-window refuses to remove
-	bell    map[string]bool // "=session:window" targets whose tab has the bell flag
-	oldAux  bool            // the right pane's client was started for the session's old name
+	exists  map[string]bool   // window ids and "=session:window" targets that exist
+	panes   int               // panes in the view window: the sidebar, then the client
+	noList  bool              // the sidebar's pane has gone and the client's remains
+	clients string            // ttys list-clients prints
+	aux     []string          // ids of the linked windows in the aux session
+	stuck   map[string]bool   // ids unlink-window refuses to remove
+	bell    map[string]bool   // "=session:window" targets whose tab has the bell flag
+	oldAux  bool              // the right pane's client was started for the session's old name
+	waiting map[string]string // "=session:window" targets and their @bay-waiting value
 }
 
 func (f *fakeTmux) run(args ...string) (string, error) {
@@ -538,9 +539,28 @@ func (f *fakeTmux) run(args ...string) (string, error) {
 			return "0\n", nil
 		case "#{window_id}":
 			return "@3\n", nil
+		case "#{@bay-waiting}":
+			return f.waiting[args[3]] + "\n", nil
 		}
 		return "/dev/ttys9\n", nil
+	case "has-session":
+		for target := range f.exists {
+			if strings.HasPrefix(target, args[2]+":") {
+				return "", nil
+			}
+		}
+		return "", fmt.Errorf("can't find session")
 	case "list-windows":
+		if args[1] == "-t" && args[2] != auxTarget {
+			// A dock's windows: its bay windows, and @3, its current window.
+			out := "@3\n"
+			for target := range f.exists {
+				if strings.HasPrefix(target, "@") && target != "@3" {
+					out += target + "\n"
+				}
+			}
+			return out, nil
+		}
 		if args[1] == "-t" {
 			out := ""
 			if f.exists[recordTarget] {
@@ -689,7 +709,7 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}()
 	emptied := 0
 	for _, c := range f.calls {
-		if c == "unbind-key -a -T docket" {
+		if c == "unbind-key -q -a -T docket" {
 			emptied++
 		}
 	}
@@ -1717,5 +1737,68 @@ func TestSetupKeepsARightPaneStartedForTheOldSessionName(t *testing.T) {
 	}
 	if f.ran("split-window") != 0 {
 		t.Errorf("a pane was started: %v", f.calls)
+	}
+}
+
+func selectsIn(calls []string) string {
+	var selects []string
+	for _, c := range calls {
+		if strings.HasPrefix(c, "select-window") || strings.HasPrefix(c, "set-window-option") {
+			selects = append(selects, c)
+		}
+	}
+	return strings.Join(selects, "|")
+}
+
+func TestShowKeepsTheWaitingMarkOfTheWindowItSelectsAgain(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@9": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n",
+		bell: map[string]bool{"=loom:@9": true}, waiting: map[string]string{"=loom:@3": "1"}}
+	v := newFakeView(f)
+	if _, err := v.Show(Row{Name: "other", Bays: []string{"loom/b9"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	want := "set-window-option -t =loom:@9 @bay-waiting 0|select-window -t =loom:@9|select-window -t =loom:@3|set-window-option -t =loom:@3 @bay-waiting 1"
+	if got := selectsIn(f.calls); got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestShowClearsTheBellOfTheDocksCurrentWindow(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@3": true, "@9": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n",
+		bell: map[string]bool{"=loom:@3": true}}
+	v := newFakeView(f)
+	v.BayWindow = func(string) (string, bool) { return "@3", true }
+	if _, err := v.Show(Row{Name: "current", Bays: []string{"loom/b3"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	want := "set-window-option -t =loom:@3 @bay-waiting 0|select-window -t =loom:@9|select-window -t =loom:@3"
+	if got := selectsIn(f.calls); got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestShowRefusesAWindowThatIsNotInTheBaysDock(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{recordTarget: true}, panes: 2, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	// @7 exists, but as a window of the view's own session, not of loom.
+	f.exists["=_docket:view"] = true
+	v.BayWindow = func(string) (string, bool) { return "@view", true }
+	note, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note != "loom/b7 has no window; showing the record" || f.ran("link-window") != 0 {
+		t.Errorf("note %q, calls %v", note, f.calls)
+	}
+}
+
+func TestShowStartsTheRecordWindowAgainInARunningSession(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, "=_docket-aux:@7": true}, panes: 2, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	if _, err := v.Show(Row{Name: "restart", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("new-window -d -t =_docket-aux: -n record") != 1 || f.ran("new-session") != 0 {
+		t.Errorf("calls: %v", f.calls)
 	}
 }

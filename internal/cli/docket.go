@@ -59,6 +59,30 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// shownOnTheRight reports whether the calling pane's window is one the
+// view's right side holds. A client switched from there would be the
+// right side's own client, so the caller is already in the view.
+func shownOnTheRight() bool {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return false
+	}
+	window, err := realTmux("display-message", "-p", "-t", pane, "#{window_id}")
+	if err != nil {
+		return false
+	}
+	held, err := realTmux("list-windows", "-t", "="+docket.AuxSession+":", "-F", "#{window_id}")
+	if err != nil {
+		return false
+	}
+	for _, id := range strings.Fields(held) {
+		if id == strings.TrimSpace(window) {
+			return true
+		}
+	}
+	return false
+}
+
 func newDocketView() (*docket.View, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -92,12 +116,24 @@ func newDocketView() (*docket.View, error) {
 			if bay == nil {
 				return "", false
 			}
+			var windows []string
 			for _, s := range bay.Surfaces {
 				if s.Tmux != nil && s.Tmux.WindowID != "" {
-					return s.Tmux.WindowID, true
+					windows = append(windows, s.Tmux.WindowID)
 				}
 			}
-			return "", false
+			if len(windows) == 0 {
+				return "", false
+			}
+			if len(windows) > 1 {
+				flagged := flaggedWindows()
+				for _, id := range windows {
+					if flagged[dockName+"\t"+id] {
+						return id, true
+					}
+				}
+			}
+			return windows[0], true
 		},
 		RecordCommand: func(item string) string {
 			return "docket show " + shellQuote(item) + " 2>&1 | less -R"
@@ -137,6 +173,10 @@ The bay window stays in its own tmux session and is not changed.
 				attach := exec.Command("tmux", "attach-session", "-t", target)
 				attach.Stdin, attach.Stdout, attach.Stderr = os.Stdin, os.Stdout, os.Stderr
 				return attach.Run()
+			}
+			if shownOnTheRight() {
+				_, err = realTmux("select-pane", "-t", "="+docket.ViewSession+":"+docket.ViewWindow+".{left}")
+				return err
 			}
 			_, err = realTmux("switch-client", "-t", target)
 			return err
@@ -220,6 +260,25 @@ func (b *bayWindows) load() map[string][]string {
 // lists of waiting bays count them. A window is looked up in its dock's
 // session, because a bell is recorded for each session the window is in.
 func waitingBays(windows map[string][]string) map[string]bool {
+	flagged := flaggedWindows()
+	if flagged == nil {
+		return nil
+	}
+	waiting := map[string]bool{}
+	for ref, ids := range windows {
+		for _, id := range ids {
+			if flagged[id] {
+				waiting[ref] = true
+			}
+		}
+	}
+	return waiting
+}
+
+// flaggedWindows returns the windows, as session and window id joined by a
+// tab, that bay marks as waiting or that rang the terminal bell. It
+// returns nil when tmux cannot list them.
+func flaggedWindows() map[string]bool {
 	out, err := realTmux("list-windows", "-a", "-F", "#{session_name}\t#{window_id}\t#{@bay-waiting}\t#{window_bell_flag}")
 	if err != nil {
 		return nil
@@ -231,15 +290,7 @@ func waitingBays(windows map[string][]string) map[string]bool {
 			flagged[parts[0]+"\t"+parts[1]] = true
 		}
 	}
-	waiting := map[string]bool{}
-	for ref, ids := range windows {
-		for _, id := range ids {
-			if flagged[id] {
-				waiting[ref] = true
-			}
-		}
-	}
-	return waiting
+	return flagged
 }
 
 // missingBays returns the bays the items name, as dock/bay, that bay's
