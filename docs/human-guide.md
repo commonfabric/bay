@@ -885,8 +885,8 @@ session:
   | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
 
   The two shaded lines at the bottom describe the view and are not rows. The
-  upper one says which levels are shown, or shows the filter. The lower one
-  reminds of keys.
+  upper one says which levels are shown, or shows the filter or the search
+  (`/text 2 of 5`). The lower one reminds of keys.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
   Closing a bay with `bay close` takes the bay off the docket items that
@@ -929,13 +929,14 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
-| `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
+| `n` / `p` | With no search set: move to the next / previous row with the same parent, passing over everything inside the rows skipped, folded or not. Areas are siblings of each other, and so are the bay rows of one item and the rows of the hotlist. At the first or last sibling the cursor stays and the shaded line says so, as `last under docket`; there is no wrap. With a search set: go to the next / previous match |
 | `J` / `K` | Move down / up ten rows |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
 | `Space` | Fold or unfold the area under the cursor |
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
-| `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
+| `/` | Search by name, title or bay in the levels shown, folded areas included. The cursor moves to the first match as you type and the right side stays as it is. `Enter` keeps the search, shows the cursor's row and makes `n` / `p` go between matches; `Esc` while typing puts the cursor and the folds back. A match in a folded area unfolds it. The shaded line shows `/text 2 of 5`, and how many more matches the levels not shown hold. `n` and `p` wrap at the ends and say so. An item and its bay rows are one match. Matches are highlighted. `Esc` clears the search |
+| `F` | Filter the list by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
 | `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An area with no open items under it is listed so that it can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
 | `X` | On a bay's row, close the bay even with uncommitted changes, which are lost: `bay close --force`. `y` confirms |
@@ -961,7 +962,7 @@ Keys from either side of the `_docket` session:
 | Key | Action |
 |-----|--------|
 | `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
-| `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
+| `Option+N` / `Option+P` | Do what `n` and `p` do |
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
