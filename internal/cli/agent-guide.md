@@ -672,7 +672,8 @@ it is fast enough to run on every docket command:
 #### `bay state [id] [<state>]`
 
 Record where the bay's work is with one mark, its lifecycle state. Set it
-at each change of state. Give the word or the mark:
+at each change of state; the docket list shows it on the bay's row and its
+item's row. Give the word or the mark:
 
 ```
 🧱 building   building

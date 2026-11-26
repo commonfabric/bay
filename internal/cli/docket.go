@@ -221,11 +221,13 @@ var styles = map[string]string{
 	"heading":  "\x1b[1m",
 }
 
-// bayWindows maps each bay, as dock/bay, to the ids of its windows. It
+// bayWindows maps each bay, as dock/bay, to the ids of its windows, and
+// keeps the lifecycle state of each bay that names an item. It
 // reads bay's state file again only when the file has changed.
 type bayWindows struct {
 	read    time.Time
 	windows map[string][]string
+	states  map[string]string // for each bay that names an item and has a lifecycle state, the state word
 }
 
 func (b *bayWindows) load() map[string][]string {
@@ -241,9 +243,12 @@ func (b *bayWindows) load() map[string][]string {
 	if err != nil {
 		return b.windows
 	}
-	b.read, b.windows = info.ModTime(), map[string][]string{}
+	b.read, b.windows, b.states = info.ModTime(), map[string][]string{}, map[string]string{}
 	for _, dock := range m.Docks {
 		for _, bay := range dock.Bays {
+			if bay.Item != "" && bay.State != "" {
+				b.states[dock.Name+"/"+bay.ID] = bay.State
+			}
 			for _, s := range bay.Surfaces {
 				if s.Tmux != nil && s.Tmux.WindowID != "" {
 					ref := dock.Name + "/" + bay.ID
@@ -710,6 +715,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 	sidebar.SetMissing(missingBays(items))
 	var windows bayWindows
 	sidebar.SetWaiting(waitingBays(windows.load()))
+	sidebar.SetStates(windows.states)
 	// The marks are kept in a file so that they outlast the list. A mark
 	// whose item is closed or gone is forgotten.
 	sidebar.SetMarks(loadMarks(stateDir))
@@ -956,6 +962,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		case <-resized:
 		case <-tick.C:
 			changed := sidebar.SetWaiting(waitingBays(windows.load()))
+			changed = sidebar.SetStates(windows.states) || changed
 			if info, err := os.Stat(stamp); err == nil && info.ModTime().After(seen) {
 				seen = info.ModTime()
 				reload()
