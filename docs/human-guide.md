@@ -928,7 +928,9 @@ session:
   When the cursor is on an area, or on an item that lists its bays, the
   row that the right side shows is shaded grey.
   The first line of the list is the desk, docket's agent session for asking
-  about the whole tree.
+  about the whole tree. The desk's row stands for the root of the tree,
+  which docket stores as an item named `_root`. It shows the number of open
+  questions about the whole tree, and `s` on it shows the root's record.
 
 The bay window is not moved. It stays in its dock's tmux session, and it is
 also linked into the view's own tmux session while it is shown. tmux lets
@@ -970,7 +972,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
 | `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An area with no open items under it is listed so that it can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
 | `X` | On a bay's row, close the bay even with uncommitted changes, which are lost: `bay close --force`. `y` confirms |
-| `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `view-hotlist.json` in docket's folder |
+| `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `items/_root/hotlist.json` in docket's folder |
 | `1` to `9` | Go to that row of the hotlist. Numbers are positions, so they close up when a row leaves |
 | `o` | On a row of the hotlist, go to the same row in its area. The row is brought into the list as a jump to a mark brings it: its areas are unfolded, its level is shown, the filter is cleared, as needed. When the row is an area, it is unfolded too, so its items are listed below the cursor. On a row in an area that is in the hotlist, go to its row in the hotlist. On any other row, `o` shows a notice. `''` goes back to the row `o` left |
 | `[` and `]` | In the hotlist, move the row up or down. On any other row, move the item up or down among the shown items under the same parent, by running `docket set <item> --before <sibling>` or `--after <sibling>`; an item does not move to another parent |
@@ -1023,9 +1025,12 @@ The command reads docket's files (`$DOCKET_STATE`, default
 three cases: `>` and `<` change the level of the item under the cursor by
 running `docket set`, `[` and `]` move it among its siblings the same way,
 and `x` closes it by running `docket close`. On a bay's row, `x` and `X`
-close the bay with `bay close`. It keeps the marks in `view-marks.json` and
-the hotlist in `view-hotlist.json` in docket's folder, and the list's width
-in `docket-view-width.json` in bay's data folder. It writes nothing else.
+close the bay with `bay close`. It keeps the marks and the hotlist in
+the root item's folder, as `items/_root/marks.json` and
+`items/_root/hotlist.json` in docket's folder. It reads the older
+`view-marks.json` and `view-hotlist.json` when those are missing, and
+removes them when it saves. It keeps the list's width in
+`docket-view-width.json` in bay's data folder. It writes nothing else.
 
 ### Infrastructure
 

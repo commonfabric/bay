@@ -875,8 +875,10 @@ item chosen in the list. It is a view for the person at the terminal. An
 agent has no reason to run it, and must not type into the windows it shows.
 It reads docket's files and bay's manifest. It changes an item's level
 when the person presses `>` or `<`, closes an item or a bay when the
-person presses `x` or `X`, and keeps its marks and the list's
-width in files of its own in docket's folder.
+person presses `x` or `X`. It keeps its marks and hotlist in
+docket's root item folder (`items/_root/marks.json` and `hotlist.json`),
+and the list's width in bay's data folder. The root of docket's tree is the
+item `_root`; the list's first row, the desk, stands for it.
 
 ### Surface commands
 

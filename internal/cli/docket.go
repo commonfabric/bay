@@ -358,44 +358,83 @@ func legendText() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// marksFile is the file that keeps the list's marks.
-func marksFile(stateDir string) string { return filepath.Join(stateDir, "view-marks.json") }
+// The list keeps its marks and its hotlist in the root item's folder, as
+// docket data. The view is the only program that writes these files.
+// Before the root item existed they were view-marks.json and
+// view-hotlist.json in docket's folder; each is read from there when the
+// new file is missing, and removed when the new file is written.
+const (
+	marksName      = "marks.json"
+	oldMarksName   = "view-marks.json"
+	hotlistName    = "hotlist.json"
+	oldHotlistName = "view-hotlist.json"
+)
 
-// loadMarks reads the list's marks: for each mark, the name of its row.
+// rootFile is the path of a file in the root item's folder.
+func rootFile(stateDir, name string) string {
+	return filepath.Join(stateDir, "items", docket.RootItem, name)
+}
+
+// loadViewData reads a file the list keeps in the root item's folder into
+// v, or the file's old copy in docket's folder when the new one is missing.
+func loadViewData(stateDir, name, oldName string, v any) {
+	data, err := os.ReadFile(rootFile(stateDir, name))
+	if errors.Is(err, fs.ErrNotExist) {
+		data, err = os.ReadFile(filepath.Join(stateDir, oldName))
+	}
+	if err == nil {
+		_ = json.Unmarshal(data, v)
+	}
+}
+
+// saveViewData writes v to a file in the root item's folder, replacing the
+// file atomically, and removes the file's old copy.
+func saveViewData(stateDir, name, oldName string, v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	path := rootFile(stateDir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	_ = os.Remove(filepath.Join(stateDir, oldName))
+	return nil
+}
+
+// loadMarks reads the list's marks: for each mark, the name of its row. A
+// mark on docket.OldDeskRow is a mark on the desk.
 func loadMarks(stateDir string) map[string]string {
 	marks := map[string]string{}
-	if data, err := os.ReadFile(marksFile(stateDir)); err == nil {
-		_ = json.Unmarshal(data, &marks)
+	loadViewData(stateDir, marksName, oldMarksName, &marks)
+	for mark, name := range marks {
+		if name == docket.OldDeskRow {
+			marks[mark] = docket.DeskRow
+		}
 	}
 	return marks
 }
 
 func saveMarks(stateDir string, marks map[string]string) error {
-	data, err := json.Marshal(marks)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(marksFile(stateDir), data, 0o644)
+	return saveViewData(stateDir, marksName, oldMarksName, marks)
 }
 
-// hotlistFile is the file that keeps the list's hotlist: the names of its
-// rows, in order.
-func hotlistFile(stateDir string) string { return filepath.Join(stateDir, "view-hotlist.json") }
-
+// loadHotlist reads the list's hotlist: the names of its rows, in order.
 func loadHotlist(stateDir string) []string {
 	var names []string
-	if data, err := os.ReadFile(hotlistFile(stateDir)); err == nil {
-		_ = json.Unmarshal(data, &names)
-	}
+	loadViewData(stateDir, hotlistName, oldHotlistName, &names)
 	return names
 }
 
 func saveHotlist(stateDir string, names []string) error {
-	data, err := json.Marshal(names)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(hotlistFile(stateDir), data, 0o644)
+	return saveViewData(stateDir, hotlistName, oldHotlistName, names)
 }
 
 // oldWidthFile is where the list's width was kept before it moved to bay's
@@ -851,7 +890,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = showKeys(stateDir)
 			case docket.State:
 				row := sidebar.Current()
-				if row.Desk {
+				if _, statErr := os.Stat(rootFile(stateDir, "item.json")); row.Desk && statErr != nil {
 					note = "the desk has no item to show"
 				} else {
 					item, _, _ := strings.Cut(row.Name, " ")

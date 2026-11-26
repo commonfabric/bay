@@ -2201,6 +2201,25 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 	}
 }
 
+func TestTheRootItemOrdersTheTopOfTheTreeAndIsNotARow(t *testing.T) {
+	items := tree()
+	items[RootItem] = Item{Name: RootItem, Title: "The whole tree", Kind: "area", Status: "open",
+		Level: "front", Order: []string{"tooling", "people"}, Questions: []Question{{}, {BlocksAll: true}}}
+	s := NewSidebar(items)
+	// root.json's order is ignored once the root item exists.
+	s.SetRootOrder([]string{"people", "tooling"})
+	if got := names(s); got != DeskRow+",tooling,sidebar,sidebar bay/b8,sidebar loom/b19,people,restart" {
+		t.Errorf("rows = %s", got)
+	}
+	desk := s.Rows()[0]
+	if !desk.Desk || desk.Open != 2 || !desk.Blocking {
+		t.Errorf("desk row = %+v, want the root's two open questions, one blocking", desk)
+	}
+	if got := (Line{Spans: rowSpans(desk)}).String(); !strings.Contains(got, "the desk ?2!") {
+		t.Errorf("desk row drawn as %q", got)
+	}
+}
+
 func TestRMovesToTheNextWaitingRowAndWrapsPastTheEnd(t *testing.T) {
 	s := NewSidebar(tree())
 	if a := s.Key("r"); a != None || s.Notice() == "" {
