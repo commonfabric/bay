@@ -38,10 +38,11 @@ type itemFlags struct {
 
 // itemRow is one bay that names an item, as `bay item --all --json` prints it.
 type itemRow struct {
-	Dock string `json:"dock"`
-	Bay  string `json:"bay"`
-	Item string `json:"item"`
-	Role string `json:"role,omitempty"`
+	Dock  string `json:"dock"`
+	Bay   string `json:"bay"`
+	Item  string `json:"item"`
+	Role  string `json:"role,omitempty"`
+	State string `json:"state,omitempty"`
 }
 
 // runItemAll backs `bay item --all`: every bay that names an item, read from
@@ -55,7 +56,7 @@ func runItemAll(eng *engine.Engine, out io.Writer, asJSON bool) error {
 	for _, d := range m.Docks {
 		for _, b := range d.Bays {
 			if b.Item != "" {
-				rows = append(rows, itemRow{Dock: d.Name, Bay: b.ID, Item: b.Item, Role: b.Role})
+				rows = append(rows, itemRow{Dock: d.Name, Bay: b.ID, Item: b.Item, Role: b.Role, State: b.State})
 			}
 		}
 	}

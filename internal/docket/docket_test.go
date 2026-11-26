@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/commonfabric/bay/internal/manifest"
 )
 
 func ptr(s string) *string { return &s }
@@ -2128,5 +2130,53 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 	s.Key("G")
 	if a := s.Key("o"); a != None || s.Notice() == "" {
 		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
+	}
+}
+
+func TestLifecycleMarksShowOnBayRowsAndTheirItem(t *testing.T) {
+	s := NewSidebar(tree())
+	rowsBy := func() map[string]Row {
+		out := map[string]Row{}
+		for _, r := range s.Rows() {
+			out[r.Name] = r
+		}
+		return out
+	}
+	if r := rowsBy()["sidebar"]; r.State != "" {
+		t.Errorf("no states set, yet sidebar row has %q", r.State)
+	}
+	if !s.SetStates(map[string]string{"loom/b19": "pr"}) || s.SetStates(map[string]string{"loom/b19": "pr"}) {
+		t.Error("SetStates reported a change wrongly")
+	}
+	rows := rowsBy()
+	// The primary bay has no mark, so the item row shows its other bay's.
+	for name, want := range map[string]string{"sidebar": "🦚", "sidebar loom/b19": "🦚", "sidebar bay/b8": "  ", "restart": "  "} {
+		if got := rows[name].State; got != want {
+			t.Errorf("%s: state %q, want %q", name, got, want)
+		}
+	}
+	if text := (Line{Spans: rowSpans(rows["sidebar"])}).String(); !strings.Contains(text, "🦚 sidebar") {
+		t.Errorf("item row drawn as %q", text)
+	}
+	if text := (Line{Spans: rowSpans(rows["restart"])}).String(); !strings.Contains(text, "   restart") {
+		t.Errorf("unmarked row drawn as %q", text)
+	}
+
+	// 🫖 on one bay is passed over while another bay still works.
+	s.SetStates(map[string]string{"bay/b8": "done", "loom/b19": "building"})
+	if got := rowsBy()["sidebar"].State; got != "🧱" {
+		t.Errorf("one bay done: item state %q", got)
+	}
+	s.SetStates(map[string]string{"bay/b8": "done", "loom/b19": "done"})
+	if got := rowsBy()["sidebar"].State; got != "🫖" {
+		t.Errorf("every bay done: item state %q", got)
+	}
+}
+
+func TestLifecycleMarksAreTwoColumnsWide(t *testing.T) {
+	for _, m := range manifest.StateMarks {
+		if w := TextWidth(m.Mark); w != 2 {
+			t.Errorf("%s (%s) is %d columns", m.Mark, m.Word, w)
+		}
 	}
 }

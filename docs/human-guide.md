@@ -196,6 +196,10 @@ Each bay has three identity concepts:
   one returns `did you mean "b1"?` with the canonical ID.
 - An optional **description** (see below) for richer context.
 
+A bay can also record the docket item it works on, and a **lifecycle
+state**: one mark, such as 🦚 for looking after an open PR, that the bay's
+session sets to say where the work is (see `bay state`).
+
 Together the ID and Name produce the bay's **canonical label**:
 - `home` for the home pseudo-bay,
 - `<id>` when the Name is empty (e.g. `b2`),
@@ -272,6 +276,31 @@ doesn't push the whole view sideways. Pipe the output or set
 `COLUMNS=200 bay tree` to force a wider description layout; piped output
 always uses the full 80-character description cap. Use `bay show`,
 `bay ls --json`, or `bay tree --json` for full names and branches.
+
+#### Lifecycle state
+
+A bay's session can record where the bay's work is with one mark, its
+lifecycle state. `bay state pr` sets it, `bay state` prints it, and
+`bay state --clear` removes it. A state is given by its word or its mark:
+
+| Mark | Word | Meaning |
+|------|------|---------|
+| 🧱 | `building` | Building |
+| 💬 | `answering` | Answering a question |
+| 🐤 | `judging` | Waiting for you to judge the result |
+| ✋ | `trying` | Waiting for you to try something by hand |
+| 📚 | `stacked` | Stacked on unmerged work |
+| 🦚 | `pr` | Looking after an open PR |
+| 👀 | `ci` | Watching CI |
+| 🪻 | `merged` | Merged and doing follow-ups |
+| 🚨 | `main` | Fixing a broken main branch |
+| 🫖 | `done` | Nothing left to do; the bay can be closed |
+
+The state is kept in bay's own record, so it stays when the session ends
+and when tmux restarts. It goes when the bay is closed. `bay show` shows
+it, and `bay show --json`, `bay ls --json`, `bay tree --json` and
+`bay item --all --json` carry it as `state` (`bay_state` in `--rows`
+output). The docket view shows it on the rows of bays that name an item.
 
 ### Surfaces
 
@@ -720,6 +749,7 @@ bay item [id]                            # print the docket item the bay works o
 bay item [id] <name> [--role <role>]     # set the item (--replace to change an existing one)
 bay item [id] --clear                    # remove the item and role
 bay role [id] [<role>]                   # print or set the role (--clear = primary bay)
+bay state [id] [<state>]                 # print or set the lifecycle state (--clear removes it)
 bay item --all [--json]                  # every bay that names an item (fast; no git checks)
 bay new --item <name> [--role <role>]    # create a bay with its item and role
 bay ls                                   # list bays in current dock
@@ -879,6 +909,7 @@ session:
   | dim `·` | The item has no bay |
   | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
   | cyan `↳ dock/bay` | One bay of an item that has several |
+  | `🦚` after the work mark | The lifecycle state its bay's session set (see `bay state`). On an item's row, the first mark among its bays, primary bay first, passing over 🫖 unless every bay has it: 🫖 on an item's row says the whole item is finished and waits only to be closed. While any bay has a state, a row without one has blank space there, so names stay aligned. `?` lists every mark |
   | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
