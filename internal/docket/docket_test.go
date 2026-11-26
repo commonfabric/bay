@@ -1364,9 +1364,9 @@ func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
 
 func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("n")
-	if a := s.Key("n"); a != Show {
-		t.Fatalf("n: %v", a)
+	s.Key("j")
+	if a := s.Key("j"); a != Show {
+		t.Fatalf("j: %v", a)
 	}
 	shown := s.Current().Name
 	// A filter is being typed; while it is, the cursor's row is not shown.
@@ -2137,17 +2137,17 @@ func TestAStartedListReturnsToTheRowTheRightSideShows(t *testing.T) {
 		t.Fatalf("a key before any row is shown: %q", s.ShownKey())
 	}
 	s.SetHotlist([]string{"tooling"})
-	s.Key("n")
-	if a := s.Key("n"); a != Show {
-		t.Fatalf("n: %v", a)
+	s.Key("j")
+	if a := s.Key("j"); a != Show {
+		t.Fatalf("j: %v", a)
 	}
-	want := s.Current().Name
+	want, shown := s.Current().Name, s.Shown().Name
 	key := s.ShownKey()
 
 	again := NewSidebar(tree())
 	again.SetHotlist([]string{"tooling"})
-	if !again.ReturnTo(key) || again.Current().Name != want || again.Shown().Name != want {
-		t.Errorf("returned to %q, want %q", again.Current().Name, want)
+	if !again.ReturnTo(key) || again.Current().Name != want || again.Shown().Name != shown {
+		t.Errorf("returned to %q showing %q, want %q showing %q", again.Current().Name, again.Shown().Name, want, shown)
 	}
 
 	// The hotlist's row and the row in its area are told apart.
