@@ -46,7 +46,8 @@ const KeysHelp = `In the list:
                   items with more than one bay
   b               collapse the list to a narrow strip
   =               give the list its first width again
-  click           go to the row; on an area, also fold or unfold it;
+  click           go to the row; a click on the area the cursor is
+                  already on folds or unfolds it;
                   on « at the bottom, collapse the list. A click
                   anywhere on the collapsed list expands it
   drag            on the line between the panes, change the list's

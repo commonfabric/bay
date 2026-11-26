@@ -965,8 +965,14 @@ func TestClickGoesToTheRowFoldsAnAreaAndIgnoresLinesBelowTheRows(t *testing.T) {
 	if a := s.Click(2, 5); a != Show || s.Current().Name != "restart" {
 		t.Errorf("click on an item: %v on %s", a, s.Current().Name)
 	}
+	if a := s.Click(1, 5); a != Show || s.Current().Name != "people" || s.Current().Folded {
+		t.Errorf("first click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+	}
 	if a := s.Click(1, 5); a != Show || s.Current().Name != "people" || !s.Current().Folded {
-		t.Errorf("click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+		t.Errorf("second click on an area: %v on %s folded %v", a, s.Current().Name, s.Current().Folded)
+	}
+	if a := s.Click(1, 5); a != Show || s.Current().Folded {
+		t.Errorf("third click on an area: %v folded %v", a, s.Current().Folded)
 	}
 	at := s.Current().Name
 	for _, line := range []int{-1, len(s.Rows()), 19, 40} {
@@ -1830,5 +1836,50 @@ func TestLoadRootOrderReadsRootJSON(t *testing.T) {
 	}
 	if order, err := LoadRootOrder(dir); err != nil || strings.Join(order, ",") != "b,a" {
 		t.Errorf("order = %v %v", order, err)
+	}
+}
+
+func TestNoticeLineFitsTheWidth(t *testing.T) {
+	for _, note := range []string{
+		strings.Repeat("a long message ", 20),
+		"two\nlines " + strings.Repeat("x", 100),
+		strings.Repeat("漢字", 40),
+		"short",
+	} {
+		for _, width := range []int{CollapsedBelow, 30, 80} {
+			text := NoticeLine(note, width).String()
+			if strings.ContainsAny(text, "\r\n") {
+				t.Errorf("notice %q has a line break", text)
+			}
+			if w := TextWidth(text); w > width {
+				t.Errorf("notice %q is %d columns, want at most %d", text, w, width)
+			}
+		}
+	}
+}
+
+func TestRenderedLinesFitTheWidth(t *testing.T) {
+	s := NewSidebar(tree())
+	lines, _ := s.RenderLines(30, 10)
+	if len(lines) != 10 {
+		t.Fatalf("got %d lines, want 10", len(lines))
+	}
+	for _, line := range lines {
+		if w := TextWidth(line.String()); w > 30 {
+			t.Errorf("line %q is %d columns", line.String(), w)
+		}
+	}
+}
+
+func TestLongFindTextShowsItsEnd(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("/")
+	for _, r := range strings.Repeat("abcdefghij", 5) + "XYZ" {
+		s.Key(string(r))
+	}
+	lines, _ := s.Render(30, 10)
+	bar := lines[len(lines)-2]
+	if TextWidth(bar) > 30 || !strings.HasSuffix(bar, "XYZ_") || !strings.Contains(bar, "…") {
+		t.Errorf("find bar %q (%d columns) should end with the typed end", bar, TextWidth(bar))
 	}
 }

@@ -725,13 +725,13 @@ func runSidebar(view *docket.View, stateDir string) error {
 			}
 		}
 		if note != "" && !sidebar.Collapsed() {
-			lines[len(lines)-1] = docket.Line{Spans: []docket.Span{{Text: note}}, Bar: true}
+			lines[len(lines)-1] = docket.NoticeLine(note, width)
 		}
 		var b strings.Builder
 		b.WriteString("\x1b[H")
 		for k, line := range lines {
 			text := line.String()
-			pad := strings.Repeat(" ", max(0, width-len([]rune(text))))
+			pad := strings.Repeat(" ", max(0, width-docket.TextWidth(text)))
 			switch {
 			case k == cursor:
 				b.WriteString("\x1b[7m" + text + pad + "\x1b[0m")
