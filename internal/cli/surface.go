@@ -760,7 +760,7 @@ func surfaceCycle(eng *engine.Engine, forward bool) error {
 // focusSurface switches focus to a surface and records it as last-focused.
 func focusSurface(eng *engine.Engine, entry *nav.SurfaceEntry, dockName, bayName string) error {
 	if entry.WindowID != "" {
-		if err := eng.Tmux.SelectWindow(entry.WindowID); err != nil {
+		if err := eng.Tmux.SelectWindow(dockName, entry.WindowID); err != nil {
 			return err
 		}
 	}

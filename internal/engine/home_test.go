@@ -183,6 +183,37 @@ func TestBayClose_LastNonHomeCreatesHomeShell(t *testing.T) {
 	}
 }
 
+func TestBayClose_ReportsEachClosedBayButNotHomeOrARefusedClose(t *testing.T) {
+	eng, _ := testEngine(t)
+	var closed []string
+	var calls int
+	eng.BaysClosed = func(refs []string) { closed, calls = append(closed, refs...), calls+1 }
+
+	for range 2 {
+		if _, err := eng.BayNew(BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+			t.Fatalf("BayNew: %v", err)
+		}
+	}
+	if err := eng.BayClose("labs", "b9", true); err == nil {
+		t.Fatal("closing a bay that does not exist succeeded")
+	}
+	if len(closed) != 0 {
+		t.Fatalf("after a refused close: %v", closed)
+	}
+	if err := eng.BayClose("labs", "b1", true); err != nil {
+		t.Fatalf("BayClose(b1): %v", err)
+	}
+	if _, _, err := eng.BayCloseClean("labs", true, false); err != nil {
+		t.Fatalf("BayCloseClean: %v", err)
+	}
+	if err := eng.BayClose("labs", manifest.HomeBayID, true); err != nil {
+		t.Fatalf("BayClose(home): %v", err)
+	}
+	if got := strings.Join(closed, " "); got != "labs/b1 labs/b2" {
+		t.Fatalf("closed = %q, want labs/b1 labs/b2", got)
+	}
+}
+
 func TestBayCloseBatch_LastNonHomeCreatesHomeShell(t *testing.T) {
 	eng, _ := testEngine(t)
 
@@ -718,7 +749,7 @@ func TestSurfaceAdd_HomeMaterializesBay(t *testing.T) {
 	sawMoveZero := false
 	sawNewWindowCWD := false
 	for _, call := range mockTmux.Calls {
-		if call.Method == "MoveWindow" && len(call.Args) == 2 && call.Args[1] == "0" {
+		if call.Method == "MoveWindow" && len(call.Args) == 3 && call.Args[1] == "0" {
 			sawMoveZero = true
 		}
 		if call.Method == "NewWindow" && len(call.Args) >= 3 && call.Args[2] == dock.Path {
@@ -761,7 +792,7 @@ func TestHome_FocusesExistingSurface(t *testing.T) {
 	}
 	sawSelect := false
 	for _, call := range mockTmux.Calls {
-		if call.Method == "SelectWindow" && len(call.Args) == 1 && call.Args[0] == winID {
+		if call.Method == "SelectWindow" && len(call.Args) == 2 && call.Args[0] == winID && call.Args[1] == "labs" {
 			sawSelect = true
 		}
 	}
@@ -1504,4 +1535,21 @@ func mustEngineHome(t *testing.T, eng *Engine) *manifest.Bay {
 		t.Fatal("missing labs dock")
 	}
 	return dock.FindBayByID(manifest.HomeBayID)
+}
+
+func TestDockClose_ReportsAllItsClosedBaysInOneCall(t *testing.T) {
+	eng, _ := testEngine(t)
+	var calls [][]string
+	eng.BaysClosed = func(refs []string) { calls = append(calls, refs) }
+	for range 3 {
+		if _, err := eng.BayNew(BayNewOptions{Dock: "labs", Shell: true}); err != nil {
+			t.Fatalf("BayNew: %v", err)
+		}
+	}
+	if err := eng.DockClose("labs", true); err != nil {
+		t.Fatalf("DockClose: %v", err)
+	}
+	if len(calls) != 1 || strings.Join(calls[0], " ") != "labs/b1 labs/b2 labs/b3" {
+		t.Fatalf("calls = %v, want one call with labs/b1 labs/b2 labs/b3", calls)
+	}
 }

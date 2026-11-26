@@ -77,7 +77,7 @@ func (e *Engine) EditAll(dockName string) ([]string, error) {
 func (e *Engine) DockEditorAdd(dockName, editorCmd, editPath string) error {
 	// Check if dock editor window already exists in tmux.
 	if winID, found := e.Tmux.FindDockEditorWindow(dockName); found {
-		return e.Tmux.SelectWindow(winID)
+		return e.Tmux.SelectWindow(dockName, winID)
 	}
 
 	// Create a new tmux window.
@@ -88,7 +88,7 @@ func (e *Engine) DockEditorAdd(dockName, editorCmd, editPath string) error {
 
 	// Tag it and move to index 0.
 	_ = e.Tmux.SetWindowOption(winID, "@bay-dock-editor", "1")
-	_ = e.Tmux.MoveWindow(winID, 0)
+	_ = e.Tmux.MoveWindow(dockName, winID, 0)
 
 	// Get the pane ID.
 	panes, err := e.Tmux.ListPanes(winID)

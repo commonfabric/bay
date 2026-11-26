@@ -75,4 +75,4 @@ jobs:
         # goroutines touching shared state. Race overhead would be
         # pure cost; the production code paths are already covered
         # under -race in the main `test` job above.
-        run: go test -tags=integration ./internal/tmux/ -run TestIntegration_
+        run: go test -tags=integration ./internal/tmux/ ./internal/detach/ -run TestIntegration_

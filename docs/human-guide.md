@@ -822,6 +822,134 @@ bay peers                                   # every Claude session in a bay surf
 bay status-line <field>                     # output for tmux status bar
 ```
 
+### The docket view
+
+```
+bay docket view                             # open the item list beside bay windows
+```
+
+docket is a separate tool that keeps a tree of work items. Each item names the
+bays where its work happens. `bay docket view` opens a tmux session named
+`_docket` with one window. The view's sessions all begin with `_`, and
+bay refuses dock names that begin with `_`, so they never meet a dock's
+session:
+
+- The left side lists the items, grouped under their areas. The marks and
+  colors of a row:
+
+  | Mark | Meaning |
+  |------|---------|
+  | `▾` / `▸` in bold light blue | An area, unfolded / folded |
+  | green `●` | The item's agent is working |
+  | yellow `○` | The item's agent is waiting for its next instruction |
+  | red `◌` | The item's work is held until something else happens |
+  | dim `·` | The item has no bay |
+  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
+  | cyan `↳ dock/bay` | One bay of an item that has several |
+  | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
+  | red `!` | One of those questions holds up all work |
+  | dim `(back)` | The item's level, when it is not front |
+  | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
+
+  The two shaded lines at the bottom describe the view and are not rows. The
+  upper one says which levels are shown, or shows the filter. The lower one
+  reminds of keys.
+- The right side shows the bay window of the item chosen in the list, with
+  all of that window's panes. An item with no bay window shows its record.
+  Closing a bay with `bay close` takes the bay off the docket items that
+  name it and notes it in each item's history. `docket doctor` lists the
+  open items whose bay does not exist or has no window.
+  An area that has a bay of its own shows that bay. An area without one
+  shows what the first item listed in the area shows, whether or not the
+  area is folded.
+  When the cursor is on an area, or on an item that lists its bays, the
+  row that the right side shows is shaded grey.
+  The first line of the list is the desk, docket's agent session for asking
+  about the whole tree.
+
+The bay window is not moved. It stays in its dock's tmux session, and it is
+also linked into the view's own tmux session while it is shown. tmux lets
+one window belong to two sessions, and each session has its own current
+window. Choosing an item therefore does not change which window its dock's
+session shows, and the dock's tabs do not appear in the view. The window is
+the same window in both places: what you type on the right side reaches it,
+and it takes the size of the right side while it is shown there.
+
+Bay's keys and commands work on the right side as they do in the dock. Bay
+finds the dock from the window, so a command run in a bay window acts on
+that window's dock whichever session shows it.
+
+tmux's prefix key works on the right side too, with your own prefix
+bindings, except those that act on a session or a client: detaching,
+switching or choosing sessions, renaming the session, and making or
+moving windows. Those would act on the view's own sessions, so on the
+right side they show a message instead. The view copies your prefix keys
+each time `bay docket view` starts.
+
+Bay manages its docks' sessions and windows itself. It does not handle
+tmux sessions made by hand to share a dock's windows (`tmux new-session
+-t`): bay's window commands act on the dock's own session.
+
+Press `?` in the list for a popup of every key and of the marks above; `q`,
+`Esc` or `Enter` closes it. Keys in the list:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
+| `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
+| `J` / `K` | Move down / up ten rows |
+| `g` / `G` | Go to the first / last row |
+| `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
+| `Space` | Fold or unfold the area under the cursor |
+| `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
+| `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
+| `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
+| `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An area with no open items under it is listed so that it can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
+| `X` | On a bay's row, close the bay even with uncommitted changes, which are lost: `bay close --force`. `y` confirms |
+| `m` then a letter | Mark the row under the cursor with that letter or digit. The mark is drawn at the end of the row as `'a`. On the row that has the mark, `m` and the letter take it off. Marks are kept when the view is closed. A mark is forgotten when its item is closed or deleted. The `?` screen lists the marks that are set, above its legend |
+| `'` then a letter | Go to the row with that mark. A row that is not in the list is brought in with the smallest change that does it: its areas are unfolded, its level is shown, the filter is cleared. `''` goes back to the row the last jump left |
+| `a` | Show more levels: front, then front + back, then front + back + shelved |
+| `s` | Show the item's state, open questions and what it waits on, in a popup; `q`, `Esc` or `Enter` closes it |
+| `B` | Show a row for every bay of every item and area, where `x` closes the bay. `B` again lists bays only for items with more than one |
+| `b` | Collapse the list to a narrow strip |
+| `=` | Give the list its first width again |
+| Click | Go to the row; on an area, also fold or unfold it; on `«` in the shaded line, collapse the list; on `»` in the same place, or anywhere on the collapsed strip, expand it |
+| Drag | On the line between the panes, change the list's width. Expanding a collapsed list gives it the width it had. A double click on that line gives the first width again. The width is saved, and the list starts at it the next time the view starts |
+| Wheel | Scroll the list. The cursor stays on its row, which can go out of sight; the next key brings it back |
+| `?` | Show the keys |
+| `q` | Leave the view: go back to the tmux session you came from, or detach when you opened the view from outside tmux. The view keeps running |
+
+Keys from either side of the `_docket` session:
+
+| Key | Action |
+|-----|--------|
+| `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
+| `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
+| `Option+Space` | Fold or unfold the area under the cursor |
+| `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
+| `Option+B` | Collapse or expand the list |
+| `Option+'` and a letter | Go to a mark, as `'` does; `Option+'` then `'` returns to the row the last jump left |
+| `Option+M` and a letter | Mark the row the right side shows, as `m` does; the same mark again takes it off |
+| `Option+d` | Move between the list and the right side |
+| `Option+D` | Leave the view, as `q` does |
+
+The keys that move the cursor, fold, or use marks from either side work
+while the list is collapsed and while a pane of the view is zoomed. When the list cannot be
+seen, the row's name is shown for a moment at the bottom of the terminal.
+
+Every other key goes to the window on the right, including the tmux prefix
+and the other `Option` keys, so bay's keybindings act on the bay being
+shown. The `_docket` session has its own key table and no prefix; no other
+session's keys or options are changed.
+
+The command reads docket's files (`$DOCKET_STATE`, default
+`~/.local/share/docket`) and bay's manifest. It changes docket's items in
+two cases: `>` and `<` change the level of the item under the cursor by
+running `docket set`, and `x` closes it by running `docket close`. On a
+bay's row, `x` and `X` close the bay with `bay close`. It keeps the marks
+in `view-marks.json` in docket's folder, and the list's width in
+`docket-view-width.json` in bay's data folder. It writes nothing else.
+
 ### Infrastructure
 
 ```

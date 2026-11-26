@@ -455,3 +455,92 @@ func TestIntegration_ListPanesReportsDeadPane(t *testing.T) {
 		t.Fatalf("live root pane reported dead: %+v", panes[rootPaneID])
 	}
 }
+
+// TestIntegration_WindowTargetsNameTheSession checks that SelectWindow and
+// MoveWindowAfter act in the named session when the window is also linked
+// into another session that was used more recently.
+func TestIntegration_WindowTargetsNameTheSession(t *testing.T) {
+	s := startTmux(t)
+	s.newDetachedSession("dock")
+	first := s.firstWindowID("dock")
+	s.mustCmd("new-window", "-d", "-t", "=dock:")
+	s.newDetachedSession("aux")
+	s.mustCmd("link-window", "-s", "=dock:"+first, "-t", "=aux:")
+	r := s.realImplementation(t)
+
+	added := s.mustCmd("new-window", "-d", "-t", "=dock:", "-P", "-F", "#{window_id}")
+	if err := r.MoveWindowAfter("dock", added, first); err != nil {
+		t.Fatalf("MoveWindowAfter: %v", err)
+	}
+	dockWindows := strings.Split(s.mustCmd("list-windows", "-t", "=dock", "-F", "#{window_id}"), "\n")
+	if len(dockWindows) != 3 || dockWindows[1] != added {
+		t.Errorf("dock windows = %v, want %s second", dockWindows, added)
+	}
+	if aux := s.mustCmd("list-windows", "-t", "=aux", "-F", "#{window_id}"); strings.Contains(aux, added) {
+		t.Errorf("aux windows = %q, want no %s", aux, added)
+	}
+
+	if err := r.SelectWindow("dock", first); err != nil {
+		t.Fatalf("SelectWindow: %v", err)
+	}
+	if got := s.mustCmd("display-message", "-t", "=dock:", "-p", "#{window_id}"); got != first {
+		t.Errorf("dock's current window = %s, want %s", got, first)
+	}
+}
+
+// TestIntegration_KillSessionKillsWindowsLinkedElsewhere checks that a
+// window of a killed session does not keep running in another session it
+// is linked into.
+func TestIntegration_KillSessionKillsWindowsLinkedElsewhere(t *testing.T) {
+	s := startTmux(t)
+	s.newDetachedSession("dock")
+	shared := s.firstWindowID("dock")
+	s.mustCmd("new-window", "-d", "-t", "=dock:")
+	s.newDetachedSession("aux")
+	s.mustCmd("link-window", "-d", "-s", "=dock:"+shared, "-t", "=aux:")
+	r := s.realImplementation(t)
+
+	if err := r.KillSession("dock"); err != nil {
+		t.Fatalf("KillSession: %v", err)
+	}
+	if aux := s.mustCmd("list-windows", "-t", "=aux", "-F", "#{window_id}"); strings.Contains(aux, shared) {
+		t.Errorf("aux windows = %q, want no %s", aux, shared)
+	}
+	if out, err := s.tmuxCmd("has-session", "-t", "=dock"); err == nil {
+		t.Errorf("dock session still exists: %s", out)
+	}
+}
+
+// TestMain lets the test binary play a process inside a tmux window:
+// with BAY_TEST_KILL_SESSION set, it kills that session from inside it.
+func TestMain(m *testing.M) {
+	if name := os.Getenv("BAY_TEST_KILL_SESSION"); name != "" {
+		_ = NewReal().KillSession(name)
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// TestIntegration_KillSessionFromInsideKillsEveryWindow runs KillSession
+// in the session's first window. Killing that window ends the process, so
+// it must be killed last, or the windows after it keep running.
+func TestIntegration_KillSessionFromInsideKillsEveryWindow(t *testing.T) {
+	s := startTmux(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.newDetachedSession("keep")
+	s.mustCmd("new-session", "-d", "-s", "dock", "-e", "BAY_TEST_KILL_SESSION=dock", "sleep 3; exec "+exe)
+	s.mustCmd("new-window", "-d", "-t", "=dock:", "sleep 60")
+	s.mustCmd("new-window", "-d", "-t", "=dock:", "sleep 60")
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := s.tmuxCmd("has-session", "-t", "=dock"); err != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the session survived: %s", s.mustCmd("list-windows", "-a", "-F", "#{session_name}:#{window_index} #{pane_current_command}"))
+}

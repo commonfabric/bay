@@ -2,9 +2,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
 
 	"github.com/commonfabric/bay/internal/config"
 	"github.com/commonfabric/bay/internal/engine"
@@ -55,10 +60,38 @@ func newEngine() (*engine.Engine, error) {
 		}
 	}
 
-	t := tmuxpkg.NewReal()
+	t := dockTmux{Interface: tmuxpkg.NewReal(), manifestFile: p.ManifestFile}
 	g := gitpkg.NewReal()
 
-	return engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g), nil
+	eng := engine.New(cfg, p.ConfigFile, p.ManifestFile, p.ArchiveFile, t, g)
+	eng.BaysClosed = tellDocketBaysClosed
+	return eng, nil
+}
+
+// tellDocketBaysClosed takes closed bays off the docket items that name
+// them, in one docket command. It does nothing when docket is not installed. Docket's items name
+// the bays of the user's own bay state, so it also does nothing in a test
+// and when XDG_DATA_HOME points bay at other state.
+// docketTimeout bounds how long closing a bay waits for docket.
+const docketTimeout = 10 * time.Second
+
+func tellDocketBaysClosed(refs []string) {
+	if testing.Testing() {
+		return
+	}
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		home, err := os.UserHomeDir()
+		if err != nil || filepath.Clean(dir) != filepath.Join(home, ".local", "share") {
+			return
+		}
+	}
+	docket, err := exec.LookPath("docket")
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), docketTimeout)
+	defer cancel()
+	_ = exec.CommandContext(ctx, docket, append([]string{"gone", "bay"}, refs...)...).Run()
 }
 
 const bayHelpTemplate = `Bay — bay management for tmux and git worktrees.
@@ -169,6 +202,9 @@ func NewRootCmd(version string) *cobra.Command {
 	versionCmd := newVersionCmd(version)
 	versionCmd.GroupID = "other"
 
+	docketCmd := newDocketCmd()
+	docketCmd.GroupID = "navigation"
+
 	configCmd := newConfigCmd()
 	configCmd.GroupID = "infra"
 	prepareWorkerCmd := newPrepareWorkerCmd()
@@ -198,6 +234,7 @@ func NewRootCmd(version string) *cobra.Command {
 		statusLineCmd,
 		whoCmd,
 		peersCmd,
+		docketCmd,
 		dockCmd,
 		configCmd,
 		setupCmd,

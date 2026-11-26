@@ -369,6 +369,14 @@ func (e *Engine) closeBayState(dockName, bayID string, force bool) (closeBayResu
 }
 
 func (e *Engine) closeBayStateWithAdditionalClosingWindows(dockName, bayID string, force bool, additionalClosingWindowIDs []string) (closeBayResult, error) {
+	result, err := e.removeBayState(dockName, bayID, force, additionalClosingWindowIDs)
+	if err == nil && !manifest.IsReservedBayID(bayID) {
+		e.reportClosed(dockName + "/" + bayID)
+	}
+	return result, err
+}
+
+func (e *Engine) removeBayState(dockName, bayID string, force bool, additionalClosingWindowIDs []string) (closeBayResult, error) {
 	m, err := e.LoadManifest()
 	if err != nil {
 		return closeBayResult{}, err
@@ -952,6 +960,7 @@ func (e *Engine) bayCloseBatch(dockName string, force, dryRun bool, skip baySkip
 		windowIDs []string
 	}
 	var pending []pendingKill
+	flush := e.batchClosed()
 	for _, t := range targets {
 		label := t.dock + ":" + t.id
 		result, closeErr := e.closeBayState(t.dock, t.id, force)
@@ -962,6 +971,7 @@ func (e *Engine) bayCloseBatch(dockName string, force, dryRun bool, skip baySkip
 		closed = append(closed, label)
 		pending = append(pending, pendingKill{dock: t.dock, windowIDs: result.windowIDs})
 	}
+	flush()
 
 	// Second pass: kill tmux windows. Safe to die at any point — every
 	// closed-bay's manifest entry is already persisted.
@@ -1046,6 +1056,7 @@ func (e *Engine) bayCloseAll(dockName string, force, forceHomeDismiss, dryRun bo
 	closingByDock := map[string][]string{}
 	nonHomeSkipped := map[string]bool{}
 
+	flush := e.batchClosed()
 	for _, t := range targets {
 		label := t.dock + ":" + t.id
 		if t.home && nonHomeSkipped[t.dock] {
@@ -1070,6 +1081,7 @@ func (e *Engine) bayCloseAll(dockName string, force, forceHomeDismiss, dryRun bo
 		pending = append(pending, pendingKill{dock: t.dock, windowIDs: result.windowIDs, dismissDock: result.dismissDock})
 		closingByDock[t.dock] = append(closingByDock[t.dock], result.windowIDs...)
 	}
+	flush()
 
 	currentWindowID, _ := e.Tmux.CurrentWindowID()
 	dismissDocks := map[string]bool{}
@@ -1872,7 +1884,7 @@ func (e *Engine) positionNewWindow(dockName, windowID, bayID string, m *manifest
 	}
 
 	if afterID != "" && afterID != windowID {
-		_ = e.Tmux.MoveWindowAfter(windowID, afterID)
+		_ = e.Tmux.MoveWindowAfter(dockName, windowID, afterID)
 	}
 }
 

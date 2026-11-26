@@ -177,7 +177,7 @@ func focusTerminalEditor(eng *engine.Engine, dockName, absPath string) error {
 	}
 
 	// Focus the editor window, then send the command.
-	_ = eng.Tmux.SelectWindow(winID)
+	_ = eng.Tmux.SelectWindow(dockName, winID)
 	_ = eng.Tmux.SelectPane(paneID)
 	return eng.Tmux.SendKeys(paneID, keys)
 }

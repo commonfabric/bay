@@ -27,6 +27,44 @@ type Engine struct {
 	// startWorker dispatches a detached prepare-worker process. Tests
 	// override this to record calls without forking.
 	startWorker func(exe string, args []string) error
+
+	// BaysClosed, when set, is called with the bays other than home that
+	// have been closed, as dock/bay, before their windows are killed. A
+	// command that closes several bays calls it once for all of them.
+	BaysClosed func(refs []string)
+
+	// closedBatch holds closed bays for BaysClosed while a command that
+	// closes several bays runs; see batchClosed.
+	closedBatch *[]string
+}
+
+// reportClosed passes a closed bay to BaysClosed, or holds it while a
+// batch is open.
+func (e *Engine) reportClosed(ref string) {
+	if e.closedBatch != nil {
+		*e.closedBatch = append(*e.closedBatch, ref)
+		return
+	}
+	if e.BaysClosed != nil {
+		e.BaysClosed([]string{ref})
+	}
+}
+
+// batchClosed holds the bays closed from now on. The function it returns
+// passes them to BaysClosed in one call. Within a batch already open it
+// does nothing.
+func (e *Engine) batchClosed() (flush func()) {
+	if e.closedBatch != nil {
+		return func() {}
+	}
+	var refs []string
+	e.closedBatch = &refs
+	return func() {
+		e.closedBatch = nil
+		if len(refs) > 0 && e.BaysClosed != nil {
+			e.BaysClosed(refs)
+		}
+	}
 }
 
 // New creates a new Engine.
@@ -121,6 +159,19 @@ var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 func ValidateName(name string) error {
 	if !validNameRe.MatchString(name) {
 		return fmt.Errorf("invalid name %q: must match [a-zA-Z0-9_-]+", name)
+	}
+	return nil
+}
+
+// ValidateDockName extends ValidateName by reserving names that begin
+// with "_" for tmux sessions that bay makes for itself, such as the docket
+// view's. A dock's tmux session has the dock's name.
+func ValidateDockName(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
+	if strings.HasPrefix(name, "_") {
+		return fmt.Errorf("invalid dock name %q: names beginning with _ are reserved for bay's own tmux sessions", name)
 	}
 	return nil
 }

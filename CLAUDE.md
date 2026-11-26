@@ -41,7 +41,7 @@ tmux to pin the mock's behavior to ground truth. They're behind a build
 tag so they don't run by default.
 
 ```
-go test -tags=integration ./internal/tmux/ -run TestIntegration_
+go test -tags=integration ./internal/tmux/ ./internal/detach/ -run TestIntegration_
 ```
 
 Requires tmux on PATH. The tests start a private tmux server on a unique

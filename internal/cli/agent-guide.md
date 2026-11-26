@@ -787,6 +787,17 @@ no `address` and a `reason`. A dock whose tmux session can't be read,
 or a surface whose tmux window can't be read, is skipped with a warning on stderr,
 so one failure doesn't hide the rest.
 
+#### `bay docket view`
+
+Open the tmux session named `_docket`: a list of the work items kept by the
+separate `docket` tool on the left, and on the right the bay window of the
+item chosen in the list. It is a view for the person at the terminal. An
+agent has no reason to run it, and must not type into the windows it shows.
+It reads docket's files and bay's manifest. It changes an item's level
+when the person presses `>` or `<`, closes an item or a bay when the
+person presses `x` or `X`, and keeps its marks and the list's
+width in files of its own in docket's folder.
+
 ### Surface commands
 
 #### `bay surface new <kind> [args] [--bay BAY] [--dock DOCK] [--window|--split h|v]`
