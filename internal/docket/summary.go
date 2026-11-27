@@ -9,9 +9,10 @@ import (
 
 // Summary describes one item for a reader who wants to know where its work
 // stands: its title, its work state and what it waits on, its open
-// questions, and the State section of its record.
-func Summary(stateDir, name string) (string, error) {
-	items, err := LoadItems(stateDir)
+// questions, and the State section of its record. The item's bays come
+// from bay's manifest at manifestPath (see LoadItemsWithBays).
+func Summary(stateDir, manifestPath, name string) (string, error) {
+	items, err := LoadItemsWithBays(stateDir, manifestPath)
 	if err != nil {
 		return "", err
 	}

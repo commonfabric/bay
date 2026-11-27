@@ -100,19 +100,8 @@ func newDocketView() (*docket.View, error) {
 		SidebarCommand: shellQuote(self) + " docket sidebar",
 		TmuxCommand:    "tmux",
 		BayWindow: func(ref string) (string, bool) {
-			dockName, bayID, ok := strings.Cut(ref, "/")
-			if !ok {
-				return "", false
-			}
-			m, err := manifest.Load(manifestFile)
-			if err != nil {
-				return "", false
-			}
-			dock := m.FindDock(dockName)
-			if dock == nil {
-				return "", false
-			}
-			bay := dock.FindBayByID(bayID)
+			dockName, _, _ := strings.Cut(ref, "/")
+			bay := lookupBay(manifestFile, ref)
 			if bay == nil {
 				return "", false
 			}
@@ -135,6 +124,13 @@ func newDocketView() (*docket.View, error) {
 			}
 			return windows[0], true
 		},
+		BayDir: func(ref string) (string, bool) {
+			if bay := lookupBay(manifestFile, ref); bay != nil && bay.Path != "" {
+				return bay.Path, true
+			}
+			return "", false
+		},
+		BayKeys: viewBayKeys(),
 		RecordCommand: func(item string) string {
 			return "docket show " + shellQuote(item) + " 2>&1 | less -R"
 		},
@@ -218,6 +214,7 @@ var styles = map[string]string{
 	"key":      barKey,
 	"waiting":  "\x1b[1;38;5;208m",
 	"shown":    shownStyle,
+	"match":    "\x1b[1;7m",
 	"heading":  "\x1b[1m",
 }
 
@@ -362,44 +359,83 @@ func legendText() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// marksFile is the file that keeps the list's marks.
-func marksFile(stateDir string) string { return filepath.Join(stateDir, "view-marks.json") }
+// The list keeps its marks and its hotlist in the root item's folder, as
+// docket data. The view is the only program that writes these files.
+// Before the root item existed they were view-marks.json and
+// view-hotlist.json in docket's folder; each is read from there when the
+// new file is missing, and removed when the new file is written.
+const (
+	marksName      = "marks.json"
+	oldMarksName   = "view-marks.json"
+	hotlistName    = "hotlist.json"
+	oldHotlistName = "view-hotlist.json"
+)
 
-// loadMarks reads the list's marks: for each mark, the name of its row.
+// rootFile is the path of a file in the root item's folder.
+func rootFile(stateDir, name string) string {
+	return filepath.Join(stateDir, "items", docket.RootItem, name)
+}
+
+// loadViewData reads a file the list keeps in the root item's folder into
+// v, or the file's old copy in docket's folder when the new one is missing.
+func loadViewData(stateDir, name, oldName string, v any) {
+	data, err := os.ReadFile(rootFile(stateDir, name))
+	if errors.Is(err, fs.ErrNotExist) {
+		data, err = os.ReadFile(filepath.Join(stateDir, oldName))
+	}
+	if err == nil {
+		_ = json.Unmarshal(data, v)
+	}
+}
+
+// saveViewData writes v to a file in the root item's folder, replacing the
+// file atomically, and removes the file's old copy.
+func saveViewData(stateDir, name, oldName string, v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	path := rootFile(stateDir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	_ = os.Remove(filepath.Join(stateDir, oldName))
+	return nil
+}
+
+// loadMarks reads the list's marks: for each mark, the name of its row. A
+// mark on docket.OldDeskRow is a mark on the desk.
 func loadMarks(stateDir string) map[string]string {
 	marks := map[string]string{}
-	if data, err := os.ReadFile(marksFile(stateDir)); err == nil {
-		_ = json.Unmarshal(data, &marks)
+	loadViewData(stateDir, marksName, oldMarksName, &marks)
+	for mark, name := range marks {
+		if name == docket.OldDeskRow {
+			marks[mark] = docket.DeskRow
+		}
 	}
 	return marks
 }
 
 func saveMarks(stateDir string, marks map[string]string) error {
-	data, err := json.Marshal(marks)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(marksFile(stateDir), data, 0o644)
+	return saveViewData(stateDir, marksName, oldMarksName, marks)
 }
 
-// hotlistFile is the file that keeps the list's hotlist: the names of its
-// rows, in order.
-func hotlistFile(stateDir string) string { return filepath.Join(stateDir, "view-hotlist.json") }
-
+// loadHotlist reads the list's hotlist: the names of its rows, in order.
 func loadHotlist(stateDir string) []string {
 	var names []string
-	if data, err := os.ReadFile(hotlistFile(stateDir)); err == nil {
-		_ = json.Unmarshal(data, &names)
-	}
+	loadViewData(stateDir, hotlistName, oldHotlistName, &names)
 	return names
 }
 
 func saveHotlist(stateDir string, names []string) error {
-	data, err := json.Marshal(names)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(hotlistFile(stateDir), data, 0o644)
+	return saveViewData(stateDir, hotlistName, oldHotlistName, names)
 }
 
 // oldWidthFile is where the list's width was kept before it moved to bay's
@@ -453,7 +489,7 @@ func keysPage(stateDir string) []docket.Line {
 		}
 		lines = append(lines, docket.Line{Spans: []docket.Span{{Text: text, Style: style}}})
 	}
-	items, _ := docket.LoadItems(stateDir)
+	items, _ := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Your bookmarks:", Style: "heading"}}})
 	lines = append(lines, docket.MarkLines(loadMarks(stateDir), items)...)
 	lines = append(lines, docket.Line{}, docket.Line{Spans: []docket.Span{{Text: "Marks and colors:", Style: "heading"}}})
@@ -471,7 +507,7 @@ func newDocketStateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			text, err := docket.Summary(stateDir, args[0])
+			text, err := docket.Summary(stateDir, bayPaths().ManifestFile, args[0])
 			if err != nil {
 				return err
 			}
@@ -699,7 +735,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h")
 	defer fmt.Print("\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l")
 
-	items, err := docket.LoadItems(stateDir)
+	items, err := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 	if err != nil {
 		return err
 	}
@@ -785,7 +821,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		fmt.Print(b.String())
 	}
 	reload := func() {
-		items, err := docket.LoadItems(stateDir)
+		items, err := docket.LoadItemsWithBays(stateDir, bayPaths().ManifestFile)
 		if err != nil {
 			note = err.Error()
 			return
@@ -855,7 +891,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 				err = showKeys(stateDir)
 			case docket.State:
 				row := sidebar.Current()
-				if row.Desk {
+				if _, statErr := os.Stat(rootFile(stateDir, "item.json")); row.Desk && statErr != nil {
 					note = "the desk has no item to show"
 				} else {
 					item, _, _ := strings.Cut(row.Name, " ")
@@ -967,4 +1003,33 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 		draw()
 	}
+}
+
+// lookupBay returns the bay named "dock/bay" in the manifest, or nil.
+func lookupBay(manifestFile, ref string) *manifest.Bay {
+	dockName, bayID, ok := strings.Cut(ref, "/")
+	if !ok {
+		return nil
+	}
+	m, err := manifest.Load(manifestFile)
+	if err != nil {
+		return nil
+	}
+	dock := m.FindDock(dockName)
+	if dock == nil {
+		return nil
+	}
+	return dock.FindBayByID(bayID)
+}
+
+// viewBayKeys lists bay's own keys for the docket view to bind again.
+func viewBayKeys() []docket.BayKey {
+	var keys []docket.BayKey
+	for _, kb := range bayKeybindings {
+		keys = append(keys, docket.BayKey{
+			Table: kb.table, Key: kb.key, Command: kb.cmd,
+			Tmux: kb.isTmuxCommand, Verb: kb.tmuxVerb, Global: kb.global,
+		})
+	}
+	return keys
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -32,10 +33,62 @@ func splitItemArgs(args []string) (target, name string, haveName bool) {
 type itemFlags struct {
 	dock, role         string
 	roleSet, clr, repl bool
+	all, json          bool
+}
+
+// itemRow is one bay that names an item, as `bay item --all --json` prints it.
+type itemRow struct {
+	Dock  string `json:"dock"`
+	Bay   string `json:"bay"`
+	Item  string `json:"item"`
+	Role  string `json:"role,omitempty"`
+	State string `json:"state,omitempty"`
+}
+
+// runItemAll backs `bay item --all`: every bay that names an item, read from
+// the manifest without syncing bays against git or tmux.
+func runItemAll(eng *engine.Engine, out io.Writer, asJSON bool) error {
+	m, err := eng.LoadManifest()
+	if err != nil {
+		return err
+	}
+	rows := []itemRow{}
+	for _, d := range m.Docks {
+		for _, b := range d.Bays {
+			if b.Item != "" {
+				rows = append(rows, itemRow{Dock: d.Name, Bay: b.ID, Item: b.Item, Role: b.Role, State: b.State})
+			}
+		}
+	}
+	if asJSON {
+		data, err := json.MarshalIndent(rows, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, string(data))
+		return nil
+	}
+	for _, r := range rows {
+		line := r.Dock + "/" + r.Bay + "\t" + r.Item
+		if r.Role != "" {
+			line += "\t" + r.Role
+		}
+		fmt.Fprintln(out, line)
+	}
+	return nil
 }
 
 // runItem backs `bay item`.
 func runItem(eng *engine.Engine, out io.Writer, args []string, f itemFlags) error {
+	if f.all {
+		if len(args) > 0 || f.clr || f.repl || f.roleSet || f.dock != "" {
+			return fmt.Errorf("--all takes no bay, name or other flags except --json")
+		}
+		return runItemAll(eng, out, f.json)
+	}
+	if f.json {
+		return fmt.Errorf("--json goes with --all")
+	}
 	target, name, haveName := splitItemArgs(args)
 	dock, bayID, err := resolveBayArg(eng, target, f.dock)
 	if err != nil {
@@ -112,7 +165,8 @@ Another bay of the item needs a role (--role).
   bay item docket                set the current bay's item
   bay item b3 docket --role review   set by bay ID, with a role
   bay item b3 other --replace    change an item the bay already has
-  bay item --clear               remove the item and role`,
+  bay item --clear               remove the item and role
+  bay item --all [--json]        list every bay that names an item`,
 		Args: cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eng, err := newEngine()
@@ -128,6 +182,8 @@ Another bay of the item needs a role (--role).
 	cmd.Flags().StringVar(&f.role, "role", "", "role of the bay within the item (empty = primary)")
 	cmd.Flags().BoolVar(&f.clr, "clear", false, "remove the item and role")
 	cmd.Flags().BoolVar(&f.repl, "replace", false, "allow changing an item the bay already has")
+	cmd.Flags().BoolVar(&f.all, "all", false, "list every bay that names an item, from the manifest without syncing")
+	cmd.Flags().BoolVar(&f.json, "json", false, "with --all, print JSON")
 	return cmd
 }
 

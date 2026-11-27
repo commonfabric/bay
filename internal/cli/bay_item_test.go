@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -147,5 +149,46 @@ func TestListRows_CarryItemAndRole(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no row with item and role: %+v", rows)
+	}
+}
+
+func TestRunItem_AllListsEveryLinkedBay(t *testing.T) {
+	eng := itemFixture(t)
+	var out bytes.Buffer
+	if err := runItem(eng, &out, []string{"b1", "docket"}, itemFlags{dock: "labs"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runItem(eng, &out, []string{"b2", "docket"}, itemFlags{dock: "labs", role: "helper", roleSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.BaySetState("labs", "b2", "pr"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := runItem(eng, &out, nil, itemFlags{all: true, json: true}); err != nil {
+		t.Fatal(err)
+	}
+	var rows []itemRow
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	want := []itemRow{{"labs", "b1", "docket", "", ""}, {"labs", "b2", "docket", "helper", "pr"}}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("rows = %+v, want %+v", rows, want)
+	}
+	out.Reset()
+	if err := runItem(eng, &out, nil, itemFlags{all: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "labs/b1\tdocket\nlabs/b2\tdocket\thelper\n" {
+		t.Errorf("plain = %q", got)
+	}
+	for name, f := range map[string]itemFlags{
+		"all with clear": {all: true, clr: true},
+		"json alone":     {json: true},
+	} {
+		if err := runItem(eng, &out, nil, f); err == nil {
+			t.Errorf("%s: want error", name)
+		}
 	}
 }

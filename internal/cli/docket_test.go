@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/commonfabric/bay/internal/docket"
 )
 
 func TestFitPopupKeepsAPopupInsideTheTerminal(t *testing.T) {
@@ -78,5 +82,51 @@ func TestTheListKeepsItsWidthWhenTheTerminalChangesSize(t *testing.T) {
 func TestTmuxTextShowsAHashAsItIs(t *testing.T) {
 	if got := tmuxText("bay#355 #{session_name}"); got != "bay##355 ##{session_name}" {
 		t.Errorf("tmuxText = %q", got)
+	}
+}
+
+func TestMarksAndHotlistMoveIntoTheRootItemsFolder(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("view-marks.json", `{"a":"docket","d":"the desk"}`)
+	write("view-hotlist.json", `["docket","bay-tool"]`)
+	marks := loadMarks(dir)
+	if len(marks) != 2 || marks["a"] != "docket" || marks["d"] != docket.DeskRow {
+		t.Errorf("old marks read as %v", marks)
+	}
+	if got := loadHotlist(dir); len(got) != 2 || got[1] != "bay-tool" {
+		t.Errorf("old hotlist read as %v", got)
+	}
+	marks["b"] = "bay-tool"
+	if err := saveMarks(dir, marks); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveHotlist(dir, []string{"bay-tool"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, old := range []string{"view-marks.json", "view-hotlist.json"} {
+		if _, err := os.Stat(filepath.Join(dir, old)); !os.IsNotExist(err) {
+			t.Errorf("%s still there after a save: %v", old, err)
+		}
+	}
+	var saved map[string]string
+	data, err := os.ReadFile(filepath.Join(dir, "items", "_root", "marks.json"))
+	if err != nil || json.Unmarshal(data, &saved) != nil || saved["d"] != "_root" || saved["b"] != "bay-tool" {
+		t.Errorf("marks.json = %s, %v", data, err)
+	}
+	if got := loadHotlist(dir); len(got) != 1 || got[0] != "bay-tool" {
+		t.Errorf("hotlist after save = %v", got)
+	}
+}
+
+func TestViewBayKeysAreAllOnesTheViewKnowsHowToBind(t *testing.T) {
+	for _, k := range viewBayKeys() {
+		if !k.Tmux && k.Verb != "run-shell" && !strings.HasPrefix(k.Verb, "display-popup") {
+			t.Errorf("key %s %s runs %q through %q, which the view does not bind", k.Table, k.Key, k.Command, k.Verb)
+		}
 	}
 }
