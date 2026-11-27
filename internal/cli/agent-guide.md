@@ -881,7 +881,9 @@ and the list's width in bay's data folder. The root of docket's tree is the
 item `_root`; the list's first row, the desk, stands for it. An item that
 `docket rename` renamed keeps its old names in `aliases` in its
 `item.json`. A bay whose item is an old name is shown under the item, and
-the view's marks, hotlist, folds and cursor move to the new name.
+the view's marks, hotlist, folds and cursor move to the new name. Each
+time docket's files change it runs `docket doctor --files --json`, which
+changes nothing, and shows a line while it finds problems.
 
 ### Surface commands
 
