@@ -2229,8 +2229,8 @@ func TestAFoldedAreaDrawsWhatIsBeneathItDimAndAnUnfoldedOneDoesNot(t *testing.T)
 	for _, sp := range spans {
 		if (sp.Text == " "+WaitingMark || strings.HasPrefix(sp.Text, " +")) && sp.Style != "dim" {
 			t.Errorf("span %q is drawn %q, want dim", sp.Text, sp.Style)
-// press presses a key and returns the name of the row the cursor is on,
-// the action and the notice.
+			// press presses a key and returns the name of the row the cursor is on,
+			// the action and the notice.
 		}
 	}
 }
