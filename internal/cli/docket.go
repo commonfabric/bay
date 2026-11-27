@@ -214,6 +214,7 @@ var styles = map[string]string{
 	"key":      barKey,
 	"waiting":  "\x1b[1;38;5;208m",
 	"shown":    shownStyle,
+	"match":    "\x1b[1;7m",
 	"heading":  "\x1b[1m",
 }
 
