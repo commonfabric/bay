@@ -5,18 +5,39 @@ const KeysHelp = `In the list:
   j, k            move down or up one row; the right side shows it, and
                   for an area shows the area's own bay, or else the
                   first item in the area
-  n, p            move to the next or previous item or bay, passing over
-                  areas and the row of an item that lists its bays
+  n, p            with no search set, move to the next or previous row
+                  with the same parent, passing over everything inside
+                  the rows they skip, folded or not. Areas count as
+                  siblings, and so do the bay rows of one item and the
+                  rows of the hotlist. At the first or last sibling the
+                  cursor stays, and the line above the key reminder
+                  says so. With a search set, go to the next or
+                  previous match
   J, K            move down or up ten rows
+  r               move to the next row with the waiting mark, from the
+                  last row to the first
   g, G            go to the first or last row
   Enter           move to the right side, also from an area
   Space           fold or unfold the area under the cursor
   u               unfold every area; u again puts the folds back
-  /               find by name, title or bay in the levels shown; an area
-                  that matches lists all its items. The right side stays
-                  as it is while you type. Enter keeps the filter and
-                  shows the cursor's row. Esc clears the filter and
-                  returns the cursor to the row the right side shows
+  /               search the text the rows show (an item's name, an
+                  area's title, a bay on its own row) in the levels
+                  shown, folded areas included. The cursor moves to
+                  the first match as you type, and the right side
+                  stays as it is. Enter
+                  keeps the search, shows the cursor's row and sets n and
+                  p to go between matches; Esc returns the cursor and the
+                  folds. A match in a folded area unfolds it. The line
+                  above the key reminder shows /text 2 of 5, and how many
+                  more matches the levels not shown hold. n and p wrap at
+                  the ends and say so. An item and its bay rows are one
+                  match. Matches are highlighted. Esc clears the search
+  F               filter the list by name, title or bay in the levels
+                  shown; an area that matches lists all its items. The
+                  right side stays as it is while you type. Enter keeps
+                  the filter and shows the cursor's row. Esc clears the
+                  filter and returns the cursor to the row the right side
+                  shows
   *               add the row under the cursor to the end of the
                   hotlist, the rows listed below the desk, or take it
                   off. At most nine. The row stays in its area, which
@@ -50,8 +71,9 @@ const KeysHelp = `In the list:
                   more than one bay. On a bay's row, close the bay
                   (y confirms); a bay with uncommitted changes is
                   refused. A bay that no longer exists is taken off
-                  its item. An area with no open items is listed so
-                  that it can be closed
+                  its item. An open area is listed at its level
+                  whatever is beneath it; one with no open items is
+                  marked empty and can be closed
   X               on a bay's row, close the bay even with
                   uncommitted changes, which are lost (y confirms)
   a               show more levels: front, then front + back, then
@@ -76,11 +98,16 @@ const KeysHelp = `In the list:
   q               leave the view; it keeps running
 
 From either side:
-  Option-j, Option-k   move down or up one row; in the right side they no
-                       longer move between the panes of a bay's window
-  Option-J, Option-K   the same as Option-j and Option-k
-  Option-N, Option-P   move to the next or previous item or bay, as n
-                       and p do
+  Option-j, Option-k   in the list, move down or up one row; in the right
+                       side, move between the panes of a bay's window
+  Option-J, Option-K   move down or up one row, from either side; the
+                       keyboard stays where it is
+  Option-r             move to the next row with the waiting mark
+  Option-g             move to the list and start a search, as / does
+  Bay's other Option keys (Option-s, -a, -o and so on) act on the bay
+  shown on the right. Option-p, bay's command palette, is not in the
+  view: it shows a notice.
+  Option-N, Option-P   do what n and p do
   Option-Space         fold or unfold the area under the cursor
   Option-?             show the item's state, as s does
   Option-B             collapse or expand the list
@@ -92,7 +119,7 @@ From either side:
   Option-d             move between the list and the right side
   Option-D             leave the view, as q does
 
-Option-j, -k, -J, -K, -N, -P, Option-Space and the mark keys work while
+Option-J, -K, -r, -N, -P, Option-Space and the mark keys work while
 the list is collapsed or the right side is zoomed, and the row's name is
 then shown for a moment.
 Every other key, including the tmux prefix, goes to the window on the

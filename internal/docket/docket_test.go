@@ -86,7 +86,7 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 		t.Errorf("rows = %s\nwant   %s", got, want)
 	}
 	people := s.Rows()[1]
-	if !people.Area || people.Open != 1 || !people.Blocking {
+	if !people.Area || people.Open != 0 || people.Beneath != 1 {
 		t.Errorf("area roll-up = %+v", people)
 	}
 	s.Key("a")
@@ -121,7 +121,7 @@ func TestAnAreaShowsTheFirstItemBeneathItFoldedOrNot(t *testing.T) {
 
 func TestAFilterListsEveryItemOfAnAreaItMatches(t *testing.T) {
 	s := NewSidebar(tree())
-	for _, key := range []string{"/", "t", "o", "o", "l"} {
+	for _, key := range []string{"F", "t", "o", "o", "l"} {
 		s.Key(key)
 	}
 	// "tool" is in the name of the area tooling and of none of its items.
@@ -134,13 +134,13 @@ func TestAFilterListsEveryItemOfAnAreaItMatches(t *testing.T) {
 func TestAFilterLeavesTheRightSideAloneUntilItIsKeptOrLeft(t *testing.T) {
 	s := NewSidebar(tree())
 	// Rows: the desk, people, restart, tooling, sidebar and its bays.
-	s.Key("n")
+	toRow(s, "restart")
 	if s.Current().Name != "restart" {
 		t.Fatalf("on %s", s.Current().Name)
 	}
 	// Typing a filter that drops restart moves the cursor to the first
 	// item listed and asks for nothing to be shown.
-	for _, key := range []string{"/", "s", "i", "d"} {
+	for _, key := range []string{"F", "s", "i", "d"} {
 		if a := s.Key(key); a != None {
 			t.Errorf("%s: %v", key, a)
 		}
@@ -153,7 +153,7 @@ func TestAFilterLeavesTheRightSideAloneUntilItIsKeptOrLeft(t *testing.T) {
 		t.Errorf("esc: %v on %s", a, s.Current().Name)
 	}
 	// Enter keeps the filter and shows the cursor's row.
-	for _, key := range []string{"/", "s", "i", "d"} {
+	for _, key := range []string{"F", "s", "i", "d"} {
 		s.Key(key)
 	}
 	if a := s.Key("enter"); a != Show || !strings.HasPrefix(s.Current().Name, "sidebar") {
@@ -163,7 +163,7 @@ func TestAFilterLeavesTheRightSideAloneUntilItIsKeptOrLeft(t *testing.T) {
 
 func TestEnterOnAFilterThatMatchesNothingShowsNothing(t *testing.T) {
 	s := NewSidebar(tree())
-	for _, key := range []string{"/", "z", "z", "z"} {
+	for _, key := range []string{"F", "z", "z", "z"} {
 		s.Key(key)
 	}
 	if a := s.Key("enter"); a != None {
@@ -176,9 +176,9 @@ func TestEnterOnAFilterThatMatchesNothingShowsNothing(t *testing.T) {
 
 func TestTheCursorReturnsToTheShownRowWhenItsOwnRowLeavesTheList(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("n") // restart, under people
-	s.Key("k") // people; the right side shows restart
-	s.Key("j") // restart again
+	toRow(s, "restart") // under people
+	s.Key("k")          // people; the right side shows restart
+	s.Key("j")          // restart again
 	items := tree()
 	gone := items["restart"]
 	gone.Status = "closed"
@@ -225,7 +225,7 @@ func TestLevelKeysNameTheItemAndItsNewLevel(t *testing.T) {
 
 func TestTheCursorKeepsItsPlaceWhenItsRowLeavesTheList(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("n") // restart, the third row
+	toRow(s, "restart") // the third row
 	items := tree()
 	gone := items["restart"]
 	gone.Level = "back"
@@ -241,7 +241,7 @@ func TestTheCursorKeepsItsPlaceWhenItsRowLeavesTheList(t *testing.T) {
 func TestMarksAreSetDrawnAndTakenOff(t *testing.T) {
 	s := NewSidebar(tree())
 	// Rows: the desk, people, restart, tooling, sidebar and its bays.
-	s.Key("n")
+	toRow(s, "restart")
 	if a := s.Key("m"); a != None {
 		t.Fatalf("m: %v", a)
 	}
@@ -281,7 +281,7 @@ func TestAMarkBringsItsRowIntoTheListAndTwoQuotesGoBack(t *testing.T) {
 		t.Fatalf("'i: %v on %s, notice %q", a, s.Current().Name, s.Notice())
 	}
 	// A filter that hides restart is cleared.
-	for _, key := range []string{"/", "i", "m", "a", "g", "enter"} {
+	for _, key := range []string{"F", "i", "m", "a", "g", "enter"} {
 		s.Key(key)
 	}
 	s.Key("'")
@@ -399,18 +399,6 @@ func TestTheShownRowIsMarkedWhenTheCursorIsOnAnotherRow(t *testing.T) {
 func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) {
 	s := NewSidebar(tree())
 	// Rows: the desk, people, restart, tooling, sidebar and its bays.
-	// n and p pass over areas; f9 and f10, which tmux sends, do the same.
-	// They also pass over the row of an item that has a row for each of
-	// its bays, so each press shows a different window.
-	for _, c := range []struct{ key, want string }{{"n", "restart"}, {"f9", "sidebar bay/b8"},
-		{"n", "sidebar loom/b19"}, {"p", "sidebar bay/b8"}, {"p", "restart"}, {"f10", DeskRow}} {
-		if a := s.Key(c.key); a != Show || s.Current().Name != c.want {
-			t.Errorf("%s: %v on %s, want %s", c.key, a, s.Current().Name, c.want)
-		}
-	}
-	if a := s.Key("p"); a != None || !s.Current().Desk {
-		t.Errorf("p at the top: %v on %s", a, s.Current().Name)
-	}
 	if a := s.Key("?"); a != Help {
 		t.Errorf("?: %v", a)
 	}
@@ -442,14 +430,14 @@ func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) 
 	if got := names(s); strings.Contains(got, "restart") {
 		t.Errorf("a folded area still lists its items: %s", got)
 	}
-	if s.Rows()[1].Open != 1 {
-		t.Errorf("a folded area lost its question count")
+	if got := (Line{Spans: rowSpans(s.Rows()[1])}).String(); !strings.Contains(got, "+1") || strings.Contains(got, "?") {
+		t.Errorf("a folded area draws %q", got)
 	}
 }
 
 func TestFilterSearchesTheLevelsShownAndEscapeRestoresTheList(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("/")
+	s.Key("F")
 	for _, r := range "imag" {
 		s.Key(string(r))
 	}
@@ -461,7 +449,7 @@ func TestFilterSearchesTheLevelsShownAndEscapeRestoresTheList(t *testing.T) {
 	s.Key("a")
 	s.Key("a")
 	before := names(s)
-	s.Key("/")
+	s.Key("F")
 	for _, r := range "imag" {
 		s.Key(string(r))
 	}
@@ -672,13 +660,25 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	if f.ran("set-option -t =_docket: prefix None") != 1 || f.ran("set-option -t =_docket: key-table docket") != 1 {
 		t.Errorf("session options not set: %v", f.calls)
 	}
-	for _, key := range []string{"M-j F5", "M-k F6", "M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
+	for _, key := range []string{"M-J F5", "M-K F6", "M-N F9", "M-P F10", "M-Space F7", "M-1 F12 1", "M-9 F12 9"} {
 		k, sent, _ := strings.Cut(key, " ")
 		// Each of these keys reaches the list whether it is collapsed or
 		// hidden by a zoomed pane.
 		want := "bind-key -T docket " + k + " send-keys -t %1 " + sent
 		if f.ran(want) != 1 {
 			t.Errorf("step key %s not bound as %q: %v", k, want, f.calls)
+		}
+	}
+	// Option-j steps the list while the list has the keyboard and goes on
+	// to the second client otherwise.
+	for _, want := range []string{
+		"bind-key -T docket M-j if-shell -F #{pane_at_left} send-keys -t %1 F5 send-keys -t '=_docket:view.{right}' M-j",
+		"bind-key -T docket M-K send-keys -t %1 F6",
+		"bind-key -T docket M-r send-keys -t %1 F12 r",
+		`bind-key -T docket M-g select-pane -t %1 \; send-keys -t %1 F12 /`,
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not bound as %q: %v", want, f.calls)
 		}
 	}
 	if f.ran("bind-key -T docket M-h select-pane -t %1") != 1 ||
@@ -765,6 +765,63 @@ func TestSetupCreatesTheSessionsOnceAndIsSafeToRepeat(t *testing.T) {
 	}
 	if f.ran("new-session") != 2 || f.ran("split-window") != 1 {
 		t.Errorf("second setup created more: %v", f.calls)
+	}
+}
+
+func TestSetupBindsBaysKeysToRunFromTheShownBaysFolder(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}}
+	v := newFakeView(f)
+	v.BayKeys = []BayKey{
+		{Key: "M-s", Command: "bay shell --pane", Verb: "run-shell"},
+		{Key: "M-x", Command: "bay palette --split pane", Verb: "display-popup -w 80% -h 80% -E"},
+		{Key: "M-p", Command: "bay palette --split pane", Verb: "display-popup -w 80% -h 80% -E"},
+		{Key: "M-g", Command: "bay go --pick", Verb: "run-shell"},
+		{Key: "M-o", Command: `display-message -d 2000 "agent" \; switch-client -T bay-agent`, Tmux: true},
+		{Table: "bay-agent", Key: "c", Command: "bay agent claude --pane", Verb: "run-shell"},
+		{Table: "bay-agent", Key: "b", Command: `switch-client -T bay-agent-bay`, Tmux: true},
+	}
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`bind-key -T docket M-s run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay shell --pane || true"`,
+		"bind-key -T docket M-p display-message not in the docket view",
+		`bind-key -T docket M-x if-shell -F "#{@docket-bay-dir}" "display-popup -w 80% -h 80% -E -t =_docket-aux: -d '#{@docket-bay-dir}' 'bay palette --split pane || true'"`,
+		`bind-key -T docket M-o display-message -d 2000 "agent" ; switch-client -T docket-bay-agent`,
+		`bind-key -T docket-bay-agent c run-shell -t =_docket-aux: "[ -n '#{@docket-bay-dir}' ] && cd '#{@docket-bay-dir}' && bay agent claude --pane || true"`,
+		`bind-key -T docket-bay-agent b switch-client -T docket-bay-agent-bay`,
+		"unbind-key -q -a -T docket-bay-agent",
+	} {
+		if f.ran(want) != 1 {
+			t.Errorf("not bound as %q: %v", want, f.calls)
+		}
+	}
+	// Bay's keys that move between panes go to the right side's table.
+	v.BayKeys = append(v.BayKeys, BayKey{Key: "M-H", Command: "select-pane -L", Tmux: true, Global: true})
+	if got := v.auxBayKeys(); got != "bind-key -T docket-aux M-H select-pane -L\n" {
+		t.Errorf("the right side's bay keys = %q", got)
+	}
+	// A key the view gives its own meaning is not bound to bay's command.
+	if f.ran("bind-key -T docket M-g run-shell") != 0 {
+		t.Errorf("Option-g runs bay's command: %v", f.calls)
+	}
+}
+
+func TestShowRecordsTheFolderOfTheBayShown(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{"@7": true, recordTarget: true}, panes: 2, clients: "/dev/ttys9\n"}
+	v := newFakeView(f)
+	v.BayDir = func(ref string) (string, bool) { return "/work/" + ref, ref == "loom/b7" }
+	if _, err := v.Show(Row{Name: "x", Bays: []string{"loom/b7"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("set-option -g @docket-bay-dir /work/loom/b7") != 1 {
+		t.Errorf("the shown bay's folder is not recorded: %v", f.calls)
+	}
+	if _, err := v.Show(Row{Name: "x"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.ran("set-option -gu @docket-bay-dir") != 1 {
+		t.Errorf("the folder stays after a row with no bay is shown: %v", f.calls)
 	}
 }
 
@@ -916,7 +973,8 @@ func TestSetupRestartsTheSidebarWhenOnlyTheRightPaneRemains(t *testing.T) {
 		t.Errorf("calls: %v", f.calls)
 	}
 	// The keys name the new pane.
-	if f.ran("bind-key -T docket M-J send-keys -t %3 F5") != 1 {
+	if f.ran("bind-key -T docket M-N send-keys -t %3 F9") != 1 ||
+		f.ran("bind-key -T docket M-J send-keys -t %3 F5") != 1 {
 		t.Errorf("calls: %v", f.calls)
 	}
 }
@@ -1194,7 +1252,7 @@ func TestCollapseAndExpandByKeyAndByClick(t *testing.T) {
 
 func TestKeysSentByTmuxWorkWhileAFilterIsBeingTyped(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("/")
+	s.Key("F")
 	s.Key("r")
 	before := names(s)
 	if a := s.Key("f5"); a != Show {
@@ -1290,7 +1348,7 @@ func TestRowsAreStyledByKindAndTheLastTwoLinesAreBars(t *testing.T) {
 			bars[strings.TrimSpace(span.Text)] = span.Style
 		}
 	}
-	for text, want := range map[string]string{"«": "key", "a": "key", "?": "key", "/": "key", "keys": "", "find": ""} {
+	for text, want := range map[string]string{"«": "key", "a": "key", "?": "key", "/": "key", "F": "key", "keys": "", "search": "", "filter": ""} {
 		if got, ok := bars[text]; !ok || got != want {
 			t.Errorf("in the bars %q is drawn as %q (present %v), want %q", text, got, ok, want)
 		}
@@ -1365,12 +1423,13 @@ func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
 func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
 	s := NewSidebar(tree())
 	s.Key("j")
+	toRow(s, "sidebar")
 	if a := s.Key("j"); a != Show {
 		t.Fatalf("j: %v", a)
 	}
 	shown := s.Current().Name
 	// A filter is being typed; while it is, the cursor's row is not shown.
-	for _, key := range []string{"/", "p", "e"} {
+	for _, key := range []string{"F", "p", "e"} {
 		s.Key(key)
 	}
 	// Option-M a: F12, m, a. The mark goes on the row the right side shows.
@@ -1389,7 +1448,7 @@ func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
 		t.Fatalf("Option-' a: %v on %s", a, s.Current().Name)
 	}
 	// Without F12, a quote typed into a filter is filter text.
-	s.Key("/")
+	s.Key("F")
 	s.Key("'")
 	if a := s.Key("a"); a == Show || s.pending != "" {
 		t.Errorf("a quote in a filter named a mark: %v", a)
@@ -1405,12 +1464,12 @@ func TestXClosesAnItemOnlyWithNothingListedUnderIt(t *testing.T) {
 		return a
 	}
 	// people has restart and the back item images under it.
-	press("n", "k")
+	press("j")
 	if press("x"); s.Notice() != "people has open items under it: restart, images" {
 		t.Errorf("people: %q", s.Notice())
 	}
 	// restart lists one bay, which the list shows on restart's own row.
-	press("n")
+	press("j")
 	if a := press("x", "f"); a != CloseItem {
 		t.Fatalf("x f on %s: %v", s.Current().Name, a)
 	}
@@ -1492,19 +1551,35 @@ func TestXAndShiftXCloseTheBayOnABayRow(t *testing.T) {
 	}
 }
 
-func TestAnAreaWithNoOpenItemsIsListedSoItCanBeClosed(t *testing.T) {
+func TestAnOpenAreaIsListedAtItsLevelWhateverIsBeneathItAndAnEmptyOneCanBeClosed(t *testing.T) {
 	items := tree()
 	items["empty"] = Item{Name: "empty", Title: "Nothing left", Kind: "area", Status: "open", Level: "front"}
 	items["backonly"] = Item{Name: "backonly", Title: "Only back items", Kind: "area", Status: "open", Level: "front"}
 	items["later"] = Item{Name: "later", Title: "Later", Kind: "goal", Parent: ptr("backonly"), Status: "open", Level: "back"}
 	s := NewSidebar(items)
 	got := names(s)
-	if !strings.Contains(got, "empty") || strings.Contains(got, "backonly") {
+	if !strings.Contains(got, "empty") || !strings.Contains(got, "backonly") {
 		t.Errorf("rows = %s", got)
 	}
-	for s.Current().Name != "empty" {
-		s.Key("j")
+	for _, r := range s.Rows() {
+		if want := r.Name == "empty"; r.Area && (r.Name == "empty" || r.Name == "backonly") && r.Empty != want {
+			t.Errorf("%s: Empty = %v", r.Name, r.Empty)
+		}
 	}
+	goTo := func(name string) {
+		s.Key("g")
+		for i := 0; i < len(s.Rows()) && s.Current().Name != name; i++ {
+			s.Key("j")
+		}
+		if s.Current().Name != name {
+			t.Fatalf("no row %s", name)
+		}
+	}
+	goTo("backonly")
+	if a := s.Key("x"); a != None || !strings.Contains(s.Notice(), "open items under it") {
+		t.Errorf("x on an area whose items are at hidden levels: %v %q", a, s.Notice())
+	}
+	goTo("empty")
 	if a := s.Key("x"); a != None || s.Notice() != "" {
 		t.Errorf("x: %v %q", a, s.Notice())
 	}
@@ -1524,7 +1599,7 @@ func TestAWaitingBayMarksItsRowItsItemAndItsArea(t *testing.T) {
 			marked[r.Name] = true
 		}
 	}
-	want := map[string]bool{"tooling": true, "sidebar": true, "sidebar loom/b19": true}
+	want := map[string]bool{"sidebar": true, "sidebar loom/b19": true}
 	if !maps.Equal(marked, want) {
 		t.Errorf("waiting rows = %v", marked)
 	}
@@ -1555,8 +1630,8 @@ func TestAnAreaWithABayOfItsOwnShowsThatBayItsQuestionsAndItsWaitingMark(t *test
 			quiet = r
 		}
 	}
-	// Its own two questions and the one of the sidebar item beneath it.
-	if area.Open != 3 || !area.Blocking || !area.Waiting || len(area.Bays) != 1 {
+	// Its own two questions; the sidebar item's one is counted beneath it.
+	if area.Open != 2 || area.Beneath != 1 || !area.Blocking || !area.Waiting || len(area.Bays) != 1 {
 		t.Errorf("area row = %+v", area)
 	}
 	if quiet.Waiting || len(quiet.Bays) != 1 {
@@ -1652,14 +1727,7 @@ func TestShiftBShowsARowForEveryBayWhereXClosesIt(t *testing.T) {
 		}
 	}
 
-	// n passes over an item whose bays have rows: it shows the same window
-	// as its first bay's row.
-	for s.Current().Name != "people loom/b1" {
-		s.Key("j")
-	}
-	if s.Key("n"); s.Current().Name != "restart loom/b7" {
-		t.Errorf("n went to %q", s.Current().Name)
-	}
+	toRow(s, "restart loom/b7")
 	if a := s.Key("x"); a != None {
 		t.Fatalf("x: %v", a)
 	}
@@ -1873,7 +1941,7 @@ func TestRenderedLinesFitTheWidth(t *testing.T) {
 
 func TestLongFindTextShowsItsEnd(t *testing.T) {
 	s := NewSidebar(tree())
-	s.Key("/")
+	s.Key("F")
 	for _, r := range strings.Repeat("abcdefghij", 5) + "XYZ" {
 		s.Key(string(r))
 	}
@@ -1898,7 +1966,7 @@ func hotNames(s *Sidebar) string {
 func TestStarAddsTheRowToTheHotlistAndTakesItOff(t *testing.T) {
 	s := NewSidebar(tree())
 	// Rows: the desk, people, restart, tooling, sidebar and its bays.
-	s.Key("n") // restart
+	toRow(s, "restart")
 	if a := s.Key("*"); a != HotlistChanged || s.Current().Name != "restart" || s.Current().HotRow {
 		t.Fatalf("*: %v on %+v", a, s.Current())
 	}
@@ -1961,7 +2029,7 @@ func TestADigitGoesToThatHotlistRowFromEitherSide(t *testing.T) {
 		t.Errorf("3: %v %q on %s", a, s.Notice(), s.Current().Name)
 	}
 	// Option-1 while a filter is typed: F12, 1.
-	s.Key("/")
+	s.Key("F")
 	s.Key("f12")
 	if a := s.Key("1"); a != Show || s.Current().Name != "tooling" || !s.Current().HotRow {
 		t.Errorf("Option-1: %v on %+v", a, s.Current())
@@ -1978,7 +2046,7 @@ func TestADigitGoesToThatHotlistRowFromEitherSide(t *testing.T) {
 func TestADigitAfterMIsRefusedAndAfterAQuoteGoesToThatHotlistRow(t *testing.T) {
 	s := NewSidebar(tree())
 	s.SetHotlist([]string{"restart", "tooling"})
-	s.Key("n") // restart, in its area
+	toRow(s, "restart") // in its area
 	for _, key := range []string{"1", "2"} {
 		s.Key("m")
 		if a := s.Key(key); a != None || s.Notice() == "" || hotNames(s) != "restart,tooling" || len(s.Marks()) != 0 {
@@ -2180,5 +2248,395 @@ func TestTheHotlistDoesNotGiveAnAreaAHiddenFirstItem(t *testing.T) {
 	s.cursor = k
 	if got := s.Shown().Name; got == "later" {
 		t.Errorf("the area shows %q, an item at a level not shown", got)
+	}
+}
+
+func TestAFoldedAreaDrawsWhatIsBeneathItDimAndAnUnfoldedOneDoesNot(t *testing.T) {
+	items := tree()
+	tooling := items["tooling"]
+	tooling.Questions = []Question{{}, {}}
+	items["tooling"] = tooling
+	s := NewSidebar(items)
+	s.SetWaiting(map[string]bool{"loom/b19": true})
+	draw := func() ([]Span, Row) {
+		for _, r := range s.Rows() {
+			if r.Name == "tooling" {
+				return rowSpans(r), r
+			}
+		}
+		t.Fatal("no tooling row")
+		return nil, Row{}
+	}
+	spans, row := draw()
+	if text := (Line{Spans: spans}).String(); strings.Contains(text, WaitingMark) || strings.Contains(text, "+") || !strings.Contains(text, "?2") || !row.BeneathWaiting {
+		t.Errorf("unfolded: %q %+v", text, row)
+	}
+	for s.Current().Name != "tooling" {
+		s.Key("j")
+	}
+	s.Key(" ")
+	spans, _ = draw()
+	if text := (Line{Spans: spans}).String(); !strings.HasSuffix(text, " "+WaitingMark+" ?2 +1") && !strings.Contains(text, "?2 +1") {
+		t.Errorf("folded: %q", text)
+	}
+	for _, sp := range spans {
+		if (sp.Text == " "+WaitingMark || strings.HasPrefix(sp.Text, " +")) && sp.Style != "dim" {
+			t.Errorf("span %q is drawn %q, want dim", sp.Text, sp.Style)
+		}
+	}
+}
+
+// press presses a key and returns the name of the row the cursor is on,
+// the action and the notice.
+func press(s *Sidebar, key string) (string, Action, string) {
+	a := s.Key(key)
+	return s.Current().Name, a, s.Notice()
+}
+
+func TestNAndPStepBetweenSiblingsAndStayPutAtTheEnds(t *testing.T) {
+	s := NewSidebar(tree())
+	// Rows: the desk, people, restart, tooling, sidebar, and sidebar's two
+	// bays. images is not at the front level.
+	for _, c := range []struct {
+		key, row string
+		action   Action
+		notice   string
+	}{
+		{"n", DeskRow, None, "the desk has no siblings"},
+		{"j", "people", Show, ""},
+		{"n", "tooling", Show, ""},
+		{"n", "tooling", None, "last at the top level"},
+		{"f10", "people", Show, ""}, // tmux sends f10 for Option-P
+		{"p", "people", None, "first at the top level"},
+		{"j", "restart", Show, ""},
+		{"n", "restart", None, "last under People"},
+		{"p", "restart", None, "first under People"},
+		{"G", "sidebar loom/b19", Show, ""},
+		{"n", "sidebar loom/b19", None, "last under sidebar"},
+		{"f10", "sidebar bay/b8", Show, ""},
+		{"p", "sidebar bay/b8", None, "first under sidebar"},
+		{"k", "sidebar", Show, ""},
+		{"n", "sidebar", None, "last under Tooling"},
+	} {
+		if row, a, notice := press(s, c.key); row != c.row || a != c.action || notice != c.notice {
+			t.Errorf("%s: on %s (%v), notice %q; want %s (%v), %q", c.key, row, a, notice, c.row, c.action, c.notice)
+		}
+	}
+}
+
+func TestSiblingStepsPassOverFoldedAndUnfoldedRowsAlike(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("j") // people, with restart under it
+	if row, a, _ := press(s, "n"); row != "tooling" || a != Show {
+		t.Errorf("n over an unfolded area: on %s (%v)", row, a)
+	}
+	s.Key("p")
+	s.Key(" ")
+	if row, a, _ := press(s, "n"); row != "tooling" || a != Show {
+		t.Errorf("n over a folded area: on %s (%v)", row, a)
+	}
+	// An item's own row is a sibling of the items beside it; its bay rows
+	// are passed over.
+	items := tree()
+	more := items["tooling"]
+	more.Order = []string{"sidebar", "extra"}
+	items["tooling"] = more
+	items["extra"] = Item{Name: "extra", Title: "Extra", Kind: "goal", Parent: ptr("tooling"), Status: "open", Level: "front"}
+	s = NewSidebar(items)
+	s.Key("G") // extra
+	for range 3 {
+		s.Key("k")
+	}
+	if s.Current().Name != "sidebar" {
+		t.Fatalf("on %s", s.Current().Name)
+	}
+	if row, _, _ := press(s, "n"); row != "extra" {
+		t.Errorf("n from an item that lists bays: on %s", row)
+	}
+}
+
+// searchTree is tree with one more item at the back level, and an area
+// folded so that its items are out of sight.
+func TestSearchMovesToMatchesAndNAndPFollowThem(t *testing.T) {
+	items := tree()
+	items["sidebar-two"] = Item{Name: "sidebar-two", Title: "Second sidebar", Kind: "goal", Parent: ptr("people"),
+		Status: "open", Level: "front"}
+	people := items["people"]
+	people.Order = []string{"restart", "sidebar-two", "images"}
+	items["people"] = people
+	s := NewSidebar(items)
+	// Rows: the desk, people, restart, sidebar-two, tooling, sidebar and its bays.
+	s.Key("j") // people
+	s.Key(" ") // fold people: its items are not in the list
+	if got := names(s); strings.Contains(got, "sidebar-two") {
+		t.Fatalf("rows = %s", got)
+	}
+	for _, key := range []string{"/", "s", "i", "d"} {
+		if a := s.Key(key); a != None {
+			t.Errorf("%s: %v", key, a)
+		}
+	}
+	// Typing moves the cursor to the first match, unfolding what hides it,
+	// and asks for nothing to be shown.
+	if s.Current().Name != "sidebar-two" || s.Rows()[1].Folded {
+		t.Errorf("typing: on %s, people folded %v", s.Current().Name, s.Rows()[1].Folded)
+	}
+	// Esc puts the cursor and the fold back.
+	s.Key("esc")
+	if s.Current().Name != "people" || !s.Rows()[1].Folded {
+		t.Errorf("esc: on %s, people folded %v", s.Current().Name, s.Rows()[1].Folded)
+	}
+	for _, key := range []string{"/", "s", "i", "d"} {
+		s.Key(key)
+	}
+	if a := s.Key("enter"); a != Show || s.Current().Name != "sidebar-two" {
+		t.Errorf("enter: %v on %s", a, s.Current().Name)
+	}
+	if bar := lastButOne(s); !strings.Contains(bar, "/sid 1 of 2") {
+		t.Errorf("bar = %q", bar)
+	}
+	// n goes to the next match; the item and its bay rows are one match.
+	if row, a, _ := press(s, "n"); row != "sidebar" || a != Show {
+		t.Errorf("n: on %s (%v)", row, a)
+	}
+	if bar := lastButOne(s); !strings.Contains(bar, "/sid 2 of 2") {
+		t.Errorf("bar = %q", bar)
+	}
+	// Past the last match it wraps, and says so.
+	if row, a, notice := press(s, "n"); row != "sidebar-two" || a != Show || notice != "search wrapped to the top" {
+		t.Errorf("n at the end: on %s (%v) %q", row, a, notice)
+	}
+	if row, _, notice := press(s, "p"); row != "sidebar" || notice != "search wrapped to the bottom" {
+		t.Errorf("p at the start: on %s, %q", row, notice)
+	}
+	// From a bay row, p goes to the match before the item, not to the item.
+	s.Key("j")
+	if row, _, _ := press(s, "p"); row != "sidebar-two" {
+		t.Errorf("p from a bay row: on %s", row)
+	}
+	// Esc clears the search, and n steps between siblings again.
+	s.Key("esc")
+	if bar := lastButOne(s); strings.Contains(bar, "/sid") {
+		t.Errorf("bar after esc = %q", bar)
+	}
+	if s.Notice() != "search cleared" {
+		t.Errorf("notice = %q", s.Notice())
+	}
+}
+
+func lastButOne(s *Sidebar) string {
+	lines, _ := s.RenderLines(80, 16)
+	return lines[len(lines)-2].String()
+}
+
+func TestSearchWithNoMatchLeavesTheCursorAndTheEarlierSearch(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("j")
+	for _, key := range []string{"/", "z", "z"} {
+		s.Key(key)
+	}
+	if a := s.Key("enter"); a != None || s.Current().Name != "people" || s.Notice() != "no match for zz" {
+		t.Errorf("enter: %v on %s, notice %q", a, s.Current().Name, s.Notice())
+	}
+	if bar := lastButOne(s); strings.Contains(bar, "/zz") {
+		t.Errorf("bar = %q", bar)
+	}
+}
+
+func TestSearchCountsMatchesInLevelsNotShown(t *testing.T) {
+	s := NewSidebar(tree())
+	// "es" is in restart, at the front, and in images, at the back.
+	for _, key := range []string{"/", "e", "s", "enter"} {
+		s.Key(key)
+	}
+	if s.Current().Name != "restart" {
+		t.Fatalf("on %s", s.Current().Name)
+	}
+	if bar := lastButOne(s); !strings.Contains(bar, "/es 1 of 1, 1 more in other levels") {
+		t.Errorf("bar = %q", bar)
+	}
+}
+
+func TestSearchMatchesOnlyTheTextARowShows(t *testing.T) {
+	s := NewSidebar(tree())
+	// "List survives a restart" is restart's title, which its row does not
+	// show; restart's one bay, loom/b7, is not shown either.
+	for _, query := range []string{"list", "b7"} {
+		for _, key := range append(append([]string{"/"}, strings.Split(query, "")...), "enter") {
+			s.Key(key)
+		}
+		if s.Notice() != "no match for "+query {
+			t.Errorf("%s: notice %q on %s", query, s.Notice(), s.Current().Name)
+		}
+	}
+	// A bay that has its own row is shown, so it matches, and the cursor
+	// goes to that row.
+	for _, key := range []string{"/", "b", "1", "9", "enter"} {
+		s.Key(key)
+	}
+	if s.Current().Name != "sidebar loom/b19" {
+		t.Errorf("b19: on %s", s.Current().Name)
+	}
+	// An item and its bay rows are one match, at the first row that
+	// matches: "b" is in sidebar and in both its bays.
+	s.Key("g")
+	for _, key := range []string{"/", "s", "i", "d", "e", "b", "enter"} {
+		s.Key(key)
+	}
+	if bar := lastButOne(s); !strings.Contains(bar, "/sideb 1 of 1") {
+		t.Errorf("bar = %q", bar)
+	}
+}
+
+func TestSearchHighlightsEveryMatchItCounts(t *testing.T) {
+	s := NewSidebar(tree())
+	s.Key("a") // front and back: images is listed too
+	for _, key := range []string{"/", "e", "enter"} {
+		s.Key(key)
+	}
+	lines, _ := s.RenderLines(60, 16)
+	highlighted := map[string]bool{}
+	for k, line := range lines {
+		if k >= len(s.Rows()) {
+			break
+		}
+		for _, span := range line.Spans {
+			if span.Style == "match" {
+				highlighted[s.Rows()[k].Name] = true
+			}
+		}
+	}
+	for _, r := range s.Rows() {
+		if rowMatches(r, "e") != highlighted[r.Name] {
+			t.Errorf("%s: matches %v, highlighted %v", r.Name, rowMatches(r, "e"), highlighted[r.Name])
+		}
+	}
+}
+
+func TestSearchHighlightsTheTextItFinds(t *testing.T) {
+	s := NewSidebar(tree())
+	for _, key := range []string{"/", "i", "d", "e", "enter"} {
+		s.Key(key)
+	}
+	lines, _ := s.RenderLines(40, 12)
+	found := false
+	for _, line := range lines {
+		for _, span := range line.Spans {
+			if span.Style == "match" {
+				found = found || strings.EqualFold(span.Text, "ide")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no span highlights ide in %v", lines)
+	}
+}
+
+// toRow moves the cursor down to the row in its area with the given name.
+func toRow(s *Sidebar, name string) {
+	for k := 0; k < len(s.Rows()) && (s.Current().Name != name || s.Current().HotRow); k++ {
+		s.Key("j")
+	}
+}
+
+func TestNAndPKeepTheHotlistApartFromTheTree(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetHotlist([]string{"restart", "tooling"})
+	// Rows: the desk, the hotlist's restart and tooling, then the tree.
+	s.Key("j")
+	for _, c := range []struct {
+		key, row string
+		hot      bool
+		notice   string
+	}{
+		{"n", "tooling", true, ""},
+		{"n", "tooling", true, "last in the hotlist"},
+		{"p", "restart", true, ""},
+		{"p", "restart", true, "first in the hotlist"},
+		{"j", "tooling", true, ""},
+		{"j", "people", false, ""},
+		{"p", "people", false, "first at the top level"},
+	} {
+		if row, _, notice := press(s, c.key); row != c.row || s.Current().HotRow != c.hot || notice != c.notice {
+			t.Errorf("%s: on %s (hotlist %v), %q; want %s (hotlist %v), %q", c.key, row, s.Current().HotRow, notice, c.row, c.hot, c.notice)
+		}
+	}
+	// A search from a row of the hotlist goes to the rows in their areas.
+	s.Key("g")
+	s.Key("j") // restart, in the hotlist
+	for _, key := range []string{"/", "s", "i", "d", "enter"} {
+		s.Key(key)
+	}
+	if cur := s.Current(); cur.Name != "sidebar" || cur.HotRow {
+		t.Errorf("search from the hotlist: on %+v", cur)
+	}
+}
+
+func TestTheRootItemOrdersTheTopOfTheTreeAndIsNotARow(t *testing.T) {
+	items := tree()
+	items[RootItem] = Item{Name: RootItem, Title: "The whole tree", Kind: "area", Status: "open",
+		Level: "front", Order: []string{"tooling", "people"}, Questions: []Question{{}, {BlocksAll: true}}}
+	s := NewSidebar(items)
+	// root.json's order is ignored once the root item exists.
+	s.SetRootOrder([]string{"people", "tooling"})
+	if got := names(s); got != DeskRow+",tooling,sidebar,sidebar bay/b8,sidebar loom/b19,people,restart" {
+		t.Errorf("rows = %s", got)
+	}
+	desk := s.Rows()[0]
+	if !desk.Desk || desk.Open != 2 || !desk.Blocking {
+		t.Errorf("desk row = %+v, want the root's two open questions, one blocking", desk)
+	}
+	if got := (Line{Spans: rowSpans(desk)}).String(); !strings.Contains(got, "the desk ?2!") {
+		t.Errorf("desk row drawn as %q", got)
+	}
+}
+
+func TestRMovesToTheNextWaitingRowAndWrapsPastTheEnd(t *testing.T) {
+	s := NewSidebar(tree())
+	if a := s.Key("r"); a != None || s.Notice() == "" {
+		t.Errorf("r with nothing waiting: %v %q", a, s.Notice())
+	}
+	s.SetWaiting(map[string]bool{"loom/b19": true})
+	if a := s.Key("r"); a != Show || !strings.HasPrefix(s.Current().Name, "sidebar") || s.Current().Area {
+		t.Errorf("r: %v on %q", a, s.Current().Name)
+	}
+	at := s.Current().Name
+	s.Key("G")
+	if a := s.Key("r"); a != Show || s.Current().Name != at {
+		t.Errorf("r from the last row: %v on %q, want %q", a, s.Current().Name, at)
+	}
+}
+
+func TestKeysQuoteAPaneTargetInsideACommandString(t *testing.T) {
+	f := &fakeTmux{exists: map[string]bool{}}
+	var binds [][]string
+	v := newFakeView(f)
+	v.Tmux = func(args ...string) (string, error) {
+		if args[0] == "bind-key" {
+			binds = append(binds, args)
+		}
+		return f.run(args...)
+	}
+	if err := v.Setup(); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range binds {
+		for _, arg := range b {
+			// An argument with a space is a command string that tmux
+			// parses again when the key is pressed.
+			if !strings.Contains(arg, " ") {
+				continue
+			}
+			for _, side := range []string{".{left}", ".{right}"} {
+				for rest := arg; strings.Contains(rest, side); {
+					at := strings.Index(rest, side) + len(side)
+					if at >= len(rest) || rest[at] != '\'' {
+						t.Errorf("%s: unquoted %s in %q", b[3], side, arg)
+						break
+					}
+					rest = rest[at:]
+				}
+			}
+		}
 	}
 }

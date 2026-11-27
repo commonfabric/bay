@@ -122,9 +122,14 @@ func LoadItems(stateDir string) (map[string]Item, error) {
 	return items, nil
 }
 
-// LoadRootOrder reads the order of the items at the top of the tree, which
-// docket keeps in root.json because they have no parent record. A missing
-// file gives no order.
+// RootItem is the name of the root of the tree. Docket stores the root as
+// an item: its order is the order of the items at the top of the tree, and
+// its questions are about the whole tree. It is not a row of the tree.
+const RootItem = "_root"
+
+// LoadRootOrder reads root.json, where docket keeps the order of the items
+// at the top of the tree in a state directory that has no root item. A
+// missing file gives no order.
 func LoadRootOrder(stateDir string) ([]string, error) {
 	data, err := os.ReadFile(filepath.Join(stateDir, "root.json"))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -144,16 +149,22 @@ func LoadRootOrder(stateDir string) ([]string, error) {
 
 // Children returns the items directly under parent in docket's order: the
 // parent's own order list first, then by creation time and name. An empty
-// parent names the top of the tree, whose order is rootOrder.
+// parent names the top of the tree, whose order is the root item's, or
+// rootOrder when there is no root item. The root item is no one's child.
 func Children(items map[string]Item, rootOrder []string, parent string) []Item {
 	var kids []Item
 	for _, item := range items {
+		if item.Name == RootItem {
+			continue
+		}
 		if (item.Parent == nil && parent == "") || (item.Parent != nil && *item.Parent == parent) {
 			kids = append(kids, item)
 		}
 	}
 	order := items[parent].Order
-	if parent == "" {
+	if root, ok := items[RootItem]; parent == "" && ok {
+		order = root.Order
+	} else if parent == "" {
 		order = rootOrder
 	}
 	rank := map[string]int{}

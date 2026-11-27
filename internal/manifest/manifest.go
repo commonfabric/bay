@@ -194,6 +194,7 @@ type Bay struct {
 	Description string  `json:"description,omitempty"` // short free-form label shown in picker/ls/tree
 	Item        string  `json:"item,omitempty"`        // name of the docket item this bay works on; empty = none
 	Role        string  `json:"role,omitempty"`        // role within the item; empty = the item's primary bay. Only meaningful when Item is set.
+	State       string  `json:"state,omitempty"`       // lifecycle state the bay's session sets, one of the words in StateMarks; empty = none
 	// Auto-description backstop state (docs/design/auto-descriptions.md).
 	// Source distinguishes user-set from auto-generated descriptions so
 	// the backstop never clobbers human intent; SummarizedAt + InputHash
