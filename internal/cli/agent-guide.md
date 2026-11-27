@@ -47,6 +47,11 @@ PR, dirty/merged flags). Each bay has three identity concepts:
   `bay describe` overrides — a description set that way is owned and the
   backstop won't touch it.
 
+A bay can record the docket item it works on (`bay item`) and a
+**lifecycle state**: one mark, such as 🦚 for looking after an open PR,
+that says where its work is. The bay's session sets it with `bay state`
+at each change of state.
+
 A **full reference** is `dock:id` (e.g., `labs:b1`). A bare ID
 (`b1`) resolves to the current dock first; if absent there, falls
 through to a cross-dock search (which errors on ambiguity).
@@ -299,6 +304,7 @@ current dock.
   "description": "Login flow fixes",
   "item": "docket",
   "role": "review",
+  "state": "pr",
   "dock": "labs",
   "type": "worktree",
   "path": "/Users/dev/projects/labs-worktrees/b1",
@@ -659,8 +665,41 @@ it is fast enough to run on every docket command:
 ```json
 [
   { "dock": "bay", "bay": "b20", "item": "bay-item-link" },
-  { "dock": "loom", "bay": "b42", "item": "people-restart", "role": "helper" }
+  { "dock": "loom", "bay": "b42", "item": "people-restart", "role": "helper", "state": "pr" }
 ]
+```
+
+#### `bay state [id] [<state>]`
+
+Record where the bay's work is with one mark, its lifecycle state. Set it
+at each change of state. Give the word or the mark:
+
+```
+🧱 building   building
+💬 answering  answering a question
+🐤 judging    waiting for the person to judge the result
+✋ trying     waiting for the person to try something by hand
+📚 stacked    stacked on unmerged work
+🦚 pr         looking after an open PR
+👀 ci         watching CI
+🪻 merged     merged and doing follow-ups
+🚨 main       fixing a broken main branch
+🫖 done       nothing left to do; the bay can be closed
+```
+
+`bay state` prints the mark and word (nothing if unset); `bay state --clear`
+removes it; any other value is refused. The state stays when the session
+ends, so set the state that remains true after you stop: `judging` while
+the person is to look at the result, `done` when nothing is left. It is
+`state` in `bay show --json`, `bay ls --json`, `bay tree --json` and
+`bay item --all --json` (omitted when unset), and `bay_state` in `--rows`
+output.
+
+```
+bay state building                        # set current bay's state
+bay state 🦚                              # same as: bay state pr
+bay state b3 judging                      # set by ID
+bay state                                 # print: 🦚 pr
 ```
 
 ### Navigation
@@ -836,8 +875,10 @@ item chosen in the list. It is a view for the person at the terminal. An
 agent has no reason to run it, and must not type into the windows it shows.
 It reads docket's files and bay's manifest. It changes an item's level
 when the person presses `>` or `<`, closes an item or a bay when the
-person presses `x` or `X`, and keeps its marks and the list's
-width in files of its own in docket's folder.
+person presses `x` or `X`. It keeps its marks and hotlist in
+docket's root item folder (`items/_root/marks.json` and `hotlist.json`),
+and the list's width in bay's data folder. The root of docket's tree is the
+item `_root`; the list's first row, the desk, stands for it.
 
 ### Surface commands
 

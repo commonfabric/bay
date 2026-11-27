@@ -73,6 +73,7 @@ type ListRow struct {
 	BayName        string `json:"bay_name,omitempty"`
 	BayItem        string `json:"bay_item,omitempty"`
 	BayRole        string `json:"bay_role,omitempty"`
+	BayState       string `json:"bay_state,omitempty"`
 	BayBranch      string `json:"bay_branch,omitempty"`
 	BayDirty       bool   `json:"bay_dirty,omitempty"`
 	BayPending     bool   `json:"bay_pending,omitempty"`
@@ -161,6 +162,7 @@ func ListRows(view ListView) []ListRow {
 					BayName:       bay.Name,
 					BayItem:       bay.Item,
 					BayRole:       bay.Role,
+					BayState:      bay.State,
 					BayBranch:     bay.Branch,
 					BayDirty:      bay.Dirty,
 					BayPending:    bay.Pending,
@@ -176,6 +178,7 @@ func ListRows(view ListView) []ListRow {
 					BayName:        bay.Name,
 					BayItem:        bay.Item,
 					BayRole:        bay.Role,
+					BayState:       bay.State,
 					BayBranch:      bay.Branch,
 					BayDirty:       bay.Dirty,
 					BayPending:     bay.Pending,
@@ -739,6 +742,9 @@ func FormatBayShow(dockName string, bay *engine.BayInfo, long bool) string {
 			item += " (" + bay.Role + ")"
 		}
 		rows = append(rows, showRow{"item", item})
+	}
+	if bay.State != "" {
+		rows = append(rows, showRow{"state", manifest.StateMarkOf(bay.State) + " " + bay.State})
 	}
 	if bay.Type != "" && bay.Type != "worktree" {
 		rows = append(rows, showRow{"type", bay.Type})

@@ -509,6 +509,7 @@ func newBayShowCmd() *cobra.Command {
 					"description":   bayInfo.Description,
 					"item":          bayInfo.Item,
 					"role":          bayInfo.Role,
+					"state":         bayInfo.State,
 					"dock":          dockName,
 					"type":          bayInfo.Type,
 					"path":          bayInfo.Path,

@@ -196,6 +196,10 @@ Each bay has three identity concepts:
   one returns `did you mean "b1"?` with the canonical ID.
 - An optional **description** (see below) for richer context.
 
+A bay can also record the docket item it works on, and a **lifecycle
+state**: one mark, such as 🦚 for looking after an open PR, that the bay's
+session sets to say where the work is (see `bay state`).
+
 Together the ID and Name produce the bay's **canonical label**:
 - `home` for the home pseudo-bay,
 - `<id>` when the Name is empty (e.g. `b2`),
@@ -272,6 +276,31 @@ doesn't push the whole view sideways. Pipe the output or set
 `COLUMNS=200 bay tree` to force a wider description layout; piped output
 always uses the full 80-character description cap. Use `bay show`,
 `bay ls --json`, or `bay tree --json` for full names and branches.
+
+#### Lifecycle state
+
+A bay's session can record where the bay's work is with one mark, its
+lifecycle state. `bay state pr` sets it, `bay state` prints it, and
+`bay state --clear` removes it. A state is given by its word or its mark:
+
+| Mark | Word | Meaning |
+|------|------|---------|
+| 🧱 | `building` | Building |
+| 💬 | `answering` | Answering a question |
+| 🐤 | `judging` | Waiting for you to judge the result |
+| ✋ | `trying` | Waiting for you to try something by hand |
+| 📚 | `stacked` | Stacked on unmerged work |
+| 🦚 | `pr` | Looking after an open PR |
+| 👀 | `ci` | Watching CI |
+| 🪻 | `merged` | Merged and doing follow-ups |
+| 🚨 | `main` | Fixing a broken main branch |
+| 🫖 | `done` | Nothing left to do; the bay can be closed |
+
+The state is kept in bay's own record, so it stays when the session ends
+and when tmux restarts. It goes when the bay is closed. `bay show` shows
+it, and `bay show --json`, `bay ls --json`, `bay tree --json` and
+`bay item --all --json` carry it as `state` (`bay_state` in `--rows`
+output).
 
 ### Surfaces
 
@@ -720,6 +749,7 @@ bay item [id]                            # print the docket item the bay works o
 bay item [id] <name> [--role <role>]     # set the item (--replace to change an existing one)
 bay item [id] --clear                    # remove the item and role
 bay role [id] [<role>]                   # print or set the role (--clear = primary bay)
+bay state [id] [<state>]                 # print or set the lifecycle state (--clear removes it)
 bay item --all [--json]                  # every bay that names an item (fast; no git checks)
 bay new --item <name> [--role <role>]    # create a bay with its item and role
 bay ls                                   # list bays in current dock
@@ -898,7 +928,9 @@ session:
   When the cursor is on an area, or on an item that lists its bays, the
   row that the right side shows is shaded grey.
   The first line of the list is the desk, docket's agent session for asking
-  about the whole tree.
+  about the whole tree. The desk's row stands for the root of the tree,
+  which docket stores as an item named `_root`. It shows the number of open
+  questions about the whole tree, and `s` on it shows the root's record.
 
 The bay window is not moved. It stays in its dock's tmux session, and it is
 also linked into the view's own tmux session while it is shown. tmux lets
@@ -931,6 +963,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
 | `n` / `p` | With no search set: move to the next / previous row with the same parent, passing over everything inside the rows skipped, folded or not. Areas are siblings of each other, and so are the bay rows of one item and the rows of the hotlist. At the first or last sibling the cursor stays and the shaded line says so, as `last under docket`; there is no wrap. With a search set: go to the next / previous match |
 | `J` / `K` | Move down / up ten rows |
+| `r` | Move to the next row with the waiting mark, from the last row to the first |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
 | `Space` | Fold or unfold the area under the cursor |
@@ -940,7 +973,7 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
 | `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An area with no open items under it is listed so that it can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
 | `X` | On a bay's row, close the bay even with uncommitted changes, which are lost: `bay close --force`. `y` confirms |
-| `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `view-hotlist.json` in docket's folder |
+| `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `items/_root/hotlist.json` in docket's folder |
 | `1` to `9` | Go to that row of the hotlist. Numbers are positions, so they close up when a row leaves |
 | `o` | On a row of the hotlist, go to the same row in its area. The row is brought into the list as a jump to a mark brings it: its areas are unfolded, its level is shown, the filter is cleared, as needed. When the row is an area, it is unfolded too, so its items are listed below the cursor. On a row in an area that is in the hotlist, go to its row in the hotlist. On any other row, `o` shows a notice. `''` goes back to the row `o` left |
 | `[` and `]` | In the hotlist, move the row up or down. On any other row, move the item up or down among the shown items under the same parent, by running `docket set <item> --before <sibling>` or `--after <sibling>`; an item does not move to another parent |
@@ -961,8 +994,17 @@ Keys from either side of the `_docket` session:
 
 | Key | Action |
 |-----|--------|
+<<<<<<< HEAD
 | `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
 | `Option+N` / `Option+P` | Do what `n` and `p` do |
+=======
+| `Option+j` / `Option+k` | In the list, move down / up one row. In the right side, select the pane below / above in the window shown |
+| `Option+J` / `Option+K` | Move down / up one row, from either side. The keyboard stays where it is |
+| `Option+h` / `Option+l` | Move the keyboard to the list / to the right side |
+| `Option+r` | Move to the next row with the waiting mark, as `r` does |
+| `Option+g` | Move to the list and start a search, as `/` does |
+| `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
+>>>>>>> origin/main
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
@@ -976,9 +1018,12 @@ The keys that move the cursor, fold, or use marks from either side work
 while the list is collapsed and while a pane of the view is zoomed. When the list cannot be
 seen, the row's name is shown for a moment at the bottom of the terminal.
 
-Every other key goes to the window on the right, including the tmux prefix
-and the other `Option` keys, so bay's keybindings act on the bay being
-shown. The `_docket` session has its own key table and no prefix; no other
+Bay's other `Option` keys, such as `Option+s`, `Option+a` and the
+`Option+o` menus, act on the bay shown on the right: the view binds
+them again to run from that bay's folder. With no bay shown they do
+nothing. `Option+p`, bay's command palette, is not offered in the view;
+it shows the notice "not in the docket view". Every other key goes to the
+window on the right, including the tmux prefix. The `_docket` session has its own key table and no prefix; no other
 session's keys or options are changed.
 
 The command reads docket's files (`$DOCKET_STATE`, default
@@ -986,9 +1031,12 @@ The command reads docket's files (`$DOCKET_STATE`, default
 three cases: `>` and `<` change the level of the item under the cursor by
 running `docket set`, `[` and `]` move it among its siblings the same way,
 and `x` closes it by running `docket close`. On a bay's row, `x` and `X`
-close the bay with `bay close`. It keeps the marks in `view-marks.json` and
-the hotlist in `view-hotlist.json` in docket's folder, and the list's width
-in `docket-view-width.json` in bay's data folder. It writes nothing else.
+close the bay with `bay close`. It keeps the marks and the hotlist in
+the root item's folder, as `items/_root/marks.json` and
+`items/_root/hotlist.json` in docket's folder. It reads the older
+`view-marks.json` and `view-hotlist.json` when those are missing, and
+removes them when it saves. It keeps the list's width in
+`docket-view-width.json` in bay's data folder. It writes nothing else.
 
 ### Infrastructure
 
