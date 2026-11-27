@@ -86,7 +86,7 @@ func TestRowsShowFrontItemsUnderTheirAreasAndHideBackAndClosedOnes(t *testing.T)
 		t.Errorf("rows = %s\nwant   %s", got, want)
 	}
 	people := s.Rows()[1]
-	if !people.Area || people.Open != 1 || !people.Blocking {
+	if !people.Area || people.Open != 0 || people.Beneath != 1 {
 		t.Errorf("area roll-up = %+v", people)
 	}
 	s.Key("a")
@@ -430,8 +430,8 @@ func TestMovingTheCursorAsksForTheRowToBeShownAndSpaceFoldsAnArea(t *testing.T) 
 	if got := names(s); strings.Contains(got, "restart") {
 		t.Errorf("a folded area still lists its items: %s", got)
 	}
-	if s.Rows()[1].Open != 1 {
-		t.Errorf("a folded area lost its question count")
+	if got := (Line{Spans: rowSpans(s.Rows()[1])}).String(); !strings.Contains(got, "+1") || strings.Contains(got, "?") {
+		t.Errorf("a folded area draws %q", got)
 	}
 }
 
@@ -1550,19 +1550,35 @@ func TestXAndShiftXCloseTheBayOnABayRow(t *testing.T) {
 	}
 }
 
-func TestAnAreaWithNoOpenItemsIsListedSoItCanBeClosed(t *testing.T) {
+func TestAnOpenAreaIsListedAtItsLevelWhateverIsBeneathItAndAnEmptyOneCanBeClosed(t *testing.T) {
 	items := tree()
 	items["empty"] = Item{Name: "empty", Title: "Nothing left", Kind: "area", Status: "open", Level: "front"}
 	items["backonly"] = Item{Name: "backonly", Title: "Only back items", Kind: "area", Status: "open", Level: "front"}
 	items["later"] = Item{Name: "later", Title: "Later", Kind: "goal", Parent: ptr("backonly"), Status: "open", Level: "back"}
 	s := NewSidebar(items)
 	got := names(s)
-	if !strings.Contains(got, "empty") || strings.Contains(got, "backonly") {
+	if !strings.Contains(got, "empty") || !strings.Contains(got, "backonly") {
 		t.Errorf("rows = %s", got)
 	}
-	for s.Current().Name != "empty" {
-		s.Key("j")
+	for _, r := range s.Rows() {
+		if want := r.Name == "empty"; r.Area && (r.Name == "empty" || r.Name == "backonly") && r.Empty != want {
+			t.Errorf("%s: Empty = %v", r.Name, r.Empty)
+		}
 	}
+	goTo := func(name string) {
+		s.Key("g")
+		for i := 0; i < len(s.Rows()) && s.Current().Name != name; i++ {
+			s.Key("j")
+		}
+		if s.Current().Name != name {
+			t.Fatalf("no row %s", name)
+		}
+	}
+	goTo("backonly")
+	if a := s.Key("x"); a != None || !strings.Contains(s.Notice(), "open items under it") {
+		t.Errorf("x on an area whose items are at hidden levels: %v %q", a, s.Notice())
+	}
+	goTo("empty")
 	if a := s.Key("x"); a != None || s.Notice() != "" {
 		t.Errorf("x: %v %q", a, s.Notice())
 	}
@@ -1582,7 +1598,7 @@ func TestAWaitingBayMarksItsRowItsItemAndItsArea(t *testing.T) {
 			marked[r.Name] = true
 		}
 	}
-	want := map[string]bool{"tooling": true, "sidebar": true, "sidebar loom/b19": true}
+	want := map[string]bool{"sidebar": true, "sidebar loom/b19": true}
 	if !maps.Equal(marked, want) {
 		t.Errorf("waiting rows = %v", marked)
 	}
@@ -1613,8 +1629,8 @@ func TestAnAreaWithABayOfItsOwnShowsThatBayItsQuestionsAndItsWaitingMark(t *test
 			quiet = r
 		}
 	}
-	// Its own two questions and the one of the sidebar item beneath it.
-	if area.Open != 3 || !area.Blocking || !area.Waiting || len(area.Bays) != 1 {
+	// Its own two questions; the sidebar item's one is counted beneath it.
+	if area.Open != 2 || area.Beneath != 1 || !area.Blocking || !area.Waiting || len(area.Bays) != 1 {
 		t.Errorf("area row = %+v", area)
 	}
 	if quiet.Waiting || len(quiet.Bays) != 1 {
@@ -2179,6 +2195,41 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 	s.Key("G")
 	if a := s.Key("o"); a != None || s.Notice() == "" {
 		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
+	}
+}
+
+func TestAFoldedAreaDrawsWhatIsBeneathItDimAndAnUnfoldedOneDoesNot(t *testing.T) {
+	items := tree()
+	tooling := items["tooling"]
+	tooling.Questions = []Question{{}, {}}
+	items["tooling"] = tooling
+	s := NewSidebar(items)
+	s.SetWaiting(map[string]bool{"loom/b19": true})
+	draw := func() ([]Span, Row) {
+		for _, r := range s.Rows() {
+			if r.Name == "tooling" {
+				return rowSpans(r), r
+			}
+		}
+		t.Fatal("no tooling row")
+		return nil, Row{}
+	}
+	spans, row := draw()
+	if text := (Line{Spans: spans}).String(); strings.Contains(text, WaitingMark) || strings.Contains(text, "+") || !strings.Contains(text, "?2") || !row.BeneathWaiting {
+		t.Errorf("unfolded: %q %+v", text, row)
+	}
+	for s.Current().Name != "tooling" {
+		s.Key("j")
+	}
+	s.Key(" ")
+	spans, _ = draw()
+	if text := (Line{Spans: spans}).String(); !strings.HasSuffix(text, " "+WaitingMark+" ?2 +1") && !strings.Contains(text, "?2 +1") {
+		t.Errorf("folded: %q", text)
+	}
+	for _, sp := range spans {
+		if (sp.Text == " "+WaitingMark || strings.HasPrefix(sp.Text, " +")) && sp.Style != "dim" {
+			t.Errorf("span %q is drawn %q, want dim", sp.Text, sp.Style)
+		}
 	}
 }
 
