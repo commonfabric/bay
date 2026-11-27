@@ -1031,12 +1031,20 @@ The command reads docket's files (`$DOCKET_STATE`, default
 three cases: `>` and `<` change the level of the item under the cursor by
 running `docket set`, `[` and `]` move it among its siblings the same way,
 and `x` closes it by running `docket close`. On a bay's row, `x` and `X`
+<<<<<<< HEAD
+close the bay with `bay close`. It keeps the marks in `view-marks.json` and
+the hotlist in `view-hotlist.json` in docket's folder, and the list's width
+in `docket-view-width.json` in bay's data folder. The row the right side
+shows is kept in `docket-view-row.json` in bay's data folder, so that a list
+that starts again puts its cursor back on that row. It writes nothing else.
+=======
 close the bay with `bay close`. It keeps the marks and the hotlist in
 the root item's folder, as `items/_root/marks.json` and
 `items/_root/hotlist.json` in docket's folder. It reads the older
 `view-marks.json` and `view-hotlist.json` when those are missing, and
 removes them when it saves. It keeps the list's width in
 `docket-view-width.json` in bay's data folder. It writes nothing else.
+>>>>>>> origin/main
 
 ### Infrastructure
 

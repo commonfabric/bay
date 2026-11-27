@@ -85,6 +85,19 @@ func TestTmuxTextShowsAHashAsItIs(t *testing.T) {
 	}
 }
 
+func TestTheShownRowIsSavedAndReadBack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bay", "docket-view-row.json")
+	if got := loadShownRow(path); got != "" {
+		t.Errorf("nothing saved: %q", got)
+	}
+	if err := saveShownRow(path, "\x00docket"); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadShownRow(path); got != "\x00docket" {
+		t.Errorf("read back %q", got)
+	}
+}
+
 func TestMarksAndHotlistMoveIntoTheRootItemsFolder(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {

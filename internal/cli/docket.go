@@ -478,6 +478,29 @@ func saveWidth(path, oldPath string, width int) error {
 	return nil
 }
 
+// loadShownRow reads the key of the row the right side last showed, and ""
+// when none is saved.
+func loadShownRow(path string) string {
+	var saved struct {
+		Row string `json:"row"`
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &saved)
+	}
+	return saved.Row
+}
+
+func saveShownRow(path, key string) error {
+	data, err := json.Marshal(map[string]string{"row": key})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 // keysPage is the text of the keys popup: the keys, the marks that are
 // set, then the legend.
 func keysPage(stateDir string) []docket.Line {
@@ -762,6 +785,8 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 	}
 	forgetHotlist()
+	// The list starts on the row the right side still shows from before.
+	sidebar.ReturnTo(loadShownRow(bayPaths().DocketViewRow))
 	// The list starts at the width it had when it was last used. A width
 	// the list is later given is saved, except a collapsed one and one a
 	// zoomed pane gives it. When the terminal changes size, tmux changes
@@ -976,6 +1001,8 @@ func runSidebar(view *docket.View, stateDir string) error {
 				note = shown
 				if err != nil {
 					note = err.Error()
+				} else {
+					_ = saveShownRow(bayPaths().DocketViewRow, sidebar.ShownKey())
 				}
 				// A collapsed list, or one hidden by a zoomed right
 				// pane, cannot show where the cursor is, so the row's

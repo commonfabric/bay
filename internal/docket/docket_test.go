@@ -1422,6 +1422,7 @@ func TestANewSidebarIsGivenTheSavedWidth(t *testing.T) {
 
 func TestBookmarkKeysFromTheRightSideActWhileAFilterIsTyped(t *testing.T) {
 	s := NewSidebar(tree())
+	s.Key("j")
 	toRow(s, "sidebar")
 	if a := s.Key("j"); a != Show {
 		t.Fatalf("j: %v", a)
@@ -2195,6 +2196,58 @@ func TestOGoesBetweenAHotlistRowAndItsRowInItsArea(t *testing.T) {
 	s.Key("G")
 	if a := s.Key("o"); a != None || s.Notice() == "" {
 		t.Errorf("o on a row not in the hotlist: %v %q", a, s.Notice())
+	}
+}
+
+func TestAStartedListReturnsToTheRowTheRightSideShows(t *testing.T) {
+	s := NewSidebar(tree())
+	if s.ShownKey() != "" {
+		t.Fatalf("a key before any row is shown: %q", s.ShownKey())
+	}
+	s.SetHotlist([]string{"tooling"})
+	s.Key("j")
+	if a := s.Key("j"); a != Show {
+		t.Fatalf("j: %v", a)
+	}
+	want, shown := s.Current().Name, s.Shown().Name
+	key := s.ShownKey()
+
+	again := NewSidebar(tree())
+	again.SetHotlist([]string{"tooling"})
+	if !again.ReturnTo(key) || again.Current().Name != want || again.Shown().Name != shown {
+		t.Errorf("returned to %q showing %q, want %q showing %q", again.Current().Name, again.Shown().Name, want, shown)
+	}
+
+	// The hotlist's row and the row in its area are told apart.
+	s.Key("1")
+	hot := s.ShownKey()
+	again = NewSidebar(tree())
+	again.SetHotlist([]string{"tooling"})
+	if !again.ReturnTo(hot) || !again.Current().HotRow {
+		t.Errorf("hotlist row: on %+v", again.Current())
+	}
+
+	// A row no longer listed leaves the cursor where it starts.
+	if again := NewSidebar(tree()); again.ReturnTo("gone-item") || again.cursor != 0 {
+		t.Errorf("returned to a row that is not listed")
+	}
+}
+
+func TestTheHotlistDoesNotGiveAnAreaAHiddenFirstItem(t *testing.T) {
+	items := tree()
+	items["quiet"] = Item{Name: "quiet", Title: "Quiet", Kind: "area", Status: "open", Level: "front"}
+	// At the front level the area lists only an empty area beneath it.
+	items["empty"] = Item{Name: "empty", Title: "Empty", Kind: "area", Status: "open", Level: "front", Parent: ptr("quiet")}
+	items["later"] = Item{Name: "later", Title: "Later", Kind: "goal", Status: "open", Level: "back", Parent: ptr("quiet")}
+	s := NewSidebar(items)
+	s.SetHotlist([]string{"tooling"})
+	k := s.rowNamed("quiet")
+	if k < 0 {
+		t.Fatalf("the area is not listed: %s", names(s))
+	}
+	s.cursor = k
+	if got := s.Shown().Name; got == "later" {
+		t.Errorf("the area shows %q, an item at a level not shown", got)
 	}
 }
 
