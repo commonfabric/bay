@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Item is the part of a docket item that the sidebar shows.
@@ -31,6 +32,37 @@ type Item struct {
 	Sites     []Site     `json:"sites"`
 	Holds     []Hold     `json:"holds"`
 	Links     []string   `json:"links"`
+	Aliases   []string   `json:"aliases"` // the item's old names; each still names it
+}
+
+// Renames maps each old name of an item to the item's name now. Docket
+// keeps an item's old names when it renames the item, and refuses an old
+// name to any other item.
+func Renames(items map[string]Item) map[string]string {
+	renames := map[string]string{}
+	for name, item := range items {
+		for _, old := range item.Aliases {
+			if _, ok := items[old]; !ok {
+				renames[old] = name
+			}
+		}
+	}
+	return renames
+}
+
+// Renamed returns a row's name with an old item name replaced by the
+// item's name now. A row's name is an item's name, or an item's name, a
+// space and a bay.
+func Renamed(name string, renames map[string]string) string {
+	item, rest, isBay := strings.Cut(name, " ")
+	now, ok := renames[item]
+	if !ok {
+		return name
+	}
+	if isBay {
+		return now + " " + rest
+	}
+	return now
 }
 
 // Hold is one thing an item's work waits on.

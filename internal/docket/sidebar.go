@@ -49,8 +49,9 @@ type Row struct {
 // cursor is. It has no terminal or tmux dependency.
 type Sidebar struct {
 	items       map[string]Item
-	rootOrder   []string // the order of the items at the top of the tree
-	hotlist     []string // the names of the rows in the hotlist, in order
+	renames     map[string]string // each old name of an item, and the item's name now
+	rootOrder   []string          // the order of the items at the top of the tree
+	hotlist     []string          // the names of the rows in the hotlist, in order
 	sibling     SiblingMove
 	folded      map[string]bool
 	levels      int             // 0 front; 1 front and back; 2 every level
@@ -106,21 +107,25 @@ func (s *Sidebar) SetMarks(marks map[string]string) {
 // Marks returns the marks: for each mark, the name of its row.
 func (s *Sidebar) Marks() map[string]string { return s.marks }
 
-// ForgetMarks drops the marks whose item is closed or no longer exists,
-// and reports whether it dropped any. It drops none when there are no
-// items at all.
+// ForgetMarks moves a mark on an old name of an item to the item's name
+// now, drops the marks whose item is closed or no longer exists, and
+// reports whether it changed any. It drops none when there are no items at
+// all.
 func (s *Sidebar) ForgetMarks() bool {
-	dropped := false
+	changed := false
 	if len(s.items) == 0 {
 		return false
 	}
 	for mark, name := range s.marks {
+		if now := Renamed(name, s.renames); now != name {
+			s.marks[mark], name, changed = now, now, true
+		}
 		if !markLives(name, s.items) {
 			delete(s.marks, mark)
-			dropped = true
+			changed = true
 		}
 	}
-	return dropped
+	return changed
 }
 
 // markLives reports whether a mark's row can still be reached: it is the
@@ -317,9 +322,39 @@ func (s *Sidebar) SetWaiting(waiting map[string]bool) bool {
 
 // SetItems replaces the items. The cursor stays on the row it was on when
 // that row is still shown.
+// The list's state that names rows follows an item that docket renamed:
+// the folds, the row the right side shows, the row to jump back to, and the
+// cursor. The marks and the hotlist follow it in ForgetMarks and
+// ForgetHotlist, which report the change so that it is saved.
 func (s *Sidebar) SetItems(items map[string]Item) {
 	s.items = items
+	s.renames = Renames(items)
+	s.folded = renamedKeys(s.folded, s.renames)
+	s.saved = renamedKeys(s.saved, s.renames)
+	s.showing = Renamed(s.showing, s.renames)
+	s.back = renamedRowKey(s.back, s.renames)
 	s.rebuild()
+}
+
+// renamedKeys returns folds with each row name that is an old item name
+// replaced by the item's name now. A nil map stays nil.
+func renamedKeys(folds map[string]bool, renames map[string]string) map[string]bool {
+	if folds == nil || len(renames) == 0 {
+		return folds
+	}
+	out := make(map[string]bool, len(folds))
+	for name, folded := range folds {
+		out[Renamed(name, renames)] = folded
+	}
+	return out
+}
+
+// renamedRowKey is Renamed for a row's key, which may start with hotPrefix.
+func renamedRowKey(key string, renames map[string]string) string {
+	if rest, ok := strings.CutPrefix(key, hotPrefix); ok {
+		return hotPrefix + Renamed(rest, renames)
+	}
+	return Renamed(key, renames)
 }
 
 // SetRootOrder sets the order of the items at the top of the tree.
@@ -371,7 +406,7 @@ const (
 func (s *Sidebar) rebuild() {
 	current := ""
 	if s.cursor < len(s.rows) {
-		current = rowKey(s.rows[s.cursor])
+		current = renamedRowKey(rowKey(s.rows[s.cursor]), s.renames)
 	}
 	open, blocking := s.items[RootItem].OpenQuestions()
 	rows := []Row{{Name: DeskRow, Title: "ask about and reorganize the tree", Desk: true,

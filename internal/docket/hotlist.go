@@ -21,16 +21,22 @@ func (s *Sidebar) SetHotlist(names []string) {
 // Hotlist returns the names of the hotlist's rows, in order.
 func (s *Sidebar) Hotlist() []string { return s.hotlist }
 
-// ForgetHotlist takes off the hotlist the rows whose item is closed or no
-// longer exists, and the rows of a bay the item no longer lists. It
-// reports whether it took any off. It takes none off when there are no
-// items at all.
+// ForgetHotlist moves a row on an old name of an item to the item's name
+// now, takes off the hotlist the rows whose item is closed or no longer
+// exists, and the rows of a bay the item no longer lists. It reports
+// whether it changed any. It takes none off when there are no items at
+// all.
 func (s *Sidebar) ForgetHotlist() bool {
 	if len(s.items) == 0 {
 		return false
 	}
-	kept := slices.DeleteFunc(slices.Clone(s.hotlist), func(name string) bool { return !s.hotLives(name) })
-	if len(kept) == len(s.hotlist) {
+	kept := make([]string, 0, len(s.hotlist))
+	for _, name := range s.hotlist {
+		if name = Renamed(name, s.renames); s.hotLives(name) {
+			kept = append(kept, name)
+		}
+	}
+	if slices.Equal(kept, s.hotlist) {
 		return false
 	}
 	s.hotlist = kept

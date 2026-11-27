@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -2638,5 +2639,82 @@ func TestKeysQuoteAPaneTargetInsideACommandString(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// renamed returns items with the item old renamed to now, as docket rename
+// leaves them: the item keeps its old name as an alias, and its children
+// and its parent's order name it by the new name.
+func renamed(items map[string]Item, old, now string) map[string]Item {
+	out := map[string]Item{}
+	for name, item := range items {
+		if item.Parent != nil && *item.Parent == old {
+			item.Parent = ptr(now)
+		}
+		item.Order = slices.Clone(item.Order)
+		for k, n := range item.Order {
+			if n == old {
+				item.Order[k] = now
+			}
+		}
+		if name == old {
+			name, item.Name, item.Aliases = now, now, append(slices.Clone(item.Aliases), old)
+		}
+		out[name] = item
+	}
+	return out
+}
+
+func TestTheListFollowsARenamedItem(t *testing.T) {
+	s := NewSidebar(tree())
+	s.SetMarks(map[string]string{"r": "restart", "b": "restart loom/b7", "s": "sidebar"})
+	s.SetHotlist([]string{"restart", "sidebar"})
+	s.ForgetMarks()
+	s.ForgetHotlist()
+	for s.Current().Name != "people" {
+		s.Key("j")
+	}
+	s.Key(" ") // fold people
+	for s.Current().Name != "tooling" {
+		s.Key("j")
+	}
+	s.Key(" ")
+	s.Key(" ") // unfold tooling, so that it has a fold entry of false
+	s.SetItems(renamed(renamed(tree(), "people", "staff"), "restart", "survive"))
+	if got := s.Current().Name; got != "tooling" {
+		t.Errorf("cursor on %q, want tooling", got)
+	}
+	if !s.folded["staff"] || s.folded["people"] {
+		t.Errorf("folds = %v", s.folded)
+	}
+	if !s.ForgetMarks() {
+		t.Error("ForgetMarks reported no change")
+	}
+	if got := s.Marks(); got["r"] != "survive" || got["b"] != "survive loom/b7" || got["s"] != "sidebar" {
+		t.Errorf("marks = %v", got)
+	}
+	if !s.ForgetHotlist() || hotNames(s) != "survive,sidebar" {
+		t.Errorf("hotlist = %s", hotNames(s))
+	}
+	if s.ForgetMarks() || s.ForgetHotlist() {
+		t.Error("a second pass changed the marks or the hotlist")
+	}
+}
+
+func TestTheCursorStaysOnARenamedItemsRow(t *testing.T) {
+	s := NewSidebar(tree())
+	for s.Current().Name != "restart" {
+		s.Key("j")
+	}
+	s.showing = "sidebar" // the right side shows another row
+	// A new item above it moves its row down as it is renamed.
+	items := renamed(tree(), "restart", "survive")
+	items["hire"] = Item{Name: "hire", Title: "Hire", Kind: "goal", Parent: ptr("people"), Status: "open", Level: "front"}
+	people := items["people"]
+	people.Order = append([]string{"hire"}, people.Order...)
+	items["people"] = people
+	s.SetItems(items)
+	if got := s.Current().Name; got != "survive" {
+		t.Errorf("cursor on %q, want survive", got)
 	}
 }
