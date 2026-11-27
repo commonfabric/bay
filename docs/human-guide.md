@@ -916,7 +916,11 @@ session:
 
   The two shaded lines at the bottom describe the view and are not rows. The
   upper one says which levels are shown, or shows the filter or the search
-  (`/text 2 of 5`). The lower one reminds of keys.
+  (`/text 2 of 5`). The lower one reminds of keys. While `docket doctor`
+  finds problems in docket's files, the lower line says how many instead.
+  `docket doctor` lists them, and `docket doctor --fix` makes the repairs
+  that need no judgement. The view runs the check each time docket's files
+  change, in the background, without the slow check that each bay exists.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
   Closing a bay with `bay close` takes the bay off the docket items that

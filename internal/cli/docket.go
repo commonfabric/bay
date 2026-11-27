@@ -785,6 +785,28 @@ func runSidebar(view *docket.View, stateDir string) error {
 		}
 	}
 	forgetHotlist()
+	// docket doctor checks docket's files after each load, in the
+	// background, and the list shows a line while it finds problems. A load
+	// during a check starts one more check when it ends.
+	problems := 0
+	checked := make(chan int, 1)
+	checking, again := false, false
+	check := func() {
+		if checking {
+			again = true
+			return
+		}
+		checking = true
+		go func() {
+			out, err := exec.Command(docket.DoctorCommand[0], docket.DoctorCommand[1:]...).Output()
+			n, parseErr := docket.DoctorProblems(out)
+			if err != nil || parseErr != nil {
+				n = 0
+			}
+			checked <- n
+		}()
+	}
+	check()
 	// The list starts on the row the right side still shows from before.
 	sidebar.ReturnTo(loadShownRow(bayPaths().DocketViewRow))
 	// The list starts at the width it had when it was last used. A width
@@ -812,8 +834,12 @@ func runSidebar(view *docket.View, stateDir string) error {
 				_ = saveWidth(bayPaths().DocketViewWidth, oldWidthFile(stateDir), width)
 			}
 		}
-		if note != "" && !sidebar.Collapsed() {
-			lines[len(lines)-1] = docket.NoticeLine(note, width)
+		shown := note
+		if shown == "" {
+			shown = docket.DoctorNotice(problems)
+		}
+		if shown != "" && !sidebar.Collapsed() {
+			lines[len(lines)-1] = docket.NoticeLine(shown, width)
 		}
 		var b strings.Builder
 		b.WriteString("\x1b[H")
@@ -858,6 +884,7 @@ func runSidebar(view *docket.View, stateDir string) error {
 		sidebar.SetMissing(missingBays(items))
 		forgetMarks()
 		forgetHotlist()
+		check()
 	}
 
 	keys := make(chan string, 64)
@@ -1017,6 +1044,16 @@ func runSidebar(view *docket.View, stateDir string) error {
 				}
 			}
 		case <-resized:
+		case n := <-checked:
+			checking = false
+			if again {
+				again = false
+				check()
+			}
+			if n == problems {
+				continue
+			}
+			problems = n
 		case <-tick.C:
 			changed := sidebar.SetWaiting(waitingBays(windows.load()))
 			if info, err := os.Stat(stamp); err == nil && info.ModTime().After(seen) {
