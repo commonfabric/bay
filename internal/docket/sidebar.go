@@ -3,6 +3,7 @@ package docket
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -30,52 +31,62 @@ type Row struct {
 	Desk     bool
 	Work     string
 	Level    string
-	Open     int  // open questions; for an area, its own and those of the shown items beneath it
+	Open     int  // open questions; for an area, only its own
+	Beneath  int  // on an area, the open questions of the shown items beneath it
 	Blocking bool // an open question holds up all work
 	Bays     []string
 	Bay      string // set on a row that stands for one bay of an item with several
 	Gone     bool   // none of the row's bays exists
-	Waiting  bool   // a bay of the row waits for the person; on an area, also a bay beneath it
-	Hot      int    // the row's place in the hotlist, counted from 1; 0 when it is not in it
-	HotRow   bool   // the row is the one in the hotlist, not the one in its area
+	Waiting  bool   // a bay of the row waits for the person; on an area, a bay of the area's own
+	Empty    bool   // an area with no open items at any level
+	// BeneathWaiting is set on an area when a bay beneath it waits.
+	BeneathWaiting bool
+	Hot            int  // the row's place in the hotlist, counted from 1; 0 when it is not in it
+	HotRow         bool // the row is the one in the hotlist, not the one in its area
 }
 
 // Sidebar is the state of the list: which items are shown, and where the
 // cursor is. It has no terminal or tmux dependency.
 type Sidebar struct {
-	items     map[string]Item
-	renames   map[string]string // each old name of an item, and the item's name now
-	rootOrder []string          // the order of the items at the top of the tree
-	hotlist   []string          // the names of the rows in the hotlist, in order
-	sibling   SiblingMove
-	folded    map[string]bool
-	levels    int             // 0 front; 1 front and back; 2 every level
-	allBays   bool            // every item and area with a bay gets a row for each bay
-	saved     map[string]bool // the folds to restore while every area is unfolded; else nil
-	filter    string
-	typing    bool // the filter is being typed
-	rows      []Row
-	marks     map[string]string // for each mark, a letter or digit, the name of its row
-	pending   string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
-	closing   string            // the item x asks to close; else ""
-	bayClose  BayClose          // the bay x or X asks to close; its Ref is "" when none
-	dropping  bool              // the reason for dropping closing is being typed
-	reason    string            // the reason typed so far
-	outcome   string            // "finished" or "dropped", once chosen
-	command   bool              // F12 came last: the next key is a command even while a filter is typed
-	back      string            // the key (rowKey) of the row the cursor left on the last jump
-	notice    string            // what the last key has to tell the user
-	missing   map[string]bool   // the bays, as dock/bay, that do not exist
-	waiting   map[string]bool   // the bays, as dock/bay, whose agent waits for the person
-	first     map[string]Row    // for each area row, the first row beneath it that is not an area
-	cursor    int
-	showing   string // the name of the row the right side was last asked to show
-	moved     bool   // the cursor's row left the list, and the cursor is on another row
-	top       int    // first row drawn
-	body      int    // rows the last Render had room for
-	scrolled  bool   // the wheel moved the rows since the last key
-	width     int    // columns the last Render had
-	full      int    // columns the last Render had when it was not collapsed
+	items       map[string]Item
+	renames     map[string]string // each old name of an item, and the item's name now
+	rootOrder   []string          // the order of the items at the top of the tree
+	hotlist     []string          // the names of the rows in the hotlist, in order
+	sibling     SiblingMove
+	folded      map[string]bool
+	levels      int             // 0 front; 1 front and back; 2 every level
+	allBays     bool            // every item and area with a bay gets a row for each bay
+	saved       map[string]bool // the folds to restore while every area is unfolded; else nil
+	filter      string
+	typing      bool            // the filter is being typed
+	search      string          // the text n and p go to; "" when no search is set
+	searching   bool            // the text of a search is being typed
+	query       string          // the text typed so far
+	origin      string          // the key (rowKey) of the row the cursor was on when the search began
+	originFolds map[string]bool // the folds when the search began
+	wrapped     string          // "top" or "bottom" when the last search move went past the end of the list
+	rows        []Row
+	marks       map[string]string // for each mark, a letter or digit, the name of its row
+	pending     string            // "m", "M" (from the right side) or "'" when the next key names a mark; "x" when it says how an item closes; else ""
+	closing     string            // the item x asks to close; else ""
+	bayClose    BayClose          // the bay x or X asks to close; its Ref is "" when none
+	dropping    bool              // the reason for dropping closing is being typed
+	reason      string            // the reason typed so far
+	outcome     string            // "finished" or "dropped", once chosen
+	command     bool              // F12 came last: the next key is a command even while a filter is typed
+	back        string            // the key (rowKey) of the row the cursor left on the last jump
+	notice      string            // what the last key has to tell the user
+	missing     map[string]bool   // the bays, as dock/bay, that do not exist
+	waiting     map[string]bool   // the bays, as dock/bay, whose agent waits for the person
+	first       map[string]Row    // for each area row, the first row beneath it that is not an area
+	cursor      int
+	showing     string // the name of the row the right side was last asked to show
+	moved       bool   // the cursor's row left the list, and the cursor is on another row
+	top         int    // first row drawn
+	body        int    // rows the last Render had room for
+	scrolled    bool   // the wheel moved the rows since the last key
+	width       int    // columns the last Render had
+	full        int    // columns the last Render had when it was not collapsed
 }
 
 // NewSidebar returns a sidebar over items with the cursor on the first row.
@@ -454,13 +465,14 @@ func (s *Sidebar) tree() []Row {
 					waiting = waiting || s.waiting[ref]
 				}
 				if len(below) == 0 {
-					// An area with no open items under it is listed, so
-					// that it can be closed.
-					if s.hasOpenChild(item.Name) || !s.shown(item, inArea) {
+					// An open area at a level shown is listed whatever is
+					// beneath it. It is marked empty when it has no open
+					// items at any level, and can then be closed.
+					if !s.shown(item, inArea) {
 						continue
 					}
 					out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-						Open: n, Blocking: b, Bays: bays, Waiting: waiting})
+						Open: n, Blocking: b, Bays: bays, Waiting: waiting, Empty: !s.hasOpenChild(item.Name)})
 					if s.allBays {
 						out = append(out, s.bayRows(item, depth)...)
 					}
@@ -474,11 +486,13 @@ func (s *Sidebar) tree() []Row {
 					}
 				}
 				folded := s.folded[item.Name] && s.filter == ""
+				beneathWaiting := false
 				for _, r := range below {
-					waiting = waiting || r.Waiting
+					beneathWaiting = beneathWaiting || r.Waiting || r.BeneathWaiting
 				}
 				out = append(out, Row{Name: item.Name, Title: item.Title, Depth: depth, Area: true,
-					Folded: folded, Open: belowOpen + n, Blocking: belowBlocking || b, Bays: bays, Waiting: waiting})
+					Folded: folded, Open: n, Blocking: b, Beneath: belowOpen, Bays: bays, Waiting: waiting,
+					BeneathWaiting: beneathWaiting})
 				if s.allBays {
 					out = append(out, s.bayRows(item, depth)...)
 				}
@@ -568,6 +582,28 @@ func (s *Sidebar) rowKeyed(key string) int {
 		}
 	}
 	return -1
+}
+
+// ShownKey names the row the right side was last asked to show, for
+// ReturnTo after the list starts again. It is "" before any row is shown.
+func (s *Sidebar) ShownKey() string {
+	if s.showing == "" {
+		return ""
+	}
+	return rowKey(s.Current())
+}
+
+// ReturnTo puts the cursor on the row with the key ShownKey gave, and
+// records that the right side shows it. It reports whether the row is
+// listed.
+func (s *Sidebar) ReturnTo(key string) bool {
+	k := s.rowKeyed(key)
+	if key == "" || k < 0 {
+		return false
+	}
+	s.cursor = k
+	s.showing, s.moved = s.Shown().Name, false
+	return true
 }
 
 // did records the row the right side is asked to show.
@@ -787,6 +823,9 @@ func (s *Sidebar) key(key string) Action {
 	if s.typing && sent == "" {
 		return s.typeFilter(key)
 	}
+	if s.searching && sent == "" {
+		return s.typeSearch(key)
+	}
 	switch key {
 	case "j", "down":
 		if s.move(1) {
@@ -797,9 +836,11 @@ func (s *Sidebar) key(key string) Action {
 			return Show
 		}
 	case "n", "p":
-		if s.moveToItem(map[string]int{"n": 1, "p": -1}[key]) {
-			return Show
+		dir := map[string]int{"n": 1, "p": -1}[key]
+		if s.search != "" {
+			return s.stepMatch(dir)
 		}
+		return s.stepSibling(dir)
 	case "r":
 		if s.moveToWaiting() {
 			return Show
@@ -863,11 +904,16 @@ func (s *Sidebar) key(key string) Action {
 		return Deeper
 	case "<":
 		return Nearer
-	case "/":
+	case "F":
 		s.typing, s.filter = true, ""
 		s.rebuild()
+	case "/":
+		s.startSearch()
 	case "esc":
-		if s.filter != "" {
+		if s.search != "" {
+			s.search = ""
+			s.notice = "search cleared"
+		} else if s.filter != "" {
 			s.filter = ""
 			s.rebuild()
 		}
@@ -1028,6 +1074,333 @@ func (s *Sidebar) typeFilter(key string) Action {
 	return None
 }
 
+// searchable reports whether a span of a row holds text that a search looks
+// in and highlights: an item's name, an area's title, or a bay.
+func searchable(span Span) bool {
+	return (span.Style == "" || span.Style == "area" || span.Style == "bay") && strings.TrimSpace(span.Text) != ""
+}
+
+// rowMatches reports whether the search text is in the text the row shows:
+// an item's name, an area's title, or the bay on a bay's row.
+func rowMatches(r Row, text string) bool {
+	if r.Desk || text == "" {
+		return false
+	}
+	needle := strings.ToLower(text)
+	for _, span := range baseSpans(r) {
+		if searchable(span) && strings.Contains(strings.ToLower(span.Text), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRows returns the indexes of the rows that match the text. An item
+// and its bay rows are one match, at the first of them that matches.
+func matchRows(rows []Row, text string) []int {
+	var out []int
+	last := ""
+	for k, r := range rows {
+		item, _, _ := strings.Cut(r.Name, " ")
+		if !rowMatches(r, text) || (r.Bay != "" && item == last) {
+			continue
+		}
+		out, last = append(out, k), item
+	}
+	return out
+}
+
+// unfoldedTree returns the rows of the items under their areas at the
+// levels up to the given one, with every area unfolded. The hotlist is not
+// among them.
+func (s *Sidebar) unfoldedTree(levels int) []Row {
+	shown, folded, first := s.levels, s.folded, s.first
+	s.levels, s.folded, s.first = levels, map[string]bool{}, map[string]Row{}
+	rows := s.tree()
+	s.levels, s.folded, s.first = shown, folded, first
+	return rows
+}
+
+// searchHits lists, in the order of the list, the names of the rows that
+// match the text in the levels up to the given one. It looks inside folded
+// areas.
+func (s *Sidebar) searchHits(text string, levels int) []string {
+	rows := s.unfoldedTree(levels)
+	var hits []string
+	for _, k := range matchRows(rows, text) {
+		hits = append(hits, rows[k].Name)
+	}
+	return hits
+}
+
+// nextMatch returns the name of the row that matches the text next after
+// the row named from, going down the list when dir is 1 and up when it is
+// -1. With here set, from itself can be the match. It wraps past the end of
+// the list and sets s.wrapped. ok is false when nothing matches. A row of
+// the hotlist stands for its row in its area.
+func (s *Sidebar) nextMatch(text, from string, dir int, here bool) (name string, ok bool) {
+	rows := s.unfoldedTree(s.levels)
+	from, _, _ = strings.Cut(strings.TrimPrefix(from, hotPrefix), " ")
+	at := -1
+	for k, r := range rows {
+		if r.Name == from {
+			at = k
+		}
+	}
+	s.wrapped = ""
+	pick, wrap := -1, -1
+	for _, k := range matchRows(rows, text) {
+		ahead := k > at || (here && k == at)
+		if dir < 0 {
+			ahead = k < at
+		}
+		switch {
+		case ahead && (dir < 0 || pick < 0):
+			pick = k
+		case !ahead && (dir < 0 || wrap < 0):
+			wrap = k
+		}
+	}
+	switch {
+	case pick >= 0:
+		return rows[pick].Name, true
+	case wrap >= 0:
+		s.wrapped = map[int]string{1: "top", -1: "bottom"}[dir]
+		return rows[wrap].Name, true
+	}
+	return "", false
+}
+
+// reveal moves the cursor to the row in its area with the given name,
+// unfolding the areas above it, and reports whether the row is in the list.
+func (s *Sidebar) reveal(name string) bool {
+	itemName, _, _ := strings.Cut(name, " ")
+	for _, above := range s.ancestors(itemName) {
+		delete(s.folded, above)
+	}
+	s.rebuild()
+	k := s.rowNamed(name)
+	if k >= 0 {
+		s.cursor = k
+	}
+	return k >= 0
+}
+
+// startSearch begins typing the text of a search. The cursor goes to the
+// first match as the text is typed, and returns where it was when the typing
+// is cancelled.
+func (s *Sidebar) startSearch() {
+	s.searching, s.query = true, ""
+	s.origin = rowKey(s.Current())
+	s.originFolds = maps.Clone(s.folded)
+}
+
+// follow moves the cursor to the first match of the text typed so far, from
+// the row the search began on, and reports whether there is one. With no
+// text, or no match, the cursor is on the row the search began on.
+func (s *Sidebar) follow() bool {
+	s.folded = maps.Clone(s.originFolds)
+	if s.folded == nil {
+		s.folded = map[string]bool{}
+	}
+	s.rebuild()
+	if s.query != "" {
+		if name, ok := s.nextMatch(s.query, s.origin, 1, true); ok && s.reveal(name) {
+			return true
+		}
+	}
+	if k := s.rowKeyed(s.origin); k >= 0 {
+		s.cursor = k
+	}
+	return false
+}
+
+// typeSearch applies one key while the text of a search is typed. The right
+// side shows nothing new until Enter.
+func (s *Sidebar) typeSearch(key string) Action {
+	switch key {
+	case "enter":
+		s.searching = false
+		if s.query == "" {
+			s.follow()
+			return None
+		}
+		if !s.follow() {
+			s.notice = "no match for " + s.query
+			return None
+		}
+		s.search = s.query
+		if s.origin != rowKey(s.Current()) {
+			s.back = s.origin
+		}
+		s.noticeWrap()
+		return Show
+	case "esc":
+		s.searching, s.query = false, ""
+		s.follow()
+		return None
+	case "backspace":
+		if r := []rune(s.query); len(r) > 0 {
+			s.query = string(r[:len(r)-1])
+		}
+	default:
+		if len([]rune(key)) == 1 {
+			s.query += key
+		}
+	}
+	s.follow()
+	return None
+}
+
+// noticeWrap tells that the last search move went past the end of the list.
+func (s *Sidebar) noticeWrap() {
+	if s.wrapped != "" {
+		s.notice = "search wrapped to the " + s.wrapped
+	}
+}
+
+// stepMatch moves the cursor to the next or previous match of the search.
+func (s *Sidebar) stepMatch(dir int) Action {
+	from := rowKey(s.Current())
+	name, ok := s.nextMatch(s.search, from, dir, false)
+	if !ok || !s.reveal(name) {
+		s.notice = "no match for " + s.search
+		return None
+	}
+	if from != rowKey(s.Current()) {
+		s.back = from
+	}
+	s.noticeWrap()
+	if s.cursor == s.rowKeyed(from) {
+		s.notice = "only match"
+	}
+	return Show
+}
+
+// stepSibling moves the cursor to the next or previous row with the same
+// parent, passing over the rows inside the rows it skips. The bay rows of an
+// item are siblings of each other, and so are the rows of the hotlist. At
+// the first or last sibling the cursor stays where it is.
+func (s *Sidebar) stepSibling(dir int) Action {
+	row := s.Current()
+	edge := map[int]string{1: "last", -1: "first"}[dir]
+	if row.Desk {
+		s.notice = "the desk has no siblings"
+		return None
+	}
+	if row.Bay != "" {
+		item, _, _ := strings.Cut(row.Name, " ")
+		if k := s.cursor + dir; k >= 0 && k < len(s.rows) && s.rows[k].Bay != "" && strings.HasPrefix(s.rows[k].Name, item+" ") {
+			s.cursor = k
+			return Show
+		}
+		s.notice = edge + " under " + item
+		return None
+	}
+	for k := s.cursor + dir; k >= 0 && k < len(s.rows); k += dir {
+		r := s.rows[k]
+		if r.Desk || r.HotRow != row.HotRow || r.Depth < row.Depth {
+			break
+		}
+		if r.Depth == row.Depth && r.Bay == "" {
+			s.cursor = k
+			return Show
+		}
+	}
+	s.notice = edge + " " + s.parentLabel()
+	return None
+}
+
+// parentLabel says what the row under the cursor is under: "in the
+// hotlist", "under" and the name of the nearest row above it that is less
+// deep, or "at the top level".
+func (s *Sidebar) parentLabel() string {
+	row := s.rows[s.cursor]
+	if row.HotRow {
+		return "in the hotlist"
+	}
+	for k := s.cursor - 1; k >= 0; k-- {
+		r := s.rows[k]
+		if r.Desk || r.HotRow {
+			break
+		}
+		if r.Depth < row.Depth && r.Bay == "" {
+			if r.Area {
+				return "under " + r.Title
+			}
+			return "under " + r.Name
+		}
+	}
+	return "at the top level"
+}
+
+// searchStatus describes the search that is set: its text, which match the
+// cursor is on, and how many matches the levels not shown hold.
+func (s *Sidebar) searchStatus() string {
+	hits := s.searchHits(s.search, s.levels)
+	out := "/" + s.search
+	here, _, _ := strings.Cut(s.Current().Name, " ")
+	at := slices.IndexFunc(hits, func(name string) bool {
+		item, _, _ := strings.Cut(name, " ")
+		return item == here
+	})
+	switch {
+	case len(hits) == 0:
+		out += " no match"
+	case at >= 0:
+		out += fmt.Sprintf(" %d of %d", at+1, len(hits))
+	default:
+		out += fmt.Sprintf(" %d matches", len(hits))
+	}
+	if more := len(s.searchHits(s.search, len(levelNames)-1)) - len(hits); more > 0 {
+		out += fmt.Sprintf(", %d more in other levels", more)
+	}
+	return out
+}
+
+// highlight splits the spans that a search looks in so that the text found
+// is drawn in the style "match".
+func highlight(spans []Span, text string) []Span {
+	if text == "" {
+		return spans
+	}
+	needle := strings.ToLower(text)
+	var out []Span
+	for _, span := range spans {
+		lower := strings.ToLower(span.Text)
+		if !searchable(span) || len(lower) != len(span.Text) {
+			out = append(out, span)
+			continue
+		}
+		from := 0
+		for {
+			at := strings.Index(lower[from:], needle)
+			if at < 0 {
+				break
+			}
+			at += from
+			if at > from {
+				out = append(out, Span{span.Text[from:at], span.Style})
+			}
+			out = append(out, Span{span.Text[at : at+len(needle)], "match"})
+			from = at + len(needle)
+		}
+		if from < len(span.Text) || from == 0 {
+			out = append(out, Span{span.Text[from:], span.Style})
+		}
+	}
+	return out
+}
+
+// found is the text whose matches the rows draw highlighted: the text of
+// the search, as it is typed or once it is set.
+func (s *Sidebar) found() string {
+	if s.searching {
+		return s.query
+	}
+	return s.search
+}
+
 // toggleUnfoldAll unfolds every area, or puts the folds back as they were
 // before it did. Folds made in between are dropped. The areas above the
 // cursor's row stay unfolded, so that the row stays in the list.
@@ -1170,7 +1543,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	for k := s.top; k < len(s.rows) && k < s.top+body; k++ {
 		// A row's marks are drawn at its end, and the rest of the row is
 		// shortened to leave room for them.
-		spans, marks := rowSpans(s.rows[k]), s.marksOf(s.rows[k].Name)
+		spans, marks := highlight(rowSpans(s.rows[k]), s.found()), s.marksOf(s.rows[k].Name)
 		if marks != "" {
 			spans = append(clipSpans(spans, width-TextWidth(marks)-1), Span{" " + marks, "key"})
 		}
@@ -1183,7 +1556,7 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 	// have the style "key". The key that changes the levels is named
 	// beside them.
 	info := []Span{{"«", "key"}, {" " + levelNames[s.levels] + " (", ""}, {"a", "key"}, {")", ""}}
-	hint := keyHints("?", "keys", "/", "find", "u", "unfold", "s", "state")
+	hint := keyHints("?", "keys", "/", "search", "F", "filter", "u", "unfold")
 	switch {
 	case s.pending == "m":
 		info = []Span{{"«", "key"}, {" mark this row: press a letter", ""}}
@@ -1207,12 +1580,22 @@ func (s *Sidebar) RenderLines(width, height int) ([]Line, int) {
 		info = []Span{{"«", "key"}, {" why drop it: " + tailText(s.reason, width-TextWidth("« why drop it: _")) + "_", ""}}
 		hint = keyHints("enter", "closes", "esc", "cancels")
 	case s.typing:
-		prefix := " " + levelNames[s.levels] + " · find: "
+		prefix := " " + levelNames[s.levels] + " · filter: "
 		info = []Span{{"«", "key"}, {prefix + tailText(s.filter, width-TextWidth("«"+prefix+"_")) + "_", ""}}
 		hint = keyHints("enter", "keeps", "esc", "clears")
+	case s.searching:
+		prefix := " " + levelNames[s.levels] + " · /"
+		info = []Span{{"«", "key"}, {prefix + tailText(s.query, width-TextWidth("«"+prefix+"_")) + "_", ""}}
+		hint = keyHints("enter", "goes there", "esc", "cancels")
+	case s.search != "":
+		if s.filter != "" {
+			info = append(info, Span{" · filter: " + s.filter, ""})
+		}
+		info = append(info, Span{" · " + s.searchStatus(), ""})
+		hint = keyHints("n", "next", "p", "previous", "esc", "clears", "?", "keys")
 	case s.filter != "":
-		info = append(info, Span{" · find: " + s.filter, ""})
-		hint = keyHints("esc", "clears", "/", "find again", "?", "keys")
+		info = append(info, Span{" · filter: " + s.filter, ""})
+		hint = keyHints("esc", "clears", "F", "filter again", "?", "keys")
 	case s.saved != nil:
 		info = append(info, Span{", all unfolded", ""})
 		hint = keyHints("u", "puts the folds back", "?", "keys")
@@ -1285,14 +1668,20 @@ func rowSpans(r Row) []Span {
 func baseSpans(r Row) []Span {
 	indent := strings.Repeat("  ", r.Depth)
 	var marks []Span
-	if r.Area && r.Waiting {
+	switch {
+	case r.Area && r.Waiting:
 		marks = append(marks, Span{" " + WaitingMark, "waiting"})
+	case r.Area && r.Folded && r.BeneathWaiting:
+		marks = append(marks, Span{" " + WaitingMark, "dim"})
 	}
 	if r.Open > 0 {
 		marks = append(marks, Span{fmt.Sprintf(" ?%d", r.Open), "question"})
 		if r.Blocking {
 			marks = append(marks, Span{"!", "blocking"})
 		}
+	}
+	if r.Area && r.Folded && r.Beneath > 0 {
+		marks = append(marks, Span{fmt.Sprintf(" +%d", r.Beneath), "dim"})
 	}
 	switch {
 	case r.Desk:
@@ -1307,6 +1696,9 @@ func baseSpans(r Row) []Span {
 		fold := "▾"
 		if r.Folded {
 			fold = "▸"
+		}
+		if r.Empty {
+			return append([]Span{{indent + fold + " " + r.Title + " (empty)", "dim"}}, marks...)
 		}
 		return append([]Span{{indent + fold + " " + r.Title, "area"}}, marks...)
 	}
@@ -1368,6 +1760,7 @@ func Legend() []Line {
 		entry(Span{"!", "blocking"}, "one of those questions holds up all work"),
 		entry(Span{"(back)", "dim"}, "the item's level, when it is not front"),
 		entry(Span{"(bay gone)", "dim"}, "the item's bay no longer exists"),
+		entry(Span{"match", "match"}, "text the search found"),
 		entry(Span{"'a", "key"}, "a mark on the row; type 'a to go to it"),
 		entry(Span{"*2", "key"}, "the row is row 2 of the hotlist; type 2 to go to it"),
 		entry(Span{"shaded row", "shown"}, "the row the right side shows, when the"),

@@ -65,10 +65,10 @@ func (s *Sidebar) hotRows() []Row {
 	if len(s.hotlist) == 0 {
 		return nil
 	}
-	levels, filter, folded := s.levels, s.filter, s.folded
-	s.levels, s.filter, s.folded = len(levelNames)-1, "", map[string]bool{}
+	levels, filter, folded, first := s.levels, s.filter, s.folded, s.first
+	s.levels, s.filter, s.folded, s.first = len(levelNames)-1, "", map[string]bool{}, map[string]Row{}
 	all := s.tree()
-	s.levels, s.filter, s.folded = levels, filter, folded
+	s.levels, s.filter, s.folded, s.first = levels, filter, folded, first
 	var out []Row
 	for _, name := range s.hotlist {
 		for _, r := range all {

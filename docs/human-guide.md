@@ -907,16 +907,16 @@ session:
   | yellow `○` | The item's agent is waiting for its next instruction |
   | red `◌` | The item's work is held until something else happens |
   | dim `·` | The item has no bay |
-  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area or beneath it waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
+  | orange `▶` | An agent in one of the item's bays waits for you: bay marks its window as waiting, or it rang the terminal bell. It replaces the work mark, and the `↳` of a bay's own row. After an area's title, a bay of the area's own waits. A dim `▶` there means only a bay beneath the folded area waits. The list checks every two seconds. Showing the bay clears the mark as selecting its tab in the dock does; while the agent's prompt is still on screen, bay marks it again |
   | cyan `↳ dock/bay` | One bay of an item that has several |
-  | yellow `?2` | Two questions wait for your answer; on an area, its own and those beneath it |
+  | yellow `?2` | Two questions wait for your answer; on an area, only the area's own; while the area is folded, a dim `+5` after it counts those beneath it |
   | red `!` | One of those questions holds up all work |
   | dim `(back)` | The item's level, when it is not front |
   | dim `(bay gone)` | The item's bay no longer exists; on a bay's own row, `(gone)` |
 
   The two shaded lines at the bottom describe the view and are not rows. The
-  upper one says which levels are shown, or shows the filter. The lower one
-  reminds of keys.
+  upper one says which levels are shown, or shows the filter or the search
+  (`/text 2 of 5`). The lower one reminds of keys.
 - The right side shows the bay window of the item chosen in the list, with
   all of that window's panes. An item with no bay window shows its record.
   Closing a bay with `bay close` takes the bay off the docket items that
@@ -961,16 +961,17 @@ Press `?` in the list for a popup of every key and of the marks above; `q`,
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move down / up one row; the right side shows the row the cursor is on |
-| `n` / `p` | Move to the next / previous item or bay, passing over areas and the row of an item that lists its bays |
+| `n` / `p` | With no search set: move to the next / previous row with the same parent, passing over everything inside the rows skipped, folded or not. Areas are siblings of each other, and so are the bay rows of one item and the rows of the hotlist. At the first or last sibling the cursor stays and the shaded line says so, as `last under docket`; there is no wrap. With a search set: go to the next / previous match |
 | `J` / `K` | Move down / up ten rows |
 | `r` | Move to the next row with the waiting mark, from the last row to the first |
 | `g` / `G` | Go to the first / last row |
 | `Enter` | Move to the right side. On an area, the right side shows the area's own bay, or else its first item |
 | `Space` | Fold or unfold the area under the cursor |
 | `u` | Unfold every area; `u` again puts the folds back as they were, dropping folds made in between. The areas above the cursor's row stay unfolded |
-| `/` | Find by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
+| `/` | Search the text the rows show (an item's name, an area's title, a bay on its own row) in the levels shown, folded areas included. The cursor moves to the first match as you type and the right side stays as it is. `Enter` keeps the search, shows the cursor's row and makes `n` / `p` go between matches; `Esc` while typing puts the cursor and the folds back. A match in a folded area unfolds it. The shaded line shows `/text 2 of 5`, and how many more matches the levels not shown hold. `n` and `p` wrap at the ends and say so. An item and its bay rows are one match. Matches are highlighted. `Esc` clears the search |
+| `F` | Filter the list by name, title or bay in the levels shown; an area that matches lists all its items. The right side stays as it is while you type. `Enter` keeps the filter and shows the cursor's row. `Esc` clears the filter and returns the cursor to the row the right side shows |
 | `>` / `<` | Move the item under the cursor one level away from the front / toward it. An item that leaves the levels shown leaves the list |
-| `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An area with no open items under it is listed so that it can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
+| `x` | Close the item or area under the cursor: then `f` closes it as finished, or `d` asks for the reason it is dropped and Enter closes it. Esc gives up. An item or area with open items under it is not closed, including items at levels not shown, and neither is an item that lists more than one bay. An open area is listed whenever its own level is shown, whatever is beneath it; one with no open items at any level is drawn dim and marked `(empty)`, and can be closed. On a bay's row, `x` then `y` closes the bay with `bay close`, which refuses a bay with uncommitted changes; a bay that no longer exists is taken off its item instead |
 | `X` | On a bay's row, close the bay even with uncommitted changes, which are lost: `bay close --force`. `y` confirms |
 | `*` | Add the row under the cursor to the end of the hotlist, the rows listed below the desk, or take it off. The hotlist holds at most nine rows, an item, an area or one bay of an item. The row stays in its area, which shows the row's number at its end as `*1`. The hotlist shows its rows whatever the levels, the filter and the folds show. The cursor stays on its row when it adds; after `*` takes off the row the cursor is on in the hotlist, it goes to the row that takes its place, or the one above when it was the last, or to the desk when none is left. The hotlist is kept in `items/_root/hotlist.json` in docket's folder. A row whose item `docket rename` renames stays in the hotlist under the new name |
 | `1` to `9` | Go to that row of the hotlist. Numbers are positions, so they close up when a row leaves |
@@ -993,12 +994,17 @@ Keys from either side of the `_docket` session:
 
 | Key | Action |
 |-----|--------|
+<<<<<<< HEAD
+| `Option+J` / `Option+K` | Move down / up one row; `Option+j` / `Option+k` still select the pane below / above. `Option+l` / `Option+h` do the same |
+| `Option+N` / `Option+P` | Do what `n` and `p` do |
+=======
 | `Option+j` / `Option+k` | In the list, move down / up one row. In the right side, select the pane below / above in the window shown |
 | `Option+J` / `Option+K` | Move down / up one row, from either side. The keyboard stays where it is |
 | `Option+h` / `Option+l` | Move the keyboard to the list / to the right side |
 | `Option+r` | Move to the next row with the waiting mark, as `r` does |
 | `Option+g` | Move to the list and start a search, as `/` does |
 | `Option+N` / `Option+P` | Move to the next / previous item or bay, as `n` and `p` do |
+>>>>>>> origin/main
 | `Option+Space` | Fold or unfold the area under the cursor |
 | `Option+?` | Show the item's state, as `s` does. In this session it replaces bay's description popup |
 | `Option+B` | Collapse or expand the list |
@@ -1025,12 +1031,20 @@ The command reads docket's files (`$DOCKET_STATE`, default
 three cases: `>` and `<` change the level of the item under the cursor by
 running `docket set`, `[` and `]` move it among its siblings the same way,
 and `x` closes it by running `docket close`. On a bay's row, `x` and `X`
+<<<<<<< HEAD
+close the bay with `bay close`. It keeps the marks in `view-marks.json` and
+the hotlist in `view-hotlist.json` in docket's folder, and the list's width
+in `docket-view-width.json` in bay's data folder. The row the right side
+shows is kept in `docket-view-row.json` in bay's data folder, so that a list
+that starts again puts its cursor back on that row. It writes nothing else.
+=======
 close the bay with `bay close`. It keeps the marks and the hotlist in
 the root item's folder, as `items/_root/marks.json` and
 `items/_root/hotlist.json` in docket's folder. It reads the older
 `view-marks.json` and `view-hotlist.json` when those are missing, and
 removes them when it saves. It keeps the list's width in
 `docket-view-width.json` in bay's data folder. It writes nothing else.
+>>>>>>> origin/main
 
 ### Infrastructure
 

@@ -20,6 +20,8 @@ type Paths struct {
 	ForceCloseConfirm string
 	// DocketViewWidth keeps the width of the docket view's list.
 	DocketViewWidth string
+	// DocketViewRow keeps the docket view's row that the right side shows.
+	DocketViewRow string
 }
 
 // DefaultPaths returns the standard paths using XDG defaults.
@@ -39,5 +41,6 @@ func DefaultPaths() Paths {
 		CloseConfirm:      filepath.Join(dataDir, "close-confirm"),
 		ForceCloseConfirm: filepath.Join(dataDir, "force-close-confirm"),
 		DocketViewWidth:   filepath.Join(dataDir, "docket-view-width.json"),
+		DocketViewRow:     filepath.Join(dataDir, "docket-view-row.json"),
 	}
 }
